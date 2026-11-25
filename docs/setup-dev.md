@@ -26,8 +26,8 @@ Open the link it prints: `http://localhost:8091/__local_login`. You're logged in
 3. **MANUAL:** start Docker and wait until it's running. On a Mac: `open -a Docker`.
 4. Give Docker at least 8 GB of memory (dev used up to 5.5 GB) and about 15 GB of disk.
    Docker Desktop: Settings → Resources.
-5. A Mac with Apple chips, or another ARM64 computer. On x86-64, `up` stops today: the creations
-   container only builds for ARM64.
+5. A Mac with Apple chips, or another ARM64 computer. x86-64 should work too (the creations
+   container builds there now), but dev hasn't been tried end to end on one.
 
 If Docker is missing, not running, or not allowed for your user, `./memento` stops and says what
 to do.
@@ -62,7 +62,8 @@ On a Mac with Apple chips:
 ## Settings (optional)
 
 Dev runs with no settings at all. To change something, copy `.env.example` to `.env` and fill in
-the line you want. Or give it for one run: `DEV_ML=0 ./memento dev up`.
+the line you want. Or give it for one run: `DEV_ML=0 ./memento dev up`. To use another file
+than `.env`: `MEMENTO_ENV_FILE=/path/to/file ./memento dev up`.
 
 | Setting | What it does |
 |---|---|
@@ -181,4 +182,4 @@ lists them, with where to download each and what to name it.
 
 ## Not tested yet
 
-- Linux, and x86-64 computers (where `up` stops today, see "What you need").
+- Linux, and x86-64 computers (see "What you need").

@@ -65,7 +65,7 @@ The apps say "Memento" in place of "Immich", with their own logo.
 
 | Path | What it is |
 |---|---|
-| `./memento` | The one command for dev: `./memento dev up`, `down`, `reset`, `logs`, `status`. |
+| `./memento` | The one command: `./memento dev …` on your computer, `./memento prod …` for a server, `./memento android` for the app. |
 | `immich/web` | The website (Immich's, with Memento's changes). Ours is mostly in `web/src/lib/ai-edit/`. |
 | `immich/mobile` | The Android app (Immich's, with Memento's changes). Ours is in `mobile/lib/selfphotos/`. |
 | `memento-extras/` | Memento's service (`src/`); `reader/` is Ask's reader; `creations/` the creations container. |
@@ -89,14 +89,25 @@ Then open the link it prints. The full guide is [docs/setup-dev.md](docs/setup-d
 
 ## Run it for real
 
-A guide for your own server comes later. In short: copy `.env.example` to `.env` and fill it in,
-then Ansible sets up the server.
+A full guide for your own server comes later. In short:
 
-- **Done for you:** setting up the server, HTTPS, Immich, Memento, the captions' model, nightly
-  captions, memories, creations and backups.
-- **By hand:** getting a server (or letting Terraform make one), a domain, a Gemini API key and
-  (for backups) an AWS account; filling in `.env`; downloading the recap music; building the
-  Android app with your own signing key; and a few choices in Immich's admin settings.
+```
+cp .env.example .env          # then fill in the PROD part: .env.example says what each line is
+./memento prod check          # what's missing, and which optional parts are on
+./memento prod setup          # tools, generated passwords, server/DNS/bucket (asks first), then the deploy
+./memento prod deploy         # later deploys; ./memento prod dry-run shows what would change
+```
+
+The server is Ubuntu 24.04, ARM64 or x86-64: yours (`SERVER_HOST`), or Oracle Cloud's free ARM
+server, which setup makes with Terraform. Cloudflare DNS and backups are optional too.
+
+- **Done for you:** installing Terraform, Ansible and rclone; the generated passwords; the Oracle
+  server, the DNS record and the backup bucket (Terraform shows its plan and waits for you to type
+  `yes`); setting up the server, HTTPS, Immich, Memento, the models, nightly captions, memories,
+  creations and backups; the Android app's signing key (`./memento android keystore`).
+- **By hand (MANUAL):** a domain, a Gemini API key, and the accounts for the optional parts
+  (Oracle Cloud, Cloudflare, AWS); filling in `.env`; downloading the recap music; and a few
+  choices in Immich's admin settings.
 
 **What costs money:** among Memento's features, only AI Edit. Each edit is a paid call to Gemini
 (about $0.05, or $0.11 for a 4K result), with daily and monthly limits you set. Everything

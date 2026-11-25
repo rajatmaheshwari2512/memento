@@ -18,15 +18,29 @@
 #       cd .. && mise install node pnpm npm:@openapitools/openapi-generator-cli
 #       cd native && mise install rust
 #   - brew install --cask android-commandlinetools, and its licenses accepted
-#   - the signing key in ~/.config/selfphotos/android/ and its password in .env (ANDROID_KEYSTORE_PASSWORD)
+#   - the signing key and its password: ANDROID_KEYSTORE_PATH, ANDROID_KEYSTORE_ALIAS and
+#     ANDROID_KEYSTORE_PASSWORD in .env (./memento android keystore makes one)
 #
-# Usage: apps/android/build.sh
+# Usage: apps/android/build.sh   (or ./memento android)
+#        MEMENTO_ENV_FILE=/path/to/file apps/android/build.sh   (settings from another file than .env)
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
 repo="$(cd "$here/../.." && pwd)"
 src="$repo/immich"
-keystore="$HOME/.config/selfphotos/android/selfphotos-immich.jks"
+env_file="${MEMENTO_ENV_FILE:-$repo/.env}"
+
+# env_value NAME: NAME's value in the settings file, or nothing.
+env_value() {
+  [ -f "$env_file" ] || return 0
+  sed -n "s/^[[:space:]]*$1=//p" "$env_file" | tail -n 1 |
+    sed -e 's/[[:space:]]#.*$//' -e 's/[[:space:]]*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"
+}
+keystore="$(env_value ANDROID_KEYSTORE_PATH)"
+keystore="${keystore:-$HOME/.config/selfphotos/android/selfphotos-immich.jks}"
+case "$keystore" in "~"/*) keystore="$HOME/${keystore#"~/"}" ;; /*) ;; *) keystore="$repo/$keystore" ;; esac
+key_alias="$(env_value ANDROID_KEYSTORE_ALIAS)"
+key_alias="${key_alias:-selfphotos}"
 
 cd "$src"
 version="$(sed -n 's/^immich_version: *//p' "$repo/host/roles/immich/defaults/main.yml")"
@@ -41,16 +55,12 @@ if [ -n "$(git -C "$repo" status --porcelain -- immich/mobile/lib immich/mobile/
 fi
 
 if [ ! -f "$keystore" ]; then
-  echo "No signing key at $keystore (see the one-time setup at the top of this script)." >&2
+  echo "No signing key at $keystore (./memento android keystore makes one)." >&2
   exit 1
 fi
-password=""
-if [ -f "$repo/.env" ]; then
-  password="$(sed -n 's/^[[:space:]]*ANDROID_KEYSTORE_PASSWORD=//p' "$repo/.env" | tail -n 1 |
-    sed -e 's/[[:space:]]#.*$//' -e 's/[[:space:]]*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/")"
-fi
+password="$(env_value ANDROID_KEYSTORE_PASSWORD)"
 if [ -z "$password" ]; then
-  echo "ANDROID_KEYSTORE_PASSWORD is missing from .env." >&2
+  echo "ANDROID_KEYSTORE_PASSWORD is missing from $env_file." >&2
   exit 1
 fi
 
@@ -78,7 +88,7 @@ restore() {
 }
 trap restore EXIT
 cp "$keystore" mobile/android/key.jks
-export ALIAS=selfphotos ANDROID_KEY_PASSWORD="$password" ANDROID_STORE_PASSWORD="$password"
+export ALIAS="$key_alias" ANDROID_KEY_PASSWORD="$password" ANDROID_STORE_PASSWORD="$password"
 
 # Memento branding for the UI texts (all languages), only for this build: codegen turns
 # them into Dart code below, then the trap restores Immich's own translation files.

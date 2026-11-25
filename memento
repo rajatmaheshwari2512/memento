@@ -9,10 +9,24 @@
 #   ./memento dev sample-memories                add two "on this day" memories, one with a Memento title
 #   ./memento dev config immich|memento [options]   the merged compose files (shows dev's secrets)
 #
+#   ./memento prod check                         what's missing in .env, and which optional parts are on; changes nothing
+#   ./memento prod setup                         installs the tools, fills in the generated settings, makes the server,
+#                                                DNS and backup bucket (Terraform: shows the plan, asks), then deploys
+#   ./memento prod deploy [--web] [ansible-playbook options]
+#                                                sets up the server (Ansible); builds the website first if it isn't
+#                                                built, or with --web (a new build is a new website on the server)
+#   ./memento prod dry-run                       what deploy and Terraform would change (--check, plan); changes nothing
+#
+#   ./memento android                            builds the Android app (apps/android/build.sh)
+#   ./memento android keystore                   makes the app's signing key, if there's none
+#
 # Settings: .env (see .env.example), or for one run: DEV_ML=0 ./memento dev up
+# Another settings file: MEMENTO_ENV_FILE=/path/to/file ./memento ...
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")" && pwd)"
+env_file=${MEMENTO_ENV_FILE:-$root/.env}
+case "$env_file" in /*) ;; *) env_file="$PWD/$env_file" ;; esac
 dev="$root/.local/dev"
 link="http://localhost:8091/__local_login"
 python_image="python:3.12-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b"
@@ -33,15 +47,19 @@ fail() {
   exit 1
 }
 
-# setting NAME [default]: from the environment, else from .env, else the default.
+# file_value NAME FILE: NAME's value in FILE (KEY=value lines; the last one counts), or nothing.
+file_value() {
+  [ -f "$2" ] || return 0
+  sed -n "s/^[[:space:]]*$1=//p" "$2" | tail -n 1 |
+    sed -e 's/[[:space:]]#.*$//' -e 's/[[:space:]]*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"
+}
+
+# setting NAME [default]: from the environment, else from the settings file, else the default.
 setting() {
-  local name=$1 default=${2-} value=""
-  value=$(printenv "$name" 2>/dev/null || true)
-  if [ -z "$value" ] && [ -f "$root/.env" ]; then
-    value=$(sed -n "s/^[[:space:]]*${name}=//p" "$root/.env" | tail -n 1 |
-      sed -e 's/[[:space:]]#.*$//' -e 's/[[:space:]]*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/")
-  fi
-  printf '%s' "${value:-$default}"
+  local value
+  value=$(printenv "$1" 2>/dev/null || true)
+  [ -n "$value" ] || value=$(file_value "$1" "$env_file")
+  printf '%s' "${value:-${2-}}"
 }
 
 path_setting() {
@@ -201,7 +219,7 @@ write_private() {
   (umask 077 && cat > "$1")
 }
 
-random_letters() { LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c "$1"; }
+random_letters() { head -c 1000 /dev/urandom | LC_ALL=C tr -dc 'A-Za-z0-9' | cut -c "1-$1"; }
 
 make_secrets() {
   local file="$dev/secrets.env"
@@ -294,8 +312,9 @@ copy_if_changed() {
 
 download_reader() {
   local entry file
-  [ -n "$reader_url" ] && [ -n "$reader_revision" ] && [ -n "$reader_files" ] ||
+  if [ -z "$reader_url" ] || [ -z "$reader_revision" ] || [ -z "$reader_files" ]; then
     fail "Can't find the reader model's pin (memento_extras_reader_*) in $extras_defaults."
+  fi
   mkdir -p "$reader_download"
   for entry in $reader_files; do
     file=${entry%%:*}
@@ -493,6 +512,496 @@ config() {
   esac
 }
 
+# ── prod ────────────────────────────────────────────────────────────────────────────────────────
+
+# value NAME [default]: NAME from the settings file only (never the shell), else the default.
+value() {
+  local v
+  v=$(file_value "$1" "$env_file")
+  printf '%s' "${v:-${2-}}"
+}
+
+expand_home() { case "$1" in "~"/*) printf '%s' "$HOME/${1#"~/"}" ;; *) printf '%s' "$1" ;; esac; }
+is_ipv4() { [[ $1 =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; }
+
+# oci_value KEY: KEY in the OCI_CONFIG_PROFILE section of ~/.oci/config, or nothing.
+oci_value() {
+  [ -f "$HOME/.oci/config" ] || return 0
+  awk -v section="[$(value OCI_CONFIG_PROFILE DEFAULT)]" -v key="$1" '
+    /^[[:space:]]*\[/ { inside = ($0 == section); next }
+    inside && $0 ~ "^[[:space:]]*" key "[[:space:]]*=" { sub(/^[^=]*=[[:space:]]*/, ""); sub(/[[:space:]]*$/, ""); print; exit }
+  ' "$HOME/.oci/config"
+}
+
+load_prod() {
+  immich_version=$(sed -n 's/^immich_version: *//p' "$root/host/roles/immich/defaults/main.yml" 2>/dev/null || true)
+  [ -n "$immich_version" ] || fail "Can't find immich_version in host/roles/immich/defaults/main.yml."
+  web_dist="$root/apps/web/dist/$immich_version"
+  plan_file="$root/infra/memento.tfplan"
+}
+
+# Sets which optional parts are on (1) or off (0), from the settings file: oracle (setup makes the
+# Oracle server), dns (Cloudflare), backups (Ansible's nightly backup), aws (setup makes the bucket).
+prod_parts() {
+  domain=$(value MEMENTO_DOMAIN)
+  server_host=$(value SERVER_HOST)
+  oracle=0 dns=0 backups=0 aws=0 server_ipv4=""
+  if [ -n "$(value OCI_TENANCY_OCID)" ] && [ -z "$server_host" ]; then oracle=1; fi
+  if [ -n "$(value CLOUDFLARE_API_TOKEN)" ]; then dns=1; fi
+  if [ -n "$(value BACKUP_BUCKET_NAME)$(value BACKUP_ACCESS_KEY_ID)$(value BACKUP_SECRET_ACCESS_KEY)" ]; then backups=1; fi
+  if [ -n "$(value AWS_PROFILE)$(value AWS_ACCESS_KEY_ID)$(value AWS_SECRET_ACCESS_KEY)" ]; then aws=1; fi
+  zone=$(value CLOUDFLARE_ZONE "${domain#*.}")
+  subdomain=${domain%".$zone"}
+  if is_ipv4 "$server_host"; then server_ipv4=$server_host; fi
+  terraform_on=0
+  if [ "$oracle$dns$aws" != 000 ]; then terraform_on=1; fi
+}
+
+# Fills problems (for the person to fix) and todos (setup fills them in).
+check_settings() {
+  local v profile key cidr
+  problems=() todos=()
+  prod_parts
+  if [ -z "$domain" ]; then
+    problems+=("MEMENTO_DOMAIN: empty. The address people will open, like photos.example.com: a name in a domain you own.")
+  elif ! [[ $domain =~ ^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$ ]]; then
+    problems+=("MEMENTO_DOMAIN: \"$domain\" isn't a name like photos.example.com.")
+  fi
+  [ -n "$(value GEMINI_API_KEY)" ] ||
+    problems+=("GEMINI_API_KEY: empty. AI Edit's key: aistudio.google.com → Get API key (with billing on; each edit is paid).")
+  v=$(value IMMICH_DB_PASSWORD)
+  if [ -z "$v" ]; then todos+=(IMMICH_DB_PASSWORD)
+  elif ! [[ $v =~ ^[A-Za-z0-9]{16,}$ ]]; then problems+=("IMMICH_DB_PASSWORD: must be 16 or more letters and digits only (Immich's rule).")
+  fi
+  v=$(value MEMENTO_SECRET)
+  if [ -z "$v" ]; then todos+=(MEMENTO_SECRET)
+  elif [ "${#v}" -lt 44 ] || [ "$v" = CHANGE_ME ]; then problems+=("MEMENTO_SECRET: must be what openssl rand -base64 32 prints (44 characters).")
+  fi
+
+  if [ -n "$server_host" ] && [ -n "$(value OCI_TENANCY_OCID)" ]; then
+    problems+=("SERVER_HOST and OCI_TENANCY_OCID are both set. Setup makes an Oracle server only when SERVER_HOST is empty:
+    empty SERVER_HOST to have it make one, or empty the ORACLE settings to use your own server.")
+  fi
+  if [ "$oracle" = 1 ]; then
+    [[ $(value OCI_TENANCY_OCID) == ocid1.tenancy.* ]] ||
+      problems+=("OCI_TENANCY_OCID: should start with ocid1.tenancy. (the tenancy= line in ~/.oci/config).")
+    profile=$(value OCI_CONFIG_PROFILE DEFAULT)
+    if ! grep -qxF "[$profile]" "$HOME/.oci/config" 2>/dev/null; then
+      problems+=("OCI_CONFIG_PROFILE: no [$profile] in ~/.oci/config. MANUAL: install Oracle's CLI and run oci setup config,
+    then add the public key it makes in Oracle's console (your profile → API keys).")
+    elif [ -z "$(value OCI_REGION)$(oci_value region)" ]; then
+      problems+=("OCI_REGION: empty, and [$profile] in ~/.oci/config has no region. Your home region, like ap-mumbai-1 (Oracle's console, top right).")
+    fi
+    key=$(expand_home "$(value SSH_PUBLIC_KEY_PATH "$HOME/.ssh/id_ed25519.pub")")
+    [ -f "$key" ] || problems+=("SSH_PUBLIC_KEY_PATH: no file at $key. Make a key: ssh-keygen -t ed25519 (or give the path of your .pub file).")
+    cidr=$(value SSH_ALLOWED_CIDR)
+    [ -z "$cidr" ] || [[ $cidr =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$ ]] ||
+      problems+=("SSH_ALLOWED_CIDR: \"$cidr\" isn't an address range like 203.0.113.7/32.")
+    [[ $(value OCI_BUDGET_AMOUNT) =~ ^[1-9][0-9]*$ ]] ||
+      problems+=("OCI_BUDGET_AMOUNT: a whole number: the monthly spending alert, in your Oracle account's currency (Billing → Cost Analysis shows which).")
+    [[ $(value OCI_BUDGET_EMAIL) == ?*@?* ]] || problems+=("OCI_BUDGET_EMAIL: the email address Oracle sends the spending alert to.")
+  fi
+  if [ "$dns" = 1 ] && [ -n "$domain" ]; then
+    if [ -z "$subdomain" ] || [ "$subdomain" = "$domain" ]; then
+      problems+=("CLOUDFLARE_ZONE: \"$zone\" isn't the end of MEMENTO_DOMAIN ($domain). Your domain in Cloudflare, like example.com.")
+    fi
+    if [ "$oracle" = 0 ] && [ -z "$server_ipv4" ]; then
+      problems+=("SERVER_HOST: Cloudflare DNS points MEMENTO_DOMAIN at your server, so SERVER_HOST must be its IPv4 address.
+    (Or empty SERVER_HOST and fill in the ORACLE part, to have setup make the server.)")
+    fi
+  fi
+  if [ "$backups" = 1 ]; then
+    [ -n "$(value BACKUP_BUCKET_NAME)" ] ||
+      problems+=("BACKUP_BUCKET_NAME: empty, but the backup keys are set. The bucket's name.")
+    if [ "$aws" = 1 ]; then
+      if [ -n "$(value AWS_PROFILE)" ] && [ -n "$(value AWS_ACCESS_KEY_ID)$(value AWS_SECRET_ACCESS_KEY)" ]; then
+        problems+=("AWS_PROFILE and AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY are all set: use the profile or the keys, not both.")
+      elif [ -n "$(value AWS_PROFILE)" ]; then
+        grep -qxF -e "[$(value AWS_PROFILE)]" -e "[profile $(value AWS_PROFILE)]" "$HOME/.aws/credentials" "$HOME/.aws/config" 2>/dev/null ||
+          problems+=("AWS_PROFILE: no [$(value AWS_PROFILE)] in ~/.aws/credentials. MANUAL: aws configure --profile $(value AWS_PROFILE), with an admin's access keys.")
+      elif [ -z "$(value AWS_ACCESS_KEY_ID)" ] || [ -z "$(value AWS_SECRET_ACCESS_KEY)" ]; then
+        problems+=("AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY: fill in both (an admin's access keys: AWS console → IAM → Users → Security credentials).")
+      fi
+      if [ -z "$(value BACKUP_ACCESS_KEY_ID)" ] || [ -z "$(value BACKUP_SECRET_ACCESS_KEY)" ]; then
+        todos+=("BACKUP_ACCESS_KEY_ID and BACKUP_SECRET_ACCESS_KEY (from Terraform, once it has made the backup user)")
+      fi
+    elif [ -z "$(value BACKUP_ACCESS_KEY_ID)" ] || [ -z "$(value BACKUP_SECRET_ACCESS_KEY)" ]; then
+      problems+=("BACKUP_ACCESS_KEY_ID and BACKUP_SECRET_ACCESS_KEY: the keys of an AWS user that may write to the bucket.
+    Or fill in AWS_PROFILE (or the AWS keys) and setup makes the bucket and its user.")
+    fi
+    [ -n "$(value BACKUP_CRYPT_PASSWORD_OBSCURED)" ] || todos+=(BACKUP_CRYPT_PASSWORD_OBSCURED)
+    [ -n "$(value BACKUP_CRYPT_PASSWORD2_OBSCURED)" ] || todos+=(BACKUP_CRYPT_PASSWORD2_OBSCURED)
+  elif [ "$aws" = 1 ]; then
+    problems+=("BACKUP_BUCKET_NAME: empty, but the AWS settings are set. The name setup should give the bucket: unique across all of AWS,
+    like memento-backup-<random letters>.")
+  fi
+  if [ "$terraform_on" = 1 ] && [ -f "$root/infra/terraform.tfvars" ]; then
+    problems+=("infra/terraform.tfvars: Terraform reads it over .env. Move its values into .env (see .env.example), then delete it.")
+  fi
+}
+
+show_parts() {
+  local server
+  if [ "$oracle" = 1 ]; then server="on: setup makes the Oracle server, its network and a spending alert."
+  elif [ -n "$server_host" ]; then server="off: your own server, at SERVER_HOST."
+  else server="off: your own server, at MEMENTO_DOMAIN (fill in the ORACLE part to have setup make one)."
+  fi
+  say "Optional parts:"
+  say "  Oracle server    $server"
+  if [ "$dns" = 1 ]; then say "  Cloudflare DNS   on: setup points MEMENTO_DOMAIN at the server."
+  else say "  Cloudflare DNS   off: MANUAL: at your DNS provider, point MEMENTO_DOMAIN at the server (an A record)."
+  fi
+  if [ "$backups" = 0 ]; then say "  Backups          off: WARNING: no off-site copy of the photos (fill in the BACKUPS part)."
+  elif [ "$aws" = 1 ]; then say "  Backups          on: nightly to S3 Glacier Deep Archive; setup makes the bucket and its user."
+  else say "  Backups          on: nightly to S3 Glacier Deep Archive, to the bucket you made."
+  fi
+}
+
+show_check() {
+  local line
+  say "Settings: $env_file"
+  say ""
+  show_parts
+  if [ ${#problems[@]} -gt 0 ]; then
+    say ""
+    say "To fill in or fix (.env.example says what each one is):"
+    for line in "${problems[@]}"; do say "  - $line"; done
+  fi
+  if [ ${#todos[@]} -gt 0 ]; then
+    say ""
+    say "./memento prod setup fills in:"
+    for line in "${todos[@]}"; do say "  - $line"; done
+  fi
+}
+
+prod_check() {
+  [ -f "$env_file" ] || fail "No settings file at $env_file. cp .env.example .env and fill in the PROD part
+(or ./memento prod setup makes it)."
+  check_settings
+  show_check
+  if [ ${#problems[@]} -gt 0 ]; then fail "Not ready: ${#problems[@]} to fill in or fix."; fi
+  if [ ${#todos[@]} -gt 0 ]; then fail "Not ready yet: ./memento prod setup fills in the rest."; fi
+  say ""
+  say "Ready: ./memento prod setup (or ./memento prod deploy if the server and DNS are there already)."
+}
+
+need_ready() {
+  [ -f "$env_file" ] || fail "No settings file at $env_file: ./memento prod setup makes one."
+  check_settings
+  if [ ${#problems[@]} -gt 0 ] || [ ${#todos[@]} -gt 0 ]; then
+    show_check
+    fail "Not ready: fix the settings above first (./memento prod check)."
+  fi
+}
+
+# set_value NAME VALUE: writes NAME=VALUE into the settings file, on NAME's last line, else at the end.
+set_value() {
+  local line tmp
+  line=$(grep -n "^[[:space:]]*$1=" "$env_file" | tail -n 1 | cut -d: -f1 || true)
+  tmp=$(mktemp "$env_file.XXXXXX")
+  if [ -n "$line" ]; then
+    NEW_LINE="$1=$2" awk -v n="$line" 'NR == n { print ENVIRON["NEW_LINE"]; next } { print }' "$env_file" > "$tmp"
+  else
+    { cat "$env_file"; if [ -n "$(tail -c 1 "$env_file")" ]; then echo; fi; printf '%s=%s\n' "$1" "$2"; } > "$tmp"
+  fi
+  cat "$tmp" > "$env_file"
+  rm -f "$tmp"
+  say "  $1 added to $env_file"
+}
+
+# fill NAME VALUE: set_value, only when NAME is empty.
+fill() { if [ -z "$(value "$1")" ]; then set_value "$1" "$2"; fi; }
+
+new_secret() { openssl rand -base64 32 2>/dev/null || head -c 32 /dev/urandom | base64; }
+
+fill_secrets() {
+  local plain1="" plain2="" name missing=0
+  for name in IMMICH_DB_PASSWORD MEMENTO_SECRET BACKUP_CRYPT_PASSWORD_OBSCURED BACKUP_CRYPT_PASSWORD2_OBSCURED ANDROID_KEYSTORE_PASSWORD; do
+    [ -n "$(value "$name")" ] || missing=1
+  done
+  if [ "$missing" = 0 ]; then
+    say "Generated settings: all there."
+    return 0
+  fi
+  say "== Generated settings (only the empty ones)"
+  fill IMMICH_DB_PASSWORD "$(random_letters 40)"
+  fill MEMENTO_SECRET "$(new_secret)"
+  if [ -z "$(value BACKUP_CRYPT_PASSWORD_OBSCURED)" ]; then
+    plain1=$(random_letters 40)
+    set_value BACKUP_CRYPT_PASSWORD_OBSCURED "$(printf '%s' "$plain1" | rclone obscure -)"
+  fi
+  if [ -z "$(value BACKUP_CRYPT_PASSWORD2_OBSCURED)" ]; then
+    plain2=$(random_letters 40)
+    set_value BACKUP_CRYPT_PASSWORD2_OBSCURED "$(printf '%s' "$plain2" | rclone obscure -)"
+  fi
+  fill ANDROID_KEYSTORE_PASSWORD "$(random_letters 40)"
+  if [ -n "$plain1$plain2" ]; then
+    say ""
+    say "SAVE THESE NOW, in your password manager. They're shown only this once."
+    say "The backups are encrypted with them; without them (or .env) nobody can read the backups:"
+    if [ -n "$plain1" ]; then say "  backup password 1: $plain1"; fi
+    if [ -n "$plain2" ]; then say "  backup password 2: $plain2"; fi
+    say ""
+  fi
+}
+
+# Installs what's missing: Ansible, rclone, and Terraform when a Terraform part is on.
+install_tools() {
+  local tool missing=() wanted=(ansible-playbook rclone)
+  if [ "$terraform_on" = 1 ]; then wanted+=(terraform); fi
+  for tool in "${wanted[@]}"; do command -v "$tool" >/dev/null 2>&1 || missing+=("$tool"); done
+  [ ${#missing[@]} -gt 0 ] || return 0
+  say "== Installing: ${missing[*]}"
+  if [ "$(uname -s)" = Darwin ]; then
+    command -v brew >/dev/null 2>&1 || fail "MANUAL: install Homebrew (https://brew.sh), then run this again."
+    for tool in "${missing[@]}"; do
+      case "$tool" in
+        terraform) brew install hashicorp/tap/terraform ;;
+        ansible-playbook) brew install ansible ;;
+        *) brew install "$tool" ;;
+      esac
+    done
+  elif command -v apt-get >/dev/null 2>&1; then
+    sudo apt-get update
+    for tool in "${missing[@]}"; do
+      case "$tool" in
+        terraform)
+          sudo apt-get install -y curl gpg
+          curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor --yes -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(sed -n 's/^VERSION_CODENAME=//p' /etc/os-release) main" |
+            sudo tee /etc/apt/sources.list.d/hashicorp.list >/dev/null
+          sudo apt-get update
+          sudo apt-get install -y terraform
+          ;;
+        ansible-playbook)
+          sudo apt-get install -y pipx
+          pipx install --include-deps ansible
+          export PATH="$HOME/.local/bin:$PATH"
+          ;;
+        *) sudo apt-get install -y "$tool" ;;
+      esac
+    done
+  else
+    fail "MANUAL: install ${missing[*]} (Terraform: developer.hashicorp.com/terraform/install;
+Ansible: docs.ansible.com; rclone: rclone.org/install), then run this again."
+  fi
+}
+
+# tf ARGS...: terraform in infra/, with only the settings it needs from the settings file.
+tf() {
+  local names=() name
+  while IFS= read -r name; do names+=(-u "$name"); done < <(env | sed -nE 's/^((TF_VAR|AWS|CLOUDFLARE|OCI)_[A-Za-z0-9_]*)=.*/\1/p')
+  env ${names[@]+"${names[@]}"} "${tf_env[@]}" terraform -chdir="$root/infra" "$@"
+}
+
+set_tf_env() {
+  local on=(false true)
+  tf_env=("TF_VAR_oracle_server=${on[$oracle]}" "TF_VAR_cloudflare_dns=${on[$dns]}" "TF_VAR_aws_backup=${on[$aws]}")
+  if [ "$oracle" = 1 ]; then
+    tf_env+=("TF_VAR_oci_tenancy_ocid=$(value OCI_TENANCY_OCID)" "TF_VAR_oci_config_profile=$(value OCI_CONFIG_PROFILE DEFAULT)"
+      "TF_VAR_oci_region=$(value OCI_REGION "$(oci_value region)")"
+      "TF_VAR_budget_amount=$(value OCI_BUDGET_AMOUNT)" "TF_VAR_budget_alert_email=$(value OCI_BUDGET_EMAIL)")
+    if [ -n "$(value SSH_PUBLIC_KEY_PATH)" ]; then tf_env+=("TF_VAR_ssh_public_key_path=$(value SSH_PUBLIC_KEY_PATH)"); fi
+    if [ -n "$(value SSH_ALLOWED_CIDR)" ]; then tf_env+=("TF_VAR_ssh_allowed_cidr=$(value SSH_ALLOWED_CIDR)"); fi
+  fi
+  if [ "$dns" = 1 ]; then
+    tf_env+=("TF_VAR_domain=$zone" "TF_VAR_subdomains=[\"$subdomain\"]" "TF_VAR_server_ipv4=$server_ipv4"
+      "CLOUDFLARE_API_TOKEN=$(value CLOUDFLARE_API_TOKEN)")
+  fi
+  if [ "$aws" = 1 ]; then
+    tf_env+=("TF_VAR_backup_bucket_name=$(value BACKUP_BUCKET_NAME)" "TF_VAR_aws_region=$(value AWS_REGION us-east-1)"
+      "TF_VAR_aws_profile=$(value AWS_PROFILE)")
+    if [ -z "$(value AWS_PROFILE)" ]; then
+      tf_env+=("AWS_ACCESS_KEY_ID=$(value AWS_ACCESS_KEY_ID)" "AWS_SECRET_ACCESS_KEY=$(value AWS_SECRET_ACCESS_KEY)")
+    fi
+  fi
+}
+
+# Stops when Terraform's state has a part that .env now turns off: Terraform would delete it.
+check_state() {
+  local state
+  state=$(tf state list 2>/dev/null) || return 0
+  if [ "$oracle" = 0 ] && grep -q -e '^module\.oci_vm' -e '^oci_identity_compartment' <<<"$state"; then
+    fail "Terraform's state has the Oracle server, but .env turns that part off (SERVER_HOST is set, or OCI_TENANCY_OCID
+is empty), so Terraform would delete it. Fill in the ORACLE part and leave SERVER_HOST empty."
+  fi
+  if [ "$dns" = 0 ] && grep -q '^module\.dns' <<<"$state"; then
+    fail "Terraform's state has the Cloudflare DNS record, but CLOUDFLARE_API_TOKEN is empty, so Terraform would delete it.
+Fill in CLOUDFLARE_API_TOKEN."
+  fi
+  if [ "$aws" = 0 ] && grep -q '^module\.backup' <<<"$state"; then
+    fail "Terraform's state has the backup bucket and its user, but AWS_PROFILE (or the AWS keys) is empty, so Terraform
+would delete them. Fill in AWS_PROFILE or AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY."
+  fi
+}
+
+tf_ready() {
+  command -v terraform >/dev/null 2>&1 || fail "Terraform isn't installed: ./memento prod setup installs it."
+  set_tf_env
+  say "== Terraform: init"
+  tf init -input=false >/dev/null || fail "terraform init failed. To see why: cd infra && terraform init"
+  check_state
+}
+
+# The plan, shown, then applied only after the person types yes. Never deletes anything.
+terraform_apply() {
+  local rc=0 deletes answer
+  tf_ready
+  say "== Terraform: plan"
+  tf plan -input=false -out="$plan_file" -detailed-exitcode || rc=$?
+  case "$rc" in
+    0) say "Terraform: nothing to change." ;;
+    2)
+      deletes=$(tf show -json "$plan_file" | python3 -I -c 'import json, sys
+for change in json.load(sys.stdin).get("resource_changes", []):
+    if "delete" in change["change"]["actions"]:
+        print("  " + change["address"])')
+      if [ -n "$deletes" ]; then
+        rm -f "$plan_file"
+        fail "This plan deletes or replaces:
+$deletes
+Setup never applies that. Check .env (a part turned off?); to do it anyway, run terraform in infra/ yourself."
+      fi
+      [ -t 0 ] || { rm -f "$plan_file"; fail "Setup asks you to type yes before Terraform changes anything: run it in a terminal."; }
+      printf '\nMake these changes? Type yes to go ahead (anything else stops): '
+      read -r answer || answer=""
+      if [ "$answer" != yes ]; then
+        rm -f "$plan_file"
+        fail "Stopped: Terraform changed nothing."
+      fi
+      tf apply -input=false "$plan_file" || { rm -f "$plan_file"; fail "terraform apply failed (above)."; }
+      ;;
+    *) rm -f "$plan_file"; fail "terraform plan failed (above)." ;;
+  esac
+  rm -f "$plan_file"
+}
+
+# After Terraform: the backup user's keys into .env, and the Oracle server's DNS.
+after_terraform() {
+  local ip
+  if [ "$aws" = 1 ]; then
+    fill BACKUP_ACCESS_KEY_ID "$(tf output -raw backup_access_key_id 2>/dev/null || true)"
+    fill BACKUP_SECRET_ACCESS_KEY "$(tf output -raw backup_secret_access_key 2>/dev/null || true)"
+  fi
+  if [ "$oracle" = 1 ]; then
+    ip=$(tf output -raw vm_public_ip 2>/dev/null || true)
+    say "The Oracle server's address: $ip"
+    if [ "$dns" = 0 ] && [ "$(resolve "$domain")" != "$ip" ]; then
+      fail "MANUAL: at your domain's DNS provider, add an A record: $domain → $ip (DNS only, no proxy).
+When it's there (host $domain shows $ip), run ./memento prod deploy."
+    fi
+  fi
+}
+
+resolve() { python3 -I -c 'import socket, sys; print(socket.gethostbyname(sys.argv[1]))' "$1" 2>/dev/null || true; }
+
+ansible_run() {
+  command -v ansible-playbook >/dev/null 2>&1 || fail "Ansible isn't installed: ./memento prod setup installs it."
+  (cd "$root/host" && MEMENTO_ENV_FILE="$env_file" ansible-playbook "$@")
+}
+
+prod_setup() {
+  if [ ! -f "$env_file" ]; then
+    (umask 077 && cp "$root/.env.example" "$env_file")
+    say "Made $env_file from .env.example."
+  fi
+  prod_parts
+  install_tools
+  fill_secrets
+  check_settings
+  if [ ${#problems[@]} -gt 0 ]; then
+    show_check
+    fail "Fill these in, then run ./memento prod setup again (it carries on where it stopped)."
+  fi
+  show_parts
+  if [ "$terraform_on" = 1 ]; then
+    terraform_apply
+    after_terraform
+  else
+    say "Terraform: nothing to make (no Oracle, Cloudflare or AWS settings)."
+  fi
+  prod_deploy
+  say ""
+  say "Memento is at https://$domain. Still by hand (MANUAL):"
+  say "  - Open it and make the admin account: the first person to sign up is the admin."
+  say "  - Music for recap videos (optional): deploy/music/tracks.md, then ./memento prod deploy."
+  say "  - The Android app: ./memento android keystore (once), then ./memento android."
+}
+
+prod_deploy() {
+  local arg build=0 args=()
+  for arg in "$@"; do
+    if [ "$arg" = --web ]; then build=1; else args+=("$arg"); fi
+  done
+  need_ready
+  if [ "$build" = 1 ] || [ ! -f "$web_dist/index.html" ] || [ ! -f "$web_dist.build.json" ]; then
+    need_docker
+    say "== Building the website (apps/web/build.sh)"
+    env -u WEB_BUILD_DIR "$root/apps/web/build.sh"
+  fi
+  if [ "$backups" = 0 ]; then say "WARNING: no backups: nothing is copied off the server (BACKUPS in .env.example)."; fi
+  say "== Setting up the server (Ansible)"
+  ansible_run site.yml --diff ${args[@]+"${args[@]}"}
+}
+
+prod_dry_run() {
+  need_ready
+  if [ ! -f "$web_dist/index.html" ] || [ ! -f "$web_dist.build.json" ]; then
+    fail "The website isn't built yet ($web_dist): ./memento prod deploy builds it first, or run apps/web/build.sh."
+  fi
+  if [ "$terraform_on" = 1 ]; then
+    tf_ready
+    say "== Terraform: plan (changes nothing)"
+    tf plan -input=false
+  else
+    say "Terraform: off (no Oracle, Cloudflare or AWS settings)."
+  fi
+  say "== Ansible: --check (changes nothing)"
+  ansible_run site.yml --check
+}
+
+# ── android ─────────────────────────────────────────────────────────────────────────────────────
+
+load_android() {
+  keystore=$(expand_home "$(value ANDROID_KEYSTORE_PATH "$HOME/.config/selfphotos/android/selfphotos-immich.jks")")
+  case "$keystore" in /*) ;; *) keystore="$root/$keystore" ;; esac
+  key_alias=$(value ANDROID_KEYSTORE_ALIAS selfphotos)
+}
+
+android_build() {
+  [ -f "$keystore" ] || fail "No signing key at $keystore. Make one: ./memento android keystore
+(or set ANDROID_KEYSTORE_PATH in .env to yours)."
+  [ -n "$(value ANDROID_KEYSTORE_PASSWORD)" ] || fail "ANDROID_KEYSTORE_PASSWORD is empty in $env_file."
+  MEMENTO_ENV_FILE="$env_file" "$root/apps/android/build.sh"
+}
+
+android_keystore() {
+  local keytool=(keytool)
+  if [ -e "$keystore" ]; then
+    say "There's a signing key at $keystore already: left as it is (never replaced)."
+    return 0
+  fi
+  if ! keytool -help >/dev/null 2>&1; then
+    keytool=(mise -C "$root/immich/mobile" exec -- keytool)
+    MISE_AUTO_INSTALL=false MISE_EXEC_AUTO_INSTALL=false "${keytool[@]}" -help >/dev/null 2>&1 ||
+      fail "MANUAL: keytool comes with Java. Install a JDK (Mac: brew install openjdk; Ubuntu: sudo apt install default-jdk-headless),
+or the Android build's tools (apps/android/build.sh, one-time setup), then run this again."
+  fi
+  if [ ! -f "$env_file" ]; then
+    (umask 077 && cp "$root/.env.example" "$env_file")
+    say "Made $env_file from .env.example."
+  fi
+  fill ANDROID_KEYSTORE_PASSWORD "$(random_letters 40)"
+  (umask 077 && mkdir -p "$(dirname "$keystore")")
+  MEMENTO_KEYSTORE_PASSWORD=$(value ANDROID_KEYSTORE_PASSWORD) MISE_AUTO_INSTALL=false MISE_EXEC_AUTO_INSTALL=false \
+    "${keytool[@]}" -genkeypair -noprompt -keystore "$keystore" -storetype PKCS12 -alias "$key_alias" \
+    -keyalg RSA -keysize 4096 -validity 10000 -dname "CN=Memento" \
+    -storepass:env MEMENTO_KEYSTORE_PASSWORD -keypass:env MEMENTO_KEYSTORE_PASSWORD >/dev/null
+  chmod 600 "$keystore"
+  say "Made the signing key: $keystore (alias $key_alias; its password is ANDROID_KEYSTORE_PASSWORD)."
+  say "MANUAL: back up the key file and its password. Every update of the app must be signed with this same key."
+}
+
 usage() {
   sed -n '2,/^set -euo/p' "$0" | sed -e '$d' -e 's/^# \{0,1\}//'
   exit 1
@@ -500,21 +1009,46 @@ usage() {
 
 [ "$(id -u)" != 0 ] || fail "Don't run ./memento as root or with sudo: dev's files must belong to you.
 On Linux, if Docker says \"permission denied\", see docs/setup-dev.md (the docker group)."
-[ "${1-}" = dev ] || usage
-load_settings
-case "${2-}" in
-  up) up ;;
-  down) down ;;
-  reset) reset ;;
-  logs)
-    shift 2
-    logs "$@"
+case "${1-}" in
+  dev)
+    load_settings
+    case "${2-}" in
+      up) up ;;
+      down) down ;;
+      reset) reset ;;
+      logs)
+        shift 2
+        logs "$@"
+        ;;
+      status) status ;;
+      sample-memories) sample_memories ;;
+      config)
+        shift 2
+        config "$@"
+        ;;
+      *) usage ;;
+    esac
     ;;
-  status) status ;;
-  sample-memories) sample_memories ;;
-  config)
-    shift 2
-    config "$@"
+  prod)
+    load_prod
+    case "${2-}" in
+      check) prod_check ;;
+      setup) prod_setup ;;
+      deploy)
+        shift 2
+        prod_deploy "$@"
+        ;;
+      dry-run) prod_dry_run ;;
+      *) usage ;;
+    esac
+    ;;
+  android)
+    load_android
+    case "${2-}" in
+      "") android_build ;;
+      keystore) android_keystore ;;
+      *) usage ;;
+    esac
     ;;
   *) usage ;;
 esac
