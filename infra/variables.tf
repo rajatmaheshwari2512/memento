@@ -21,9 +21,9 @@ variable "aws_backup" {
 # --- Oracle ---
 
 variable "oci_region" {
-  description = "Oracle home region. It can't be changed after sign-up."
+  description = "Oracle home region. It can't be changed after sign-up. null: the profile's region in ~/.oci/config."
   type        = string
-  default     = "ap-hyderabad-1"
+  default     = null
 }
 
 variable "oci_config_profile" {
@@ -71,9 +71,9 @@ variable "aws_region" {
 }
 
 variable "aws_profile" {
-  description = "Profile in ~/.aws/credentials with admin rights. Named on purpose, so Terraform never falls back to some other AWS account's default credentials on this computer. \"\": the AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables."
+  description = "Profile in ~/.aws/credentials with admin rights. \"\": the AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables."
   type        = string
-  default     = "selfphotos-admin"
+  default     = ""
 }
 
 variable "backup_bucket_name" {
