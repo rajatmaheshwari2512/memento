@@ -7,12 +7,10 @@
 # (src/noise.ts). Everything is pinned: the base images by digest (node 24.22.2 on Alpine 3.24,
 # Debian 13.7 for glibc), the packages by version (a newer Alpine build fails here, loudly, until
 # the pin is updated), the models and deep-filter by version and checksum.
-# Builds for ARM64 and x86-64: the CPU is TARGETARCH, or the build machine's when the builder
-# doesn't set it (Ansible's, on the server).
+# Builds for ARM64 and x86-64 (TARGETARCH, else the build machine's CPU).
 
 # glibc, for deep-filter on ARM64 only: its ARM64 build is for glibc, and Alpine has musl (Alpine's
-# glibc shim can't start it). Five libraries and glibc's loader, nothing else from Debian. On
-# x86-64, /glibc stays empty: that deep-filter is built for musl.
+# glibc shim can't start it). Five libraries and glibc's loader, nothing else from Debian.
 FROM debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2 AS glibc
 ARG TARGETARCH
 RUN mkdir /glibc && case "${TARGETARCH:-$(uname -m)}" in \

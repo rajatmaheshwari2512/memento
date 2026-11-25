@@ -48,9 +48,7 @@ const TAIL_SAMPLES = 4_800; // 100 ms of silence after each piece: the model's d
 // The longest sound cleaned: the video's limit, with a few seconds' leeway (Immich's length, which
 // the service checked, and ffprobe's can differ).
 const SOUND_SECONDS = LIMITS["reduce-noise"].videoSeconds + 5;
-// deep-filter's ARM64 build is for glibc (there's no ARM64 build for Alpine's musl), so there it's
-// started by glibc's own loader, with the few glibc libraries it needs (copied in by the
-// Dockerfile). The x86-64 build is for musl and runs as it is (no loader in the image).
+// deep-filter: on ARM64 through glibc's loader and libraries (copied in by the Dockerfile), else as it is.
 const DEEP_FILTER = process.env.DEEP_FILTER ?? "/app/deep-filter";
 const GLIBC = process.env.GLIBC_DIR ?? "/opt/glibc";
 const LOADER = join(GLIBC, "ld-linux-aarch64.so.1");
