@@ -14,7 +14,7 @@
 set -eu
 
 work={{ memento_extras_dir }}/night
-image=memento-extras:local
+image={{ memento_extras_image_ref }}
 until=$(date -d "${CAPTION_UNTIL:-{{ memento_extras_captions_stop }}}" --iso-8601=seconds) # today
 
 # The model goes, however this ends. The unit's ExecStopPost does it too, for a kill.

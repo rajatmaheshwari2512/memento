@@ -1,6 +1,7 @@
 # Memento's extras service (AI edits, feature flags, and later live albums and more), in
 # its own Docker Compose project in /opt/memento-extras:
 #   build/                   the source (memento-extras/ from this repo); the image is built here, on the VM
+#                            (a release, MEMENTO_VERSION in .env, pulls the images instead)
 #   data/                    edit results waiting to be saved, and the database (limits, flags)
 #   memento-extras.env       settings + Gemini key (root-only)
 #   docker-compose.yml       one container, joined to Immich's network
@@ -31,10 +32,10 @@
     owner: root
     group: root
     mode: "0755"
-  loop:
-    - "{{ memento_extras_dir }}"
-    - "{{ memento_extras_dir }}/build"
-    - "{{ memento_extras_dir }}/build/creations/src"
+  # From source: build/ holds the source the images are built from (none for a release).
+  loop: >-
+    {{ [memento_extras_dir] + ([] if memento_extras_release else
+       [memento_extras_dir ~ '/build', memento_extras_dir ~ '/build/creations/src']) }}
 
 # The container runs as memento_extras_uid, not root, so it owns its data folder and
 # everything in it (recurse). u=rwX: folders 0700, files 0600. Only that ID (and root) can read it.
@@ -47,78 +48,97 @@
     mode: u=rwX,g=,o=
     recurse: true
 
-# Only what the image needs. Not node_modules: those are dev-only (type checking on the Mac).
-- name: Copy the source to the VM
-  ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../memento-extras/{{ item }}"
-    dest: "{{ memento_extras_dir }}/build/{{ item }}"
-    mode: "0644"
-    directory_mode: "0755"
-  loop:
-    - Dockerfile
-    - package.json
-    - src/
-    - creations/src/job.ts # the creations container's jobs and limits, which the service shares
-  register: memento_extras_copied
+# From source (no MEMENTO_VERSION): the service's image, built on the VM from this checkout.
+- name: Build the service's image from this checkout
+  when: memento_extras_release | length == 0
+  block:
+    # Only what the image needs. Not node_modules: those are dev-only (type checking on the Mac).
+    - name: Copy the source to the VM
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../memento-extras/{{ item }}"
+        dest: "{{ memento_extras_dir }}/build/{{ item }}"
+        mode: "0644"
+        directory_mode: "0755"
+      loop:
+        - Dockerfile
+        - package.json
+        - src/
+        - creations/src/job.ts # the creations container's jobs and limits, which the service shares
+      register: memento_extras_copied
 
-# Copying never deletes: a file moved or removed in the repo would stay on the VM, and in
-# the image, as an old copy that scripts (caption-night.sh) could still run.
-- name: List the source files in the repo
-  ansible.builtin.find:
-    paths: "{{ playbook_dir }}/../memento-extras/src"
-    recurse: true
-  delegate_to: localhost
-  become: false
-  register: memento_extras_src_repo
+    # Copying never deletes: a file moved or removed in the repo would stay on the VM, and in
+    # the image, as an old copy that scripts (caption-night.sh) could still run.
+    - name: List the source files in the repo
+      ansible.builtin.find:
+        paths: "{{ playbook_dir }}/../memento-extras/src"
+        recurse: true
+      delegate_to: localhost
+      become: false
+      register: memento_extras_src_repo
 
-- name: List the source files on the VM
-  ansible.builtin.find:
-    paths: "{{ memento_extras_dir }}/build/src"
-    recurse: true
-  register: memento_extras_src_vm
+    - name: List the source files on the VM
+      ansible.builtin.find:
+        paths: "{{ memento_extras_dir }}/build/src"
+        recurse: true
+      register: memento_extras_src_vm
 
-# Compared as paths relative to each src folder: find tidies "host/../" out of the paths it
-# returns, so stripping a prefix by text never matches (it listed every file).
-- name: Work out which source files on the VM are no longer in the repo
-  ansible.builtin.set_fact:
-    memento_extras_stale: >-
-      {{ memento_extras_src_vm.files | map(attribute='path')
-         | map('relpath', memento_extras_dir ~ '/build/src')
-         | difference(memento_extras_src_repo.files | map(attribute='path')
-                      | map('relpath', playbook_dir ~ '/../memento-extras/src'))
-         | list }}
+    # Compared as paths relative to each src folder: find tidies "host/../" out of the paths it
+    # returns, so stripping a prefix by text never matches (it listed every file).
+    - name: Work out which source files on the VM are no longer in the repo
+      ansible.builtin.set_fact:
+        memento_extras_stale: >-
+          {{ memento_extras_src_vm.files | map(attribute='path')
+             | map('relpath', memento_extras_dir ~ '/build/src')
+             | difference(memento_extras_src_repo.files | map(attribute='path')
+                          | map('relpath', playbook_dir ~ '/../memento-extras/src'))
+             | list }}
 
-# A guard: a mistake above must never empty the VM's source (the image would have no code).
-- name: Check that most of the VM's source stays
-  ansible.builtin.assert:
-    that:
-      - memento_extras_src_repo.files | length > 0
-      - memento_extras_stale | length < memento_extras_src_vm.files | length
-      - "'server.ts' not in memento_extras_stale"
-    fail_msg: "Would remove {{ memento_extras_stale | length }} of {{ memento_extras_src_vm.files | length }} source files on the VM; stopping."
-    quiet: true
+    # A guard: a mistake above must never empty the VM's source (the image would have no code).
+    - name: Check that most of the VM's source stays
+      ansible.builtin.assert:
+        that:
+          - memento_extras_src_repo.files | length > 0
+          - memento_extras_stale | length < memento_extras_src_vm.files | length
+          - "'server.ts' not in memento_extras_stale"
+        fail_msg: "Would remove {{ memento_extras_stale | length }} of {{ memento_extras_src_vm.files | length }} source files on the VM; stopping."
+        quiet: true
 
-- name: Remove source files that are no longer in the repo
-  ansible.builtin.file:
-    path: "{{ memento_extras_dir }}/build/src/{{ item }}"
-    state: absent
-  loop: "{{ memento_extras_stale }}"
-  register: memento_extras_removed
+    - name: Remove source files that are no longer in the repo
+      ansible.builtin.file:
+        path: "{{ memento_extras_dir }}/build/src/{{ item }}"
+        state: absent
+      loop: "{{ memento_extras_stale }}"
+      register: memento_extras_removed
 
-# Built on the VM, so there's no image registry and nothing is published. The build is
-# small (no npm install), about a minute on the 2-core VM. Rebuilt only when the source changed.
-- name: Build the memento-extras image
+    # Built on the VM, so there's no image registry and nothing is published. The build is
+    # small (no npm install), about a minute on the 2-core VM. Rebuilt only when the source changed.
+    - name: Build the memento-extras image
+      community.docker.docker_image:
+        name: memento-extras
+        tag: local
+        source: build
+        build:
+          path: "{{ memento_extras_dir }}/build"
+        force_source: "{{ memento_extras_copied is changed or memento_extras_removed is changed }}"
+      register: memento_extras_image
+
+# A release (MEMENTO_VERSION): its three images, pulled instead of built. An image already on
+# the server isn't pulled again.
+- name: Pull Memento's images for the release
   community.docker.docker_image:
-    name: memento-extras
-    tag: local
-    source: build
-    build:
-      path: "{{ memento_extras_dir }}/build"
-    force_source: "{{ memento_extras_copied is changed or memento_extras_removed is changed }}"
-  register: memento_extras_image
+    name: "{{ item }}"
+    source: pull
+  loop:
+    - "{{ memento_extras_image_ref }}"
+    - "{{ memento_extras_reader_image_ref }}"
+    - "{{ memento_extras_creations_image_ref }}"
+  register: memento_extras_pulled
+  when: memento_extras_release | length > 0
 
+# Builds the reader from source; a release's reader image has its model inside.
 - name: The question reader (Ask)
   ansible.builtin.import_tasks: reader.yml
+  when: memento_extras_release | length == 0
 
 - name: Collages, recap videos, animations and cinematic photos (the creations container)
   ansible.builtin.import_tasks: creations.yml
@@ -148,8 +168,8 @@
     remove_orphans: true
     recreate: >-
       {{ 'always' if (memento_extras_image is changed or memento_extras_reader_image is changed
-         or memento_extras_creations_image is changed or memento_extras_env is changed
-         or memento_extras_compose is changed) else 'auto' }}
+         or memento_extras_creations_image is changed or memento_extras_pulled is changed
+         or memento_extras_env is changed or memento_extras_compose is changed) else 'auto' }}
     wait: true
     wait_timeout: 120
 

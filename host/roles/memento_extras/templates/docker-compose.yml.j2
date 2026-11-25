@@ -3,7 +3,7 @@ name: memento-extras
 
 services:
   memento-extras:
-    image: memento-extras:local # built on this VM by Ansible
+    image: {{ memento_extras_image_ref }} # {{ memento_extras_image_note }}
     container_name: memento_extras
     restart: always
     # Not root; owns {{ memento_extras_dir }}/data (see memento_extras_uid in the role's defaults).
@@ -28,7 +28,7 @@ services:
   # The trained question reader (memento-extras/reader/). No ports and no internet: it's only
   # on the internal "reader" network, where the extras service calls http://memento-reader:8000.
   memento-reader:
-    image: memento-reader:local # built on this VM by Ansible
+    image: {{ memento_extras_reader_image_ref }} # {{ memento_extras_image_note }}
     container_name: memento_reader
     restart: always
     environment:
@@ -44,7 +44,7 @@ services:
   # (memento-extras/creations/). No ports, no internet (only the internal "creations" network), no
   # keys: it reads and writes the work folder only.
   memento-creations:
-    image: memento-creations:local # built on this VM by Ansible
+    image: {{ memento_extras_creations_image_ref }} # {{ memento_extras_image_note }}
     container_name: memento_creations
     restart: always
     user: "{{ memento_extras_uid }}:{{ memento_extras_uid }}"

@@ -7,6 +7,13 @@ dotenv: "{{ (lookup('ansible.builtin.file', lookup('ansible.builtin.env', 'MEMEN
 
 photos_hostname: "{{ dotenv.MEMENTO_DOMAIN | default('') }}"
 
+# --- A Memento release (docs/upgrades.md) ---
+# MEMENTO_VERSION in .env, like v1.2.0: the server runs that release's images, pulled from
+# MEMENTO_IMAGES (like ghcr.io/<owner>; ./memento works it out from the git remote when it's
+# empty), instead of building them from this checkout. Empty: built from this checkout.
+memento_version: "{{ dotenv.MEMENTO_VERSION | default('') }}"
+memento_images: "{{ dotenv.MEMENTO_IMAGES | default('') }}"
+
 # --- base ---
 # TZ in .env, like Europe/London. Empty: Etc/UTC.
 base_timezone: "{{ dotenv.TZ | default('Etc/UTC', true) }}"
@@ -27,12 +34,16 @@ immich_require_mount: false
 immich_timezone: "{{ base_timezone }}"
 immich_db_password: "{{ dotenv.IMMICH_DB_PASSWORD | default('') }}"
 # Our build of the web app (AI Edit, Memento Features; apps/web/build.sh). "" = official.
-immich_custom_web_dir: "{{ playbook_dir }}/../apps/web/dist/{{ immich_version }}"
+# A release has it inside its server image instead.
+immich_custom_web_dir: "{{ '' if memento_version else playbook_dir ~ '/../apps/web/dist/' ~ immich_version }}"
+immich_server_image: "{{ memento_images ~ '/memento-server:' ~ memento_version if memento_version else '' }}"
 
 # --- memento_extras (AI edits, feature flags, ...) ---
 memento_extras_gemini_api_key: "{{ dotenv.GEMINI_API_KEY | default('') }}"
 memento_extras_secret: "{{ dotenv.MEMENTO_SECRET | default('') }}"
 memento_extras_timezone: "{{ base_timezone }}"
+memento_extras_release: "{{ memento_version }}"
+memento_extras_images: "{{ memento_images }}"
 # Ask's reader model from a folder on this computer (relative to the repo, or absolute). "": downloaded on the server.
 memento_extras_reader_model: >-
   {{ '' if not dotenv.READER_MODEL_DIR | default('')

@@ -36,6 +36,36 @@
     checksum: sha256:{{ immich_compose_sha256 }}
     mode: "0644"
 
+# A Memento release: its server image, pulled before Immich starts, so that one built on another
+# Immich release (its org.opencontainers.image.base.name label) stops the deploy here.
+- name: Get Memento's server image
+  when: immich_server_image | length > 0
+  block:
+    - name: Pull Memento's server image
+      community.docker.docker_image:
+        name: "{{ immich_server_image }}"
+        source: pull
+
+    - name: Read which Immich release it's built on
+      community.docker.docker_image_info:
+        name: "{{ immich_server_image }}"
+      register: immich_server_image_info
+
+    # Skipped in --check when the image is new: it isn't pulled there.
+    - name: Check it's built on immich_version
+      vars:
+        immich_server_built_on: >-
+          {{ (immich_server_image_info.images[0].Config.Labels | default({}, true))['org.opencontainers.image.base.name']
+             | default('an unknown Immich release') }}
+      ansible.builtin.assert:
+        that: immich_server_built_on == 'ghcr.io/immich-app/immich-server:' ~ immich_version
+        fail_msg: >-
+          {{ immich_server_image }} is built on {{ immich_server_built_on }}, but immich_version is
+          {{ immich_version }}. Check out that release (git checkout {{ immich_server_image.split(':') | last }}),
+          so the server setup matches it.
+        quiet: true
+      when: immich_server_image_info.images | length > 0
+
 # SelfPhotos phase 2: our build of Immich's web app (apps/web/build.sh on your Mac).
 # Each build is unpacked into its own folder, /opt/immich/web/<version>-<commit>-<time>,
 # and the override below mounts it over the image's web app. Old builds stay, for going back.

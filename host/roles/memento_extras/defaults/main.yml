@@ -9,6 +9,21 @@ memento_extras_port: 3005
 # that's Oracle's built-in "opc" account. Pick an ID no account on the VM has.
 memento_extras_uid: 10001
 
+# A Memento release (MEMENTO_VERSION in .env; docs/upgrades.md): its tag, like v1.2.0, and where
+# its images are, like ghcr.io/<owner>. The service, the reader (with its model inside) and the
+# creations container are then pulled from there, not built on the server from this checkout, and
+# READER_MODEL_DIR is unused. "": built here.
+memento_extras_release: ""
+memento_extras_images: ""
+# The images the containers (and caption-night.sh) run: the release's, or <name>:local built here.
+memento_extras_image_ref: >-
+  {{ memento_extras_images ~ '/memento-extras:' ~ memento_extras_release if memento_extras_release else 'memento-extras:local' }}
+memento_extras_reader_image_ref: >-
+  {{ memento_extras_images ~ '/memento-reader:' ~ memento_extras_release if memento_extras_release else 'memento-reader:local' }}
+memento_extras_creations_image_ref: >-
+  {{ memento_extras_images ~ '/memento-creations:' ~ memento_extras_release if memento_extras_release else 'memento-creations:local' }}
+memento_extras_image_note: "{{ 'Memento ' ~ memento_extras_release ~ ', pulled' if memento_extras_release else 'built on this VM by Ansible' }}"
+
 # Set from .env in group_vars/all/main.yml. Empty = the role stops with an error.
 memento_extras_gemini_api_key: ""
 # Encrypts the per-user keys live albums keep (32+ random bytes, base64). From .env (MEMENTO_SECRET).

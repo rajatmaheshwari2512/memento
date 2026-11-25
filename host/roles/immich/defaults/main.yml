@@ -25,3 +25,8 @@ immich_db_password: ""
 immich_custom_web_dir: ""
 # Where builds are unpacked on the VM, one folder per build.
 immich_web_builds_dir: /opt/immich/web
+
+# A Memento release (MEMENTO_VERSION in .env): Immich's server image with Memento's website already
+# in it, like ghcr.io/<owner>/memento-server:v1.2.0, run instead of Immich's own (and
+# immich_custom_web_dir is then ""). It must be built on immich_version. Empty = Immich's own image.
+immich_server_image: ""

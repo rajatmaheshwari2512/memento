@@ -15,6 +15,14 @@
         fail_msg: "Copy .env.example to .env at the top of the repo and fill in the PROD lines (MEMENTO_DOMAIN is missing or has no dot)."
         quiet: true
 
+    - name: Check where a release's images are
+      ansible.builtin.assert:
+        that: memento_version | length == 0 or memento_images | length > 0
+        fail_msg: >-
+          MEMENTO_VERSION is set but MEMENTO_IMAGES is empty: set it in .env (like ghcr.io/<owner>),
+          or deploy with ./memento prod deploy, which works it out from the git remote.
+        quiet: true
+
 - name: Set up the SelfPhotos VM
   hosts: photos
   become: true # run tasks as root (sudo)

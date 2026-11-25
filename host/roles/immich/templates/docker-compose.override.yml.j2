@@ -4,6 +4,10 @@
 
 services:
   immich-server:
+{% if immich_server_image | length > 0 %}
+    # A Memento release: Immich's server with Memento's website already in it.
+    image: {{ immich_server_image }}
+{% endif %}
     # Only reachable from the VM itself (Caddy), never straight from the internet.
     # Docker's published ports skip the VM's iptables rules, so '2283:2283' would be
     # exposed whenever Oracle's security list allowed it.
