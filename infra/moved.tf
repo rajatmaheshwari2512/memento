@@ -1,5 +1,4 @@
-# Where things were before the parts became optional (count). Terraform moves them in its
-# state on the next apply, so nothing that exists is recreated.
+# Where things were before the parts became optional (count).
 
 moved {
   from = oci_identity_compartment.selfphotos

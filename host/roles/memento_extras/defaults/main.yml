@@ -1,5 +1,5 @@
-# Memento's extras service: AI edits (phase 2, AI.md), feature flags, and the features in
-# FEATURES.md. Source code: memento-extras/ at the repo root. Was called ai-edit until 2026-11-19.
+# Memento's extras service: AI edits, feature flags, and the features in the README.
+# Source code: memento-extras/ at the repo root. Was called ai-edit until 2026-11-19.
 
 memento_extras_dir: /opt/memento-extras
 # Where Caddy reaches it. Only on 127.0.0.1, so it's never reachable from outside directly.
@@ -46,8 +46,7 @@ memento_extras_immich_url: http://immich-server:2283
 # --- Night captions for new photos (memento-extras/src/scripts/caption-night.ts) ---
 # Every night the caption model runs on this VM and captions photos that have none yet
 # (new uploads, and any the backlog missed), newest first, into the database Ask searches.
-# The switch is in Administration → Settings → Memento Features. DECISIONS.md, "Captions for
-# new photos"; docs/runbooks.md, "Night captions".
+# The switch is in Administration → Settings → Memento Features.
 memento_extras_captions_start: "00:30" # after midnight: the stop time is read as "today"
 memento_extras_captions_stop: "07:00" # nothing new starts after this; the photo in hand finishes
 # Lowest CPU priority (Immich, Ask and the 04:00 backup always go first) and a hard memory
@@ -89,8 +88,7 @@ memento_extras_reader_memory: 768m
 
 # --- Themed memories and creations (memento-extras/src/services/memories.service.ts, creations.service.ts) ---
 # The extras service's own caps, so a leak restarts it instead of squeezing Immich. It uses
-# ~45 MB by day; the nightly memories run for one person peaks well under these (docs/runbooks.md,
-# "Themed memories and creations").
+# ~45 MB by day; the nightly memories run for one person peaks well under these.
 memento_extras_memory: 512m
 memento_extras_node_heap_mb: 384
 # The creations container (memento-extras/creations/): collages with vips, recap videos,
@@ -108,7 +106,7 @@ memento_extras_creations_work: "{{ memento_extras_dir }}/creations-work"
 # When the day's themed memories are made (local time): just after the night captions stop
 # (memento_extras_captions_stop), so their photo checks and Sunday's renders never overlap them.
 memento_extras_memories_run_at: "07:05"
-# Music for recap videos (docs/runbooks.md, "Music for recaps"): the deploy copies every .mp3 from
+# Music for recap videos (deploy/music/tracks.md): the deploy copies every .mp3 from
 # the source folder on the Mac (outside git) to the server's folder. Each recap picks one that
 # fits its memory's mood, faded in and out. None: videos are silent.
 memento_extras_creations_music: "{{ memento_extras_dir }}/music"

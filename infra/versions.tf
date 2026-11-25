@@ -20,6 +20,5 @@ terraform {
     }
   }
 
-  # No `backend` block, so state is the local file terraform.tfstate (gitignored).
-  # docs/runbooks.md explains how to move it to an OCI bucket before GitHub Actions.
+  # No `backend` block, so state is the local file terraform.tfstate (gitignored): back it up with .env.
 }

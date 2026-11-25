@@ -14,8 +14,8 @@ backup_crypt_password2_obscured: ""
 # same nightly run. The full list is in group_vars/all/main.yml.
 #   name:           a short label for the log
 #   enabled:        optional, false = skip this job (e.g. Nextcloud while Crypt is parked)
-#   source:         either a folder on the VM's disk, with encrypt_names set (stage 1,
-#                   STORAGE.md), or the box's ENCRYPTED folder (storagebox:<folder>), not
+#   source:         either a folder on the VM's disk, with encrypt_names set, or the
+#                   box's ENCRYPTED folder (storagebox:<folder>), not
 #                   the decrypted view: those scrambled files are copied as they are
 #                   (rclone's recommended way), so AWS gets the same data as Hetzner.
 #   encrypt_names:  for a plain folder on the VM: base32 or base64. Files are encrypted on

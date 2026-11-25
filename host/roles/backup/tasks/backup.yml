@@ -32,7 +32,7 @@
         or (backup_crypt_password_obscured | length > 0 and backup_crypt_password2_obscured | length > 0)
     fail_msg: >-
       Fill in BACKUP_* in .env (see .env.example)
-      (docs/setup.md, step 5), and give every backup_jobs entry with only_subfolder a crypt_remote too.
+      (BACKUPS), and give every backup_jobs entry with only_subfolder a crypt_remote too.
     quiet: true
 
 # This job was called immich-backup (Immich only), then storagebox-backup (every folder

@@ -61,7 +61,7 @@ backup_jobs:
     weekly_only: backups
     weekly_as: latest.sql.gz
     # Memento's playback copies of videos and the clips it pulls out of motion photos.
-    # It rebuilds both from the originals after a restore (docs/runbooks.md), so Deep
+    # It rebuilds both from the originals after a restore, so Deep
     # Archive holds only the originals and the database backup.
     skip_folders: [encoded-video]
   # Memento's extras service: a copy of its database (live-album rules, the encrypted keys

@@ -43,7 +43,6 @@
     - { src: reader/common.py, dest: common.py }
   register: memento_extras_reader_code
 
-# ~210 MB, downloaded once. The checksums pin the exact files; a changed file fails here.
 - name: Download the question reader's model
   tags: reader
   ansible.builtin.get_url:
@@ -56,7 +55,6 @@
   loop_control:
     label: "{{ item.key }}"
   register: memento_extras_reader_download
-  # A dry run (--check) creates no folders, so on the first deploy there's nothing to download into.
   when:
     - memento_extras_reader_model | length == 0
     - not (ansible_check_mode and memento_extras_reader_dirs is changed)

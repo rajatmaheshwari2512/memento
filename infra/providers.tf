@@ -9,8 +9,7 @@ provider "oci" {
 }
 
 # AWS: the named profile from ~/.aws/credentials, or (aws_profile "") the
-# AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables. With aws_backup
-# off, placeholder keys and no checks, so it never looks for an account.
+# AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables.
 provider "aws" {
   region  = var.aws_region
   profile = var.aws_backup && var.aws_profile != "" ? var.aws_profile : null
