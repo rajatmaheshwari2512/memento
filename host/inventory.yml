@@ -1,5 +1,4 @@
-# The one machine Ansible manages. Same shape as learn/ansible/01-inventory,
-# but over SSH instead of Docker.
+# The one machine Ansible manages, over SSH.
 all:
   hosts:
     photos:
@@ -7,3 +6,5 @@ all:
       ansible_host: "{{ dotenv.SERVER_HOST | default(photos_hostname, true) }}"
       ansible_user: "{{ dotenv.SERVER_USER | default('ubuntu', true) }}"
       ansible_python_interpreter: /usr/bin/python3
+      # A new server's SSH key is trusted on the first connection; a changed key still stops.
+      ansible_ssh_common_args: -o StrictHostKeyChecking=accept-new
