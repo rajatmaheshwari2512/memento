@@ -1,0 +1,64 @@
+# Opens caddy_firewall_ports: in Oracle's iptables rules, else in ufw when it's on, else nothing
+# (a note: the provider's firewall must allow them).
+#
+# Oracle's Ubuntu image ships an iptables firewall that rejects everything except SSH.
+# Its rules live in /etc/iptables/rules.v4 (loaded at boot), ending in a REJECT line.
+# We add our ACCEPT lines before that REJECT, in the file (for reboots) and in the
+# running firewall (for now). We don't run `netfilter-persistent save`, because that
+# would also save Docker's own rules into the file.
+
+- name: Check the firewall file looks like Oracle's
+  ansible.builtin.command: grep -q '^-A INPUT -j REJECT' /etc/iptables/rules.v4
+  register: caddy_oracle_firewall
+  changed_when: false
+  failed_when: caddy_oracle_firewall.rc not in [0, 1, 2]
+  check_mode: false
+
+- name: Open ports in the firewall file (applied at boot)
+  ansible.builtin.lineinfile:
+    path: /etc/iptables/rules.v4
+    line: "-A INPUT -p tcp -m state --state NEW -m tcp --dport {{ item }} -j ACCEPT"
+    insertbefore: "^-A INPUT -j REJECT"
+  loop: "{{ caddy_firewall_ports }}"
+  when: caddy_oracle_firewall.rc == 0
+
+# The same rule, written the same way, so `iptables -C` (check) finds it after a reboot.
+- name: Open ports in the running firewall (now, without a reboot)
+  ansible.builtin.shell: |
+    if iptables -C INPUT -p tcp -m state --state NEW -m tcp --dport {{ item }} -j ACCEPT 2>/dev/null; then
+      echo present
+    else
+      iptables -I INPUT 1 -p tcp -m state --state NEW -m tcp --dport {{ item }} -j ACCEPT
+      echo added
+    fi
+  register: caddy_fw
+  changed_when: "'added' in caddy_fw.stdout"
+  loop: "{{ caddy_firewall_ports }}"
+  when: caddy_oracle_firewall.rc == 0
+
+- name: Check whether ufw is on
+  ansible.builtin.command: ufw status
+  register: caddy_ufw
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: caddy_oracle_firewall.rc != 0
+
+- name: Open ports in ufw
+  community.general.ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+  loop: "{{ caddy_firewall_ports }}"
+  when:
+    - caddy_oracle_firewall.rc != 0
+    - "caddy_ufw.stdout | default('') is search('Status: active')"
+
+- name: Say the provider's firewall must allow the ports
+  ansible.builtin.debug:
+    msg: >-
+      No firewall to open on this server (no Oracle rules file, ufw off). MANUAL: your provider's
+      firewall must allow TCP {{ caddy_firewall_ports | join(' and ') }} from anywhere.
+  when:
+    - caddy_oracle_firewall.rc != 0
+    - "caddy_ufw.stdout | default('') is not search('Status: active')"

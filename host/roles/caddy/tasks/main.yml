@@ -2,35 +2,9 @@
 # by itself, as soon as it loads a site and DNS points here.
 
 # --- Firewall ---
-# Oracle's Ubuntu image ships an iptables firewall that rejects everything except SSH.
-# Its rules live in /etc/iptables/rules.v4 (loaded at boot), ending in a REJECT line.
-# We add our ACCEPT lines before that REJECT, in the file (for reboots) and in the
-# running firewall (for now). We don't run `netfilter-persistent save`, because that
-# would also save Docker's own rules into the file.
 
-- name: Check the firewall file looks like Oracle's
-  ansible.builtin.command: grep -q '^-A INPUT -j REJECT' /etc/iptables/rules.v4
-  changed_when: false
-
-- name: Open ports in the firewall file (applied at boot)
-  ansible.builtin.lineinfile:
-    path: /etc/iptables/rules.v4
-    line: "-A INPUT -p tcp -m state --state NEW -m tcp --dport {{ item }} -j ACCEPT"
-    insertbefore: "^-A INPUT -j REJECT"
-  loop: "{{ caddy_firewall_ports }}"
-
-# The same rule, written the same way, so `iptables -C` (check) finds it after a reboot.
-- name: Open ports in the running firewall (now, without a reboot)
-  ansible.builtin.shell: |
-    if iptables -C INPUT -p tcp -m state --state NEW -m tcp --dport {{ item }} -j ACCEPT 2>/dev/null; then
-      echo present
-    else
-      iptables -I INPUT 1 -p tcp -m state --state NEW -m tcp --dport {{ item }} -j ACCEPT
-      echo added
-    fi
-  register: caddy_fw
-  changed_when: "'added' in caddy_fw.stdout"
-  loop: "{{ caddy_firewall_ports }}"
+- name: Open ports 80 and 443 in the server's firewall
+  ansible.builtin.import_tasks: firewall.yml
 
 # --- Install (same steps as caddyserver.com/docs/install, as Ansible tasks) ---
 
