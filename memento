@@ -818,9 +818,12 @@ set_tf_env() {
 }
 
 # Stops when Terraform's state has a part that .env now turns off: Terraform would delete it.
+# Keeps the state's addresses in tf_state.
 check_state() {
   local state
+  tf_state=""
   state=$(tf state list 2>/dev/null) || return 0
+  tf_state=$state
   if [ "$oracle" = 0 ] && grep -q -e '^module\.oci_vm' -e '^oci_identity_compartment' <<<"$state"; then
     fail "Terraform's state has the Oracle server, but .env turns that part off (SERVER_HOST is set, or OCI_TENANCY_OCID
 is empty), so Terraform would delete it. Fill in the ORACLE part and leave SERVER_HOST empty."
@@ -843,24 +846,30 @@ tf_ready() {
   check_state
 }
 
-# The plan, shown, then applied only after the person types yes. Never deletes anything.
+# The plan, shown, then applied only after the person types yes. Never deletes anything, or
+# makes again something the state has (another region or account than before would).
 terraform_apply() {
-  local rc=0 deletes answer
+  local rc=0 refused answer
   tf_ready
   say "== Terraform: plan"
   tf plan -input=false -out="$plan_file" -detailed-exitcode || rc=$?
   case "$rc" in
     0) say "Terraform: nothing to change." ;;
     2)
-      deletes=$(tf show -json "$plan_file" | python3 -I -c 'import json, sys
+      refused=$(tf show -json "$plan_file" | STATE="$tf_state" python3 -I -c 'import json, os, sys
+known = set(os.environ["STATE"].splitlines())
 for change in json.load(sys.stdin).get("resource_changes", []):
-    if "delete" in change["change"]["actions"]:
-        print("  " + change["address"])')
-      if [ -n "$deletes" ]; then
+    actions, address = change["change"]["actions"], change["address"]
+    if "delete" in actions:
+        print("  deletes: " + address)
+    elif "create" in actions and (address in known or address.replace("[0]", "", 1) in known):
+        print("  makes again (the state has it): " + address)')
+      if [ -n "$refused" ]; then
         rm -f "$plan_file"
-        fail "This plan deletes or replaces:
-$deletes
-Setup never applies that. Check .env (a part turned off?); to do it anyway, run terraform in infra/ yourself."
+        fail "This plan:
+$refused
+Setup never applies that. Check .env: a part turned off, or another region or account than before?
+To do it anyway, run terraform in infra/ yourself."
       fi
       [ -t 0 ] || { rm -f "$plan_file"; fail "Setup asks you to type yes before Terraform changes anything: run it in a terminal."; }
       printf '\nMake these changes? Type yes to go ahead (anything else stops): '
