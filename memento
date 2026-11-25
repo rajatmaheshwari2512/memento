@@ -573,7 +573,7 @@ release_settings() {
   images=$(value MEMENTO_IMAGES)
   if [ -z "$images" ]; then
     owner=$(git -C "$root" remote get-url origin 2>/dev/null |
-      sed -nE 's#^(git@github\.com:|ssh://git@github\.com/|https://github\.com/)([A-Za-z0-9-]+)/.*#\2#p')
+      sed -nE 's#^(git@github\.com:|ssh://git@github\.com/|https://github\.com/)([A-Za-z0-9-]+)/.*#\2#p' || true)
     if [ -n "$owner" ]; then images="ghcr.io/$(printf '%s' "$owner" | tr '[:upper:]' '[:lower:]')"; fi
   fi
   images=${images%/}
