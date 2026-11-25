@@ -1,7 +1,9 @@
-# Set from .env in group_vars/all/main.yml. Empty = the role stops with an error.
+# Set from .env in group_vars/all/main.yml. All three empty: no backups (a warning). Only some:
+# the role stops with an error.
 backup_bucket: ""
 backup_access_key_id: ""
 backup_secret_access_key: ""
+backup_off: "{{ (backup_bucket ~ backup_access_key_id ~ backup_secret_access_key) | length == 0 }}"
 backup_aws_region: us-east-1
 backup_rclone_version: "1.76.0"
 # The Storage Box's two encryption passwords (obscured), for jobs with encrypt_names.

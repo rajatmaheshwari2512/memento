@@ -42,6 +42,7 @@ memento_extras_reader_model: >-
 backup_bucket: "{{ dotenv.BACKUP_BUCKET_NAME | default('') }}"
 backup_access_key_id: "{{ dotenv.BACKUP_ACCESS_KEY_ID | default('') }}"
 backup_secret_access_key: "{{ dotenv.BACKUP_SECRET_ACCESS_KEY | default('') }}"
+backup_aws_region: "{{ dotenv.AWS_REGION | default('us-east-1', true) }}"
 # The two encryption passwords for everything copied (rclone obscure).
 backup_crypt_password_obscured: "{{ dotenv.BACKUP_CRYPT_PASSWORD_OBSCURED | default('') }}"
 backup_crypt_password2_obscured: "{{ dotenv.BACKUP_CRYPT_PASSWORD2_OBSCURED | default('') }}"

@@ -30,5 +30,5 @@
       tags: immich
     - role: memento_extras # AI edits, feature flags, and more (needs Immich's network)
       tags: memento_extras
-    - role: backup # rclone, and a nightly encrypted copy to Deep Archive (deep-archive-backup)
+    - role: backup # rclone, and a nightly encrypted copy to Deep Archive (deep-archive-backup); a warning without BACKUP_* in .env
       tags: backup
