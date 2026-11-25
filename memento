@@ -550,6 +550,8 @@ prod_parts() {
   if [ -n "$(value CLOUDFLARE_API_TOKEN)" ]; then dns=1; fi
   if [ -n "$(value BACKUP_BUCKET_NAME)$(value BACKUP_ACCESS_KEY_ID)$(value BACKUP_SECRET_ACCESS_KEY)" ]; then backups=1; fi
   if [ -n "$(value AWS_PROFILE)$(value AWS_ACCESS_KEY_ID)$(value AWS_SECRET_ACCESS_KEY)" ]; then aws=1; fi
+  new_bucket=0
+  if [ "$backups$aws" = 11 ] && [ -z "$(value BACKUP_ACCESS_KEY_ID)$(value BACKUP_SECRET_ACCESS_KEY)" ]; then new_bucket=1; fi
   zone=$(value CLOUDFLARE_ZONE "${domain#*.}")
   subdomain=${domain%".$zone"}
   if is_ipv4 "$server_host"; then server_ipv4=$server_host; fi
@@ -577,6 +579,12 @@ check_settings() {
   if [ -z "$v" ]; then todos+=(MEMENTO_SECRET)
   elif [ "${#v}" -lt 44 ] || [ "$v" = CHANGE_ME ]; then problems+=("MEMENTO_SECRET: must be what openssl rand -base64 32 prints (44 characters).")
   fi
+  v=$(value TZ)
+  [ -z "$v" ] || [[ $v =~ ^[A-Za-z0-9_+-]+(/[A-Za-z0-9_+-]+)*$ ]] || problems+=("TZ: \"$v\" isn't a time zone like Asia/Kolkata.")
+  if [ -f "$keystore" ] && [ -z "$(value ANDROID_KEYSTORE_PASSWORD)" ]; then
+    problems+=("ANDROID_KEYSTORE_PASSWORD: empty, but there's a signing key at $keystore. Put its password here
+    (from your password manager); setup makes a new password only when there's no key.")
+  fi
 
   if [ -n "$server_host" ] && [ -n "$(value OCI_TENANCY_OCID)" ]; then
     problems+=("SERVER_HOST and OCI_TENANCY_OCID are both set. Setup makes an Oracle server only when SERVER_HOST is empty:
@@ -602,7 +610,9 @@ check_settings() {
     [[ $(value OCI_BUDGET_EMAIL) == ?*@?* ]] || problems+=("OCI_BUDGET_EMAIL: the email address Oracle sends the spending alert to.")
   fi
   if [ "$dns" = 1 ] && [ -n "$domain" ]; then
-    if [ -z "$subdomain" ] || [ "$subdomain" = "$domain" ]; then
+    if [[ $zone != *.* ]]; then
+      problems+=("CLOUDFLARE_ZONE: MEMENTO_DOMAIN ($domain) gives the zone \"$zone\". Set CLOUDFLARE_ZONE to your domain in Cloudflare, like example.com.")
+    elif [ -z "$subdomain" ] || [ "$subdomain" = "$domain" ]; then
       problems+=("CLOUDFLARE_ZONE: \"$zone\" isn't the end of MEMENTO_DOMAIN ($domain). Your domain in Cloudflare, like example.com.")
     fi
     if [ "$oracle" = 0 ] && [ -z "$server_ipv4" ]; then
@@ -629,14 +639,24 @@ check_settings() {
       problems+=("BACKUP_ACCESS_KEY_ID and BACKUP_SECRET_ACCESS_KEY: the keys of an AWS user that may write to the bucket.
     Or fill in AWS_PROFILE (or the AWS keys) and setup makes the bucket and its user.")
     fi
-    [ -n "$(value BACKUP_CRYPT_PASSWORD_OBSCURED)" ] || todos+=(BACKUP_CRYPT_PASSWORD_OBSCURED)
-    [ -n "$(value BACKUP_CRYPT_PASSWORD2_OBSCURED)" ] || todos+=(BACKUP_CRYPT_PASSWORD2_OBSCURED)
+    for key in BACKUP_CRYPT_PASSWORD_OBSCURED BACKUP_CRYPT_PASSWORD2_OBSCURED; do
+      if [ -n "$(value "$key")" ]; then continue; fi
+      if [ "$new_bucket" = 1 ]; then todos+=("$key")
+      else problems+=("$key: empty. It encrypts what's already in your bucket: restore it from your password manager
+    (rclone obscure <password> prints the value). Setup makes new ones only when it makes the bucket.")
+      fi
+    done
   elif [ "$aws" = 1 ]; then
     problems+=("BACKUP_BUCKET_NAME: empty, but the AWS settings are set. The name setup should give the bucket: unique across all of AWS,
     like memento-backup-<random letters>.")
   fi
   if [ "$terraform_on" = 1 ] && [ -f "$root/infra/terraform.tfvars" ]; then
-    problems+=("infra/terraform.tfvars: Terraform reads it over .env. Move its values into .env (see .env.example), then delete it.")
+    problems+=("infra/terraform.tfvars: Terraform reads it over .env. Move its values into .env, then delete it:
+      oci_tenancy_ocid → OCI_TENANCY_OCID, oci_config_profile → OCI_CONFIG_PROFILE, oci_region → OCI_REGION,
+      ssh_public_key_path → SSH_PUBLIC_KEY_PATH, ssh_allowed_cidr → SSH_ALLOWED_CIDR, budget_amount → OCI_BUDGET_AMOUNT,
+      budget_alert_email → OCI_BUDGET_EMAIL, aws_profile → AWS_PROFILE, aws_region → AWS_REGION,
+      backup_bucket_name → BACKUP_BUCKET_NAME, domain → CLOUDFLARE_ZONE (or nothing: MEMENTO_DOMAIN's end),
+      subdomains → MEMENTO_DOMAIN's first part (photos.example.com).")
   fi
 }
 
@@ -648,7 +668,7 @@ show_parts() {
   fi
   say "Optional parts:"
   say "  Oracle server    $server"
-  if [ "$dns" = 1 ]; then say "  Cloudflare DNS   on: setup points MEMENTO_DOMAIN at the server."
+  if [ "$dns" = 1 ]; then say "  Cloudflare DNS   on: setup points MEMENTO_DOMAIN at the server: record \"$subdomain\" in zone $zone."
   else say "  Cloudflare DNS   off: MANUAL: at your DNS provider, point MEMENTO_DOMAIN at the server (an A record)."
   fi
   if [ "$backups" = 0 ]; then say "  Backups          off: WARNING: no off-site copy of the photos (fill in the BACKUPS part)."
@@ -714,9 +734,16 @@ fill() { if [ -z "$(value "$1")" ]; then set_value "$1" "$2"; fi; }
 
 new_secret() { openssl rand -base64 32 2>/dev/null || head -c 32 /dev/urandom | base64; }
 
+# secret_names: the settings fill_secrets makes, when empty.
+secret_names() {
+  printf '%s\n' IMMICH_DB_PASSWORD MEMENTO_SECRET
+  if [ "$new_bucket" = 1 ]; then printf '%s\n' BACKUP_CRYPT_PASSWORD_OBSCURED BACKUP_CRYPT_PASSWORD2_OBSCURED; fi
+  if [ ! -e "$keystore" ]; then printf '%s\n' ANDROID_KEYSTORE_PASSWORD; fi
+}
+
 fill_secrets() {
   local plain1="" plain2="" name missing=0
-  for name in IMMICH_DB_PASSWORD MEMENTO_SECRET BACKUP_CRYPT_PASSWORD_OBSCURED BACKUP_CRYPT_PASSWORD2_OBSCURED ANDROID_KEYSTORE_PASSWORD; do
+  for name in $(secret_names); do
     [ -n "$(value "$name")" ] || missing=1
   done
   if [ "$missing" = 0 ]; then
@@ -726,15 +753,15 @@ fill_secrets() {
   say "== Generated settings (only the empty ones)"
   fill IMMICH_DB_PASSWORD "$(random_letters 40)"
   fill MEMENTO_SECRET "$(new_secret)"
-  if [ -z "$(value BACKUP_CRYPT_PASSWORD_OBSCURED)" ]; then
+  if [ "$new_bucket" = 1 ] && [ -z "$(value BACKUP_CRYPT_PASSWORD_OBSCURED)" ]; then
     plain1=$(random_letters 40)
     set_value BACKUP_CRYPT_PASSWORD_OBSCURED "$(printf '%s' "$plain1" | rclone obscure -)"
   fi
-  if [ -z "$(value BACKUP_CRYPT_PASSWORD2_OBSCURED)" ]; then
+  if [ "$new_bucket" = 1 ] && [ -z "$(value BACKUP_CRYPT_PASSWORD2_OBSCURED)" ]; then
     plain2=$(random_letters 40)
     set_value BACKUP_CRYPT_PASSWORD2_OBSCURED "$(printf '%s' "$plain2" | rclone obscure -)"
   fi
-  fill ANDROID_KEYSTORE_PASSWORD "$(random_letters 40)"
+  if [ ! -e "$keystore" ]; then fill ANDROID_KEYSTORE_PASSWORD "$(random_letters 40)"; fi
   if [ -n "$plain1$plain2" ]; then
     say ""
     say "SAVE THESE NOW, in your password manager. They're shown only this once."
@@ -745,10 +772,13 @@ fill_secrets() {
   fi
 }
 
-# Installs what's missing: Ansible, rclone, and Terraform when a Terraform part is on.
+# Installs what's missing: Ansible, Terraform when a Terraform part is on, rclone for new backup passwords.
 install_tools() {
-  local tool missing=() wanted=(ansible-playbook rclone)
+  local tool missing=() wanted=(ansible-playbook)
   if [ "$terraform_on" = 1 ]; then wanted+=(terraform); fi
+  if [ "$new_bucket" = 1 ] && { [ -z "$(value BACKUP_CRYPT_PASSWORD_OBSCURED)" ] || [ -z "$(value BACKUP_CRYPT_PASSWORD2_OBSCURED)" ]; }; then
+    wanted+=(rclone)
+  fi
   for tool in "${wanted[@]}"; do command -v "$tool" >/dev/null 2>&1 || missing+=("$tool"); done
   [ ${#missing[@]} -gt 0 ] || return 0
   say "== Installing: ${missing[*]}"
@@ -789,9 +819,11 @@ Ansible: docs.ansible.com; rclone: rclone.org/install), then run this again."
 
 # tf ARGS...: terraform in infra/, with only the settings it needs from the settings file.
 tf() {
-  local names=() name
-  while IFS= read -r name; do names+=(-u "$name"); done < <(env | sed -nE 's/^((TF_VAR|AWS|CLOUDFLARE|OCI)_[A-Za-z0-9_]*)=.*/\1/p')
-  env ${names[@]+"${names[@]}"} "${tf_env[@]}" terraform -chdir="$root/infra" "$@"
+  (
+    while IFS= read -r name; do unset "$name"; done < <(env | sed -nE 's/^((TF_VAR|AWS|CLOUDFLARE|OCI)_[A-Za-z0-9_]*)=.*/\1/p')
+    for entry in "${tf_env[@]}"; do export "${entry?}"; done
+    terraform -chdir="$root/infra" "$@"
+  )
 }
 
 set_tf_env() {
@@ -818,11 +850,12 @@ set_tf_env() {
 }
 
 # Stops when Terraform's state has a part that .env now turns off: Terraform would delete it.
-# Keeps the state's addresses in tf_state.
+# Keeps the state's addresses in tf_state ("" without infra/terraform.tfstate).
 check_state() {
   local state
   tf_state=""
-  state=$(tf state list 2>/dev/null) || return 0
+  [ -f "$root/infra/terraform.tfstate" ] || return 0
+  state=$(tf state list) || fail "terraform state list failed (above), and setup's checks need it. To see why: cd infra && terraform state list"
   tf_state=$state
   if [ "$oracle" = 0 ] && grep -q -e '^module\.oci_vm' -e '^oci_identity_compartment' <<<"$state"; then
     fail "Terraform's state has the Oracle server, but .env turns that part off (SERVER_HOST is set, or OCI_TENANCY_OCID
@@ -846,24 +879,27 @@ tf_ready() {
   check_state
 }
 
-# The plan, shown, then applied only after the person types yes. Never deletes anything, or
-# makes again something the state has (another region or account than before would).
+# The plan, shown, then applied only after the person types yes (new server, for a new server).
 terraform_apply() {
-  local rc=0 refused answer
+  local rc=0 verdict refused answer confirm=yes
+  vm_created=0
   tf_ready
   say "== Terraform: plan"
   tf plan -input=false -out="$plan_file" -detailed-exitcode || rc=$?
   case "$rc" in
     0) say "Terraform: nothing to change." ;;
     2)
-      refused=$(tf show -json "$plan_file" | STATE="$tf_state" python3 -I -c 'import json, os, sys
+      verdict=$(tf show -json "$plan_file" | STATE="$tf_state" python3 -I -c 'import json, os, sys
 known = set(os.environ["STATE"].splitlines())
 for change in json.load(sys.stdin).get("resource_changes", []):
     actions, address = change["change"]["actions"], change["address"]
     if "delete" in actions:
-        print("  deletes: " + address)
+        print("refuse   deletes: " + address)
     elif "create" in actions and (address in known or address.replace("[0]", "", 1) in known):
-        print("  makes again (the state has it): " + address)')
+        print("refuse   makes again (the state has it): " + address)
+    elif "create" in actions and change.get("type") == "oci_core_instance":
+        print("new-server")')
+      refused=$(sed -n 's/^refuse //p' <<<"$verdict")
       if [ -n "$refused" ]; then
         rm -f "$plan_file"
         fail "This plan:
@@ -872,34 +908,62 @@ Setup never applies that. Check .env: a part turned off, or another region or ac
 To do it anyway, run terraform in infra/ yourself."
       fi
       [ -t 0 ] || { rm -f "$plan_file"; fail "Setup asks you to type yes before Terraform changes anything: run it in a terminal."; }
-      printf '\nMake these changes? Type yes to go ahead (anything else stops): '
+      if grep -qx new-server <<<"$verdict"; then
+        confirm="new server"
+        say ""
+        if [ -z "$tf_state" ]; then say "There's no Terraform state here (infra/terraform.tfstate): this makes a NEW server (pay-as-you-go)."
+        else say "This makes a NEW server (pay-as-you-go)."
+        fi
+      fi
+      printf '\nMake these changes? Type %s to go ahead (anything else stops): ' "$confirm"
       read -r answer || answer=""
-      if [ "$answer" != yes ]; then
+      if [ "$answer" != "$confirm" ]; then
         rm -f "$plan_file"
         fail "Stopped: Terraform changed nothing."
       fi
       tf apply -input=false "$plan_file" || { rm -f "$plan_file"; fail "terraform apply failed (above)."; }
+      if [ "$confirm" = "new server" ]; then vm_created=1; fi
       ;;
     *) rm -f "$plan_file"; fail "terraform plan failed (above)." ;;
   esac
   rm -f "$plan_file"
 }
 
-# After Terraform: the backup user's keys into .env, and the Oracle server's DNS.
+# After Terraform: the backup user's keys into .env; deploy_host, the Oracle server's address for the
+# deploy, when it's new or MEMENTO_DOMAIN doesn't point at it yet.
 after_terraform() {
   local ip
+  deploy_host=""
   if [ "$aws" = 1 ]; then
     fill BACKUP_ACCESS_KEY_ID "$(tf output -raw backup_access_key_id 2>/dev/null || true)"
     fill BACKUP_SECRET_ACCESS_KEY "$(tf output -raw backup_secret_access_key 2>/dev/null || true)"
   fi
   if [ "$oracle" = 1 ]; then
     ip=$(tf output -raw vm_public_ip 2>/dev/null || true)
+    [ -n "$ip" ] || fail "Terraform has no address for the Oracle server (terraform output vm_public_ip)."
     say "The Oracle server's address: $ip"
-    if [ "$dns" = 0 ] && [ "$(resolve "$domain")" != "$ip" ]; then
-      fail "MANUAL: at your domain's DNS provider, add an A record: $domain → $ip (DNS only, no proxy).
-When it's there (host $domain shows $ip), run ./memento prod deploy."
+    if [ "$vm_created" = 1 ] || [ "$(resolve "$domain")" != "$ip" ]; then
+      wait_for_ssh "$ip"
+      deploy_host=$ip
     fi
   fi
+}
+
+# wait_for_ssh ADDRESS: waits until ADDRESS answers on port 22, at most 5 minutes.
+wait_for_ssh() {
+  say "Waiting for the server at $1 to answer on port 22 (up to 5 minutes)..."
+  python3 -I -c 'import socket, sys, time
+deadline = time.time() + 300
+while True:
+    try:
+        socket.create_connection((sys.argv[1], 22), timeout=5).close()
+        break
+    except OSError:
+        if time.time() > deadline:
+            sys.exit(1)
+        time.sleep(5)' "$1" ||
+    fail "The server at $1 doesn't answer on port 22 after 5 minutes. Check it's running (Oracle's console →
+Compute → Instances), then run ./memento prod setup again."
 }
 
 resolve() { python3 -I -c 'import socket, sys; print(socket.gethostbyname(sys.argv[1]))' "$1" 2>/dev/null || true; }
@@ -923,15 +987,20 @@ prod_setup() {
     fail "Fill these in, then run ./memento prod setup again (it carries on where it stopped)."
   fi
   show_parts
+  deploy_host=""
   if [ "$terraform_on" = 1 ]; then
     terraform_apply
     after_terraform
   else
     say "Terraform: nothing to make (no Oracle, Cloudflare or AWS settings)."
   fi
-  prod_deploy
+  if [ -n "$deploy_host" ]; then prod_deploy -e "ansible_host=$deploy_host"; else prod_deploy; fi
   say ""
   say "Memento is at https://$domain. Still by hand (MANUAL):"
+  if [ "$dns" = 0 ] && [ -n "$deploy_host" ]; then
+    say "  - At your domain's DNS provider, add an A record: $domain → $deploy_host (DNS only, no proxy)."
+    say "    HTTPS starts working once it's there; later deploys reach the server at $domain."
+  fi
   say "  - Open it and make the admin account: the first person to sign up is the admin."
   say "  - Music for recap videos (optional): deploy/music/tracks.md, then ./memento prod deploy."
   say "  - The Android app: ./memento android keystore (once), then ./memento android."
@@ -1040,6 +1109,7 @@ case "${1-}" in
     ;;
   prod)
     load_prod
+    load_android
     case "${2-}" in
       check) prod_check ;;
       setup) prod_setup ;;

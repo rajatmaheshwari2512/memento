@@ -99,7 +99,9 @@ cp .env.example .env          # then fill in the PROD part: .env.example says wh
 ```
 
 The server is Ubuntu 24.04, ARM64 or x86-64: yours (`SERVER_HOST`), or Oracle Cloud's free ARM
-server, which setup makes with Terraform. Cloudflare DNS and backups are optional too.
+server, which setup makes with Terraform. Cloudflare DNS and backups are optional too. Back up
+`.env`, and `infra/terraform.tfstate` once setup has made anything: it's Terraform's only record of
+the server, DNS record and bucket (without it, setup would make a new server).
 
 - **Done for you:** installing Terraform, Ansible and rclone; the generated passwords; the Oracle
   server, the DNS record and the backup bucket (Terraform shows its plan and waits for you to type
