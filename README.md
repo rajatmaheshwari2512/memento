@@ -106,9 +106,8 @@ cp .env.example .env          # then fill in the PROD part: .env.example says wh
 ```
 
 The server is Ubuntu 24.04, ARM64 or x86-64: yours (`SERVER_HOST`), or Oracle Cloud's free ARM
-server, which setup makes with Terraform. (On a server that isn't Oracle's, setup doesn't finish
-yet: [the known gap](docs/setup-prod.md#two-ways-to-get-a-server).) Cloudflare DNS and backups
-are optional too. Back up
+server, which setup makes with Terraform. It's tested on an Oracle Ampere (ARM) server; your own
+server hasn't been tried end to end yet. Cloudflare DNS and backups are optional too. Back up
 `.env`, and `infra/terraform.tfstate` once setup has made anything: it's Terraform's only record of
 the server, DNS record and bucket (without it, setup would make a new server).
 

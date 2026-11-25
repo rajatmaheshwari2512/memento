@@ -36,20 +36,22 @@ Then open your address and make the admin account. The rest of this guide is eac
 
 ## Two ways to get a server
 
+> **Tested on:** an Oracle Ampere (ARM) server, Ubuntu 24.04. Your own server (path b) and x86-64
+> servers should work, but haven't been tried end to end yet.
+
 **a. Setup makes one on Oracle Cloud.** Terraform makes Oracle's free ARM server (2 cores, 12 GB
-of memory, 200 GB of disk), its network, and a spending alert. This is how Memento is run
-today. Fill in the ORACLE part of `.env` and leave `SERVER_HOST` empty.
+of memory, 200 GB of disk), its network, and a spending alert. Fill in the ORACLE part of `.env`
+and leave `SERVER_HOST` empty.
 
 **b. Your own server.** Any Ubuntu 24.04 server, ARM64 or x86-64: a cloud server or one at home.
 Put its address in `SERVER_HOST` and leave the ORACLE part empty.
 
-> **Known gap, path b:** the server setup still expects Oracle's Ubuntu image. Before it opens
-> ports 80 and 443, it checks Oracle's firewall file (`/etc/iptables/rules.v4`). A server that
-> isn't Oracle's usually doesn't have that file, so the first deploy stops at the step
-> **"Check the firewall file looks like Oracle's"**. Until that's fixed (in `host/roles/caddy`),
-> path b doesn't finish on its own. Path b hasn't been tried end to end.
+Either way, the setup opens ports 80 and 443 in the server's own firewall: Oracle's firewall
+rules, or `ufw` when it's on. If the server has no firewall of its own, the deploy says so, and
+**MANUAL:** your provider's firewall (or your router, at home) must allow ports 80 and 443 from
+anywhere.
 
-Either way, Cloudflare DNS and backups are optional parts you turn on in `.env`.
+Cloudflare DNS and backups are optional parts you turn on in `.env`.
 
 ## What you need
 
@@ -107,8 +109,12 @@ Either way, Cloudflare DNS and backups are optional parts you turn on in `.env`.
      your user's and your tenancy's OCIDs (Oracle's console → your profile) and your region,
      then writes `~/.oci/config` and an API key.
   5. Add the public key it made in Oracle's console: your profile → API keys → Add API key.
-- **Cloudflare (optional):** dash.cloudflare.com → My Profile → API Tokens → Create Token →
-  "Edit zone DNS", for your domain only.
+- **Cloudflare (optional):** a token that may change your domain's DNS records, and nothing else.
+  1. dash.cloudflare.com → your profile icon (top right) → My Profile → API Tokens → Create Token.
+  2. Next to **Edit zone DNS**, click Use template. It gives the permission Zone · DNS · Edit.
+  3. Add a second permission: Zone · Zone · Read (setup looks your domain up by its name).
+  4. Under Zone Resources: Include · Specific zone · your domain.
+  5. Continue to summary → Create Token. Copy the token: Cloudflare shows it only once.
 - **AWS (optional, strongly advised):**
   1. Make an account. Make an IAM user with admin rights for yourself (not the root login), and
      an access key for it.
@@ -127,21 +133,32 @@ what it is, its default, where to get it, and what happens if it's empty. Fill i
 
 | Part in `.env.example` | When | What |
 |---|---|---|
-| `PROD: REQUIRED` | Always | `MEMENTO_DOMAIN`, `GEMINI_API_KEY`, and `TZ` (your time zone, like `Asia/Kolkata`; the night jobs and AI Edit's daily limits follow it) |
+| `PROD: REQUIRED` | Always | `MEMENTO_DOMAIN`, `GEMINI_API_KEY`, and `TZ` (your time zone, like `Europe/London`; the night jobs and AI Edit's daily limits follow it) |
 | `PROD: YOUR OWN SERVER` | Path b | `SERVER_HOST`, and `SERVER_USER` if it isn't `ubuntu` |
-| `PROD: ORACLE SERVER` | Path a | `OCI_TENANCY_OCID`, `OCI_BUDGET_AMOUNT`, `OCI_BUDGET_EMAIL`; the others have defaults |
+| `PROD: ORACLE SERVER` | Path a | `OCI_TENANCY_OCID`: your tenancy's OCID, Oracle's ID for your account, which looks like `ocid1.tenancy.oc1..<letters>` (the `tenancy=` line in `~/.oci/config`). `OCI_BUDGET_AMOUNT`: the monthly spending alert, a whole number **in your Oracle account's billing currency** (Billing → Cost Analysis shows which; it may not be your country's). `OCI_BUDGET_EMAIL`: where the alert goes. The others have defaults. |
 | `PROD: CLOUDFLARE DNS` | Optional | `CLOUDFLARE_API_TOKEN` |
 | `PROD: BACKUPS` | Optional, strongly advised | `BACKUP_BUCKET_NAME` (unique across all of AWS, like `memento-backup-<random letters>`), `AWS_REGION`, `AWS_PROFILE` |
+| `DEV and PROD` | Optional | `MUSIC_DIR`, if your recap music isn't in `.local/recap-music/tracks/` (step 9) |
 | `GENERATED` | Leave empty | Setup fills these in and never changes one that's set |
 | `ANDROID` | Optional | Only to keep the app's signing key somewhere else |
 
-Leave the `DEV` parts alone; prod doesn't read them.
+Leave the `DEV` part alone; prod doesn't read it.
 
-You can make the backup bucket yourself instead (with versioning on, and a user that may only
-add and read files). Then fill in `BACKUP_ACCESS_KEY_ID` and `BACKUP_SECRET_ACCESS_KEY` instead
-of `AWS_PROFILE`, and make the two backup passwords yourself: two long random passwords, saved
-in your password manager, each put into `.env` as `rclone obscure -` prints it. Letting setup make
-the bucket is simpler.
+**Making the backup bucket yourself** (instead of `AWS_PROFILE`): letting setup make it is
+simpler. If you do make it, match what setup's Terraform makes (`infra/modules/aws-backup/main.tf`):
+
+- **The bucket:** versioning on; block all public access; a lifecycle rule that deletes
+  replaced (noncurrent) versions after 180 days, and one that aborts unfinished uploads after
+  7 days.
+- **A user for the server,** with a policy that allows `s3:ListBucket` on the bucket, and
+  `s3:PutObject`, `s3:GetObject`, `s3:AbortMultipartUpload` and `s3:ListMultipartUploadParts` on
+  its files, and that explicitly **denies** `s3:DeleteObject`, `s3:DeleteObjectVersion`,
+  `s3:DeleteBucket`, `s3:PutBucketVersioning`, `s3:PutLifecycleConfiguration` and
+  `s3:PutBucketPolicy`. An access key for it goes in `BACKUP_ACCESS_KEY_ID` and
+  `BACKUP_SECRET_ACCESS_KEY`.
+- **The two backup passwords:** make them yourself, two long random passwords, saved in your
+  password manager. Put each into `.env` (`BACKUP_CRYPT_PASSWORD_OBSCURED`,
+  `BACKUP_CRYPT_PASSWORD2_OBSCURED`) as `rclone obscure -` prints it.
 
 ### 3. `./memento prod check`
 
@@ -171,8 +188,9 @@ Run it yourself, in a terminal. It:
    on its own any plan that would delete something;
 5. deploys: builds the website on your computer, then sets up the server with Ansible.
 
-When it first connects to a new server, SSH may ask "Are you sure you want to continue
-connecting?". **MANUAL: type `yes`.**
+The deploy trusts a new server's SSH key on its first connection, so it doesn't stop to ask. A
+server whose key has changed (one rebuilt at the same address) still stops it, on purpose:
+**MANUAL:** forget the old key with `ssh-keygen -R <address>`, then run it again.
 
 The first deploy takes a while: it downloads Immich and the models onto the server and builds
 Memento's three images there. If setup stops, fix what it says and run it again: it carries on
@@ -189,11 +207,11 @@ has a proxy (Cloudflare's orange cloud), keep it **off** ("DNS only"): a proxy s
 | | With Cloudflare | Without Cloudflare |
 |---|---|---|
 | **Path a (Oracle)** | Setup makes the record. Nothing to do. | Setup makes the server, deploys to its address, and prints the record to add. Add it before your next deploy: later deploys reach the server by `MEMENTO_DOMAIN`. |
-| **Path b (yours)** | `SERVER_HOST` must be the server's IPv4 address; setup makes the record. | Add the record before setup. |
+| **Path b (yours)** | `SERVER_HOST` must be the server's IPv4 address; setup makes the record. | Add it whenever you like, before or after setup: the deploy reaches the server at `SERVER_HOST`. |
 
-HTTPS starts working on its own once the record points at the server: Caddy, the program in front
-of Memento, keeps trying to get the certificate. To check the record: `dig +short photos.example.com`
-prints the server's address.
+Until the record is there, the site doesn't open. HTTPS starts working on its own once the record
+points at the server: Caddy, the program in front of Memento, keeps trying to get the
+certificate. To check the record: `dig +short photos.example.com` prints the server's address.
 
 ### 6. MANUAL: make the admin account, right away
 
@@ -202,12 +220,13 @@ straight after setup. Then add the others: Administration → Users.
 
 ### 7. MANUAL: Memento's Immich settings
 
-Setup doesn't change Immich's own settings. Set them once, in the browser:
-[the table below](#mementos-immich-settings).
+Setup doesn't change Immich's own settings. Set them once, in the browser, before you upload
+photos: [the table below](#mementos-immich-settings).
 
-### 8. MANUAL: check Memento's switches
+### 8. Optional: review Memento's switches
 
-Administration → Settings → **Memento Features**. Every feature starts on. Here you switch each
+Nothing to do here unless you want to change something. Administration → Settings →
+**Memento Features**. Every feature starts on. Here you switch each
 one off or on for everyone (AI Edit, Adjust, Ask Photos, captions, memories, live albums, Reduce
 noise), and set AI Edit's limits: 10 edits a day per person and 75 a month in all, to start
 with.
@@ -218,9 +237,10 @@ memories.
 ### 9. MANUAL, optional: music for recaps
 
 [deploy/music/tracks.md](../deploy/music/tracks.md) lists the tracks, where to download each,
-and what to name it. Put them in `.local/recap-music/tracks/` at the top of the repo, then run
-`./memento prod deploy`. It copies every `.mp3` from there to the server. (`MUSIC_DIR` is for
-dev only.) Without music, recap videos are silent.
+and what to name it. Put them in `.local/recap-music/tracks/` at the top of the repo (or in any
+folder, named by `MUSIC_DIR` in `.env`), then run `./memento prod deploy`. It copies every `.mp3`
+from there to the server. A track you remove from the folder stays on the server until you
+delete it there (`/opt/memento-extras/music`). Without music, recap videos are silent.
 
 ### 10. MANUAL: back these up, in a password manager
 
@@ -392,7 +412,7 @@ df -h /                                              # free disk
 
 | Don't | Why |
 |---|---|
-| `terraform destroy` | It would try to delete the server and the bucket. |
+| `terraform destroy` | It would try to delete everything Terraform made. The server and the bucket are marked never to be destroyed, so Terraform refuses a plan that deletes them; don't lean on that. |
 | Edit files on the server that the setup manages | The next deploy puts them back. Change `host/` instead. |
 | Turn on the DNS proxy | Uploads over 100 MB (videos) fail. |
 | `rclone sync` into the bucket | `sync` deletes. The backup only ever copies. |
@@ -500,24 +520,36 @@ This hasn't been tried end to end. Read it through first.
      lost Oracle server isn't handled by setup yet.
 3. **Right after setup, before the next 04:00, stop the new server's backup.** Otherwise its
    nightly copy uploads the new, empty databases over the copies you're restoring (on Sundays,
-   Immich's too). The replaced copies stay in the bucket for 180 days, but only as older
-   versions, which the steps below don't read. On the server:
+   Immich's too). If a 04:00 has already passed, see
+   [the next section](#if-the-new-servers-backup-already-ran). On the server:
    ```
    sudo systemctl stop deep-archive-backup.timer
    ```
-   Then stop Immich while you restore (the deploy in step 7 starts both again):
+   Don't run setup or deploy again until step 7: each one turns the backup back on.
+4. **Copy the photos back,** decrypting on the way, with Immich stopped. Run it inside `tmux`, so
+   a dropped connection doesn't stop it. It uses the server's own backup settings:
    ```
    cd /opt/immich && sudo docker compose down
-   ```
-4. **Copy the photos back,** decrypting on the way. Run it inside `tmux`, so a dropped connection
-   doesn't stop it. It uses the server's own backup settings:
-   ```
    sudo bash -c 'set -a; . /etc/deep-archive-backup/glacier.env; exec rclone copy archive_immich: /opt/immich/library --transfers 4 -P'
+   cd /opt/immich && sudo docker compose up -d
    ```
-5. **Restore Immich's database** from `/opt/immich/library/backups/latest.sql.gz`, with Immich's
-   guide: docs.immich.app → Administration → Backup and Restore. In Memento, Immich's folder is
-   `/opt/immich`, and its database folder (`DB_DATA_LOCATION`) is `/opt/immich/postgres`.
-6. **Restore Memento's database:**
+5. **MANUAL, in the browser: restore Immich's database** with Immich's own restore page. The copy
+   is now in `/opt/immich/library/backups/latest.sql.gz`.
+   1. Open `https://photos.example.com`. On the welcome page, click the small **Restore From
+      Backup** button (not Getting Started).
+   2. **Restore Your Library** checks the folders. `upload` and `profile` should have files.
+      Empty `thumbs` and `encoded-video` are fine ("You can regenerate these later"). Continue.
+   3. Choose **`latest.sql.gz`**. If it offers another file, use Select another backup: files named
+      `immich-db-backup-…` are the new server's own, empty copies. It may say it "Couldn't
+      determine backup version": the name has no version in it.
+   4. Restore. Immich first saves a copy of the current (empty) database, then restores, then
+      updates the database to its own version. Then log in with your old account.
+
+   If you already made an admin account on the new server: Administration → Maintenance →
+   Restore database backup, then the same file. Immich's command-line way is in its guide
+   (docs.immich.app → Administration → Backup and Restore); in Memento, Immich's folder is
+   `/opt/immich` and its database folder (`DB_DATA_LOCATION`) is `/opt/immich/postgres`.
+6. **Restore Memento's database,** on the server:
    ```
    cd /opt/memento-extras && sudo docker compose down
    sudo rm -f /opt/memento-extras/data/data.db-wal /opt/memento-extras/data/data.db-shm
@@ -529,13 +561,40 @@ This hasn't been tried end to end. Read it through first.
    restored database already lists the lost files) for: Extract metadata, Generate Thumbnails,
    then Transcode videos. The last one takes hours.
 
+### If the new server's backup already ran
+
+Then the bucket's current copies of the two databases are the new server's empty ones. The
+old ones are still in the bucket, as older versions, for 180 days. Get them back from your
+computer (not tried yet). For Memento's database:
+
+```
+rclone cryptdecode --reverse glacier_memento: memento-extras.db     # its scrambled name in the bucket
+aws s3api list-object-versions --bucket <bucket> --prefix 'memento-extras/<scrambled name>' \
+  --query 'Versions[].[LastModified,VersionId,IsLatest]' --output table
+                          # pick the newest version from before the new server existed
+aws s3api restore-object --bucket <bucket> --key 'memento-extras/<scrambled name>' --version-id <id> \
+  --restore-request '{"Days":7,"GlacierJobParameters":{"Tier":"Bulk"}}'
+aws s3api head-object --bucket <bucket> --key 'memento-extras/<scrambled name>' --version-id <id> --query Restore
+                          # about 48 hours later: ongoing-request="false"
+rclone copy glacier_memento:memento-extras.db ~/Downloads/restore/ --s3-version-at '<its LastModified>'
+scp ~/Downloads/restore/memento-extras.db ubuntu@photos.example.com:/tmp/
+```
+
+`--s3-version-at` makes rclone read the bucket as it was at that time. In step 6, copy
+`/tmp/memento-extras.db` to `/opt/memento-extras/data/data.db` (with `sudo cp`) instead of the
+`rclone copyto` line.
+
+Immich's database works the same way, with `glacier_crypt:` and `backups/latest.sql.gz` (its
+folder in the bucket is `immich/`). In step 5, choose **Upload a backup** and pick the file you
+downloaded.
+
 ## Limits
 
 - **No iPhone app.** The website works on an iPhone's browser.
 - **One server.** Everything runs on it: no spare, no load sharing.
-- **Path b doesn't finish yet** on a server that isn't Oracle's (the [known gap](#two-ways-to-get-a-server)).
-- **The website and the app are built on your computer,** which needs Docker (and the Android
-  tools for the app).
+- **The website and the app are built on your computer,** which needs Docker for the website.
+- **The Android app can only be built on a Mac today:** `apps/android/build.sh` finds Android's
+  tools through Homebrew.
 - **Immich's database goes off the server weekly,** the photos nightly (see "What's backed up").
 - **Restores are slow and cost money:** about two days to thaw, and AWS's download fee.
 - **Upgrades are yours to do:** [upgrades.md](upgrades.md).
@@ -550,10 +609,10 @@ This hasn't been tried end to end. Read it through first.
   work everywhere. Wait, then run setup again.
 - **Setup refuses a plan** that deletes something or makes again what the state has. Check `.env`:
   a part turned off, or another region or account than before?
-- **"Host key verification failed".** Run `ssh ubuntu@<address>` once, type `yes`, then run the
-  command again. For a rebuilt server: `ssh-keygen -R <address>` first.
-- **"Check the firewall file looks like Oracle's" fails.** The [known gap](#two-ways-to-get-a-server)
-  on a server that isn't Oracle's.
+- **"Host key verification failed", or SSH warns the host's key has changed.** The server was
+  rebuilt at the same address: `ssh-keygen -R <address>`, then run the command again.
+- **The deploy says "No firewall to open on this server … MANUAL".** Not an error: the server
+  has no firewall of its own, so allow ports 80 and 443 in your provider's firewall (or router).
 - **The page doesn't open, or the certificate is wrong.** `dig +short photos.example.com` must
   print the server's address, and ports 80 and 443 must be open (the cloud provider's firewall,
   the server's own firewall, your router). Caddy's log: `sudo journalctl -u caddy --since "1 hour ago"`.
@@ -568,24 +627,37 @@ This hasn't been tried end to end. Read it through first.
 
 ## For an AI agent
 
-- **Never read or print `.env`.** It holds every secret. `./memento prod check` says what's
-  missing without showing values.
+- **Never read or print `.env`.** It holds every secret. **Ask the person for the domain**
+  (`MEMENTO_DOMAIN`) and the server's SSH address; `./memento prod check` says what's missing
+  without showing values.
 - **A person runs `./memento prod setup`.** It needs a terminal to type `yes` (or `new server`),
   and shows the two backup passwords once. Don't run it, and never capture its output.
 - **A person** makes the accounts, fills in `.env`, adds the DNS record by hand, makes the admin
   account, and sets Immich's settings in the browser.
+- **SSH keys:** the deploy trusts a new server's key by itself. If it stops because a key
+  changed, stop and ask the person: they check it's really their rebuilt server, then run
+  `ssh-keygen -R <address>`.
+- **Stop at the first error** (a non-zero exit, `failed=` above 0, or a "Not ready" from check),
+  and report it with its message. Don't change `.env`, the server or Terraform's state to get
+  past it.
 
-The order, and what to check after each:
+The first time:
 
 | Step | Command | Check |
 |---|---|---|
-| 1 | `./memento prod check` | No "To fill in or fix" list. Before the first setup, only the "setup fills in" list, ending "Not ready yet: ./memento prod setup fills in the rest." After it: "Ready: …". |
+| 1 | `./memento prod check` | No "To fill in or fix" list: only the "setup fills in" list, ending "Not ready yet: ./memento prod setup fills in the rest." |
 | 2 | (the person) `./memento prod setup` | It ends "Memento is at https://… Still by hand (MANUAL):" |
-| 3 | `curl -s https://<domain>/api/server/ping` | `{"res":"pong"}` |
+| 3 | `curl -s https://<domain>/api/server/ping` | `{"res":"pong"}` (once the DNS record is there) |
 | 4 | `curl -s https://<domain>/extras/health` | `{"ok":true}` |
-| 5 | After a change: `./memento prod dry-run` | Only the changes you expect, plus the couple that always show |
-| 6 | `./memento prod deploy` | Ansible's summary at the end: `failed=0` |
-| 7 | On the server: the commands in "Is everything OK?" | All containers healthy; the last backup ended "All copies done" |
+
+After a change, in this order:
+
+| Step | Command | Check |
+|---|---|---|
+| 1 | `./memento prod check` | "Ready: …" |
+| 2 | `./memento prod dry-run` | Only the changes you expect, plus the couple that always show "changed". Terraform: no changes, unless you meant one. |
+| 3 | `./memento prod deploy` | Ansible's summary at the end: `failed=0` |
+| 4 | The two `curl` checks above, and on the server the commands in "Is everything OK?" | All containers healthy; the last backup ended "All copies done" |
 
 Logs on the server: `sudo docker logs --tail 50 memento_extras` (Memento's service: one line per
 edit, switch change or error, never the prompts), `journalctl -u deep-archive-backup`,
@@ -593,9 +665,11 @@ edit, switch change or error, never the prompts), `journalctl -u deep-archive-ba
 
 ## Not tried yet
 
-- **Path b** (your own server) end to end; see the [known gap](#two-ways-to-get-a-server).
-- **x86-64 servers.** The images build for both, but Memento runs on ARM64.
+- **Path b** (your own server) end to end, including the firewall step on a server that isn't
+  Oracle's.
+- **x86-64 servers.** The images build for both, but it was tested on an Oracle Ampere (ARM)
+  server.
 - **`./memento prod setup` making a new Oracle server from nothing.** The Terraform and Ansible
-  underneath it run Memento's own server.
+  underneath it were tested on an Oracle Ampere server.
 - **Running setup from a Linux computer.**
 - **A full restore** ("Restore everything" above).

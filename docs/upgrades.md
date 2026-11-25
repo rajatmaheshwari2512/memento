@@ -14,12 +14,22 @@ There are two kinds of upgrade:
 
 1. **The backups work.** On the server, the last backup ended with "All copies done":
    `journalctl -u deep-archive-backup --since yesterday | tail`.
-2. **A fresh copy of Immich's database.** **MANUAL:** Administration → Job Queues → Create job →
-   Create Database Dump. It's saved on the server in `/opt/immich/library/backups/`.
-3. **A copy of Memento's database.** Memento makes one every hour; put the latest aside:
+2. **A fresh copy of Immich's database, put aside.** **MANUAL:** Administration → Job Queues →
+   Create job → Create Database Dump. It's saved on the server in `/opt/immich/library/backups/`.
+   Immich keeps only the last 7 there and deletes older ones, and Deep Archive gets only
+   Sunday's, so copy it to a folder of its own:
    ```
-   sudo cp -p /opt/memento-extras/data/backup/memento-extras.db /opt/memento-extras/memento-extras-before-upgrade.db
+   sudo ls -t /opt/immich/library/backups | head -n 1     # the newest: the one you just made
+   sudo mkdir -p /opt/before-upgrade
+   sudo cp -p /opt/immich/library/backups/<that file> /opt/before-upgrade/
    ```
+3. **A copy of Memento's database.** Memento makes one every hour; put the latest aside too:
+   ```
+   sudo cp -p /opt/memento-extras/data/backup/memento-extras.db /opt/before-upgrade/
+   ```
+
+`/opt/before-upgrade/` isn't backed up and nothing deletes it. Remove it yourself once the
+upgrade has been fine for a while.
 
 Why: Immich and Memento both update their database when a new version starts, and an older
 version can't use the updated one (Memento refuses it, and stops). Going back means putting the
@@ -48,7 +58,7 @@ git log --oneline ORIG_HEAD..HEAD     # what came in
   `./memento android` and install the new APK on each phone.
 - **A new Immich version** may come with the pull (`immich_version` in
   `host/roles/immich/defaults/main.yml` changed). Then read Immich's release notes and follow
-  [After an Immich upgrade](#5-deploy-then-check) below.
+  [5. Deploy, then check](#5-deploy-then-check) below.
 - **Try it in dev first** if the change is big: `./memento dev up`.
 
 If you have your own changes, merge as you would in any git repository; conflicts are yours to
@@ -61,8 +71,8 @@ its website and app. It isn't a git submodule. To move to a new release, you tak
 changed between your release and the new one, and apply it to that folder. Memento's changes
 stay where they are.
 
-Immich's server isn't changed by Memento: prod runs Immich's official images, at the version in
-`immich_version`.
+The server image is Immich's own, at the version in `immich_version`; Memento's website is
+mounted into it. The app is built from `immich/mobile`.
 
 ### 1. Read the release notes
 
@@ -169,18 +179,29 @@ After it:
 
 ## Going back
 
-Fixing forward is usually easier. If you must go back:
+Fixing forward is usually easier. Going back loses everything that changed since the upgrade.
+It hasn't been tried. If you must:
 
-- **Immich:** it can't run on a database a newer version has updated. Put the old code back
-  (`git revert`, or check out the commit before), restore the database copy from before the
-  upgrade (Immich's guide: docs.immich.app → Administration → Backup and Restore; in Memento,
-  Immich's folder is `/opt/immich`), then `./memento prod deploy`. What changed since is lost.
+- **Immich:** an older version can't use a database a newer one has updated, so it goes back
+  with the copy in `/opt/before-upgrade/`.
+  1. On your computer, put the old code back (`git revert`, or check out the commit before).
+  2. On the server, check the copy is there (`sudo ls -l /opt/before-upgrade`), then remove
+     Immich's database and put the copy where Immich looks for backups:
+     ```
+     cd /opt/immich && sudo docker compose down
+     sudo rm -rf /opt/immich/postgres
+     sudo cp -p /opt/before-upgrade/<the dump> /opt/immich/library/backups/
+     ```
+  3. On your computer: `./memento prod deploy`. The old Immich starts with an empty database.
+  4. **MANUAL, in the browser:** on the welcome page, click **Restore From Backup** and choose
+     that dump, as in setup-prod.md's [restore steps](setup-prod.md#restore-everything-the-servers-disk-is-lost)
+     (step 5).
 - **Memento:** an older version refuses a database a newer one has updated. Put the old code back,
   then on the server put the copy you set aside back, and deploy:
   ```
   cd /opt/memento-extras && sudo docker compose down
   sudo rm -f /opt/memento-extras/data/data.db-wal /opt/memento-extras/data/data.db-shm
-  sudo cp /opt/memento-extras/memento-extras-before-upgrade.db /opt/memento-extras/data/data.db
+  sudo cp /opt/before-upgrade/memento-extras.db /opt/memento-extras/data/data.db
   sudo chown 10001:10001 /opt/memento-extras/data/data.db
   ```
   Then `./memento prod deploy` on your computer.
