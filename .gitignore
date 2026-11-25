@@ -32,7 +32,6 @@ __pycache__/
 .ruff_cache/
 
 # --- The old separate Immich repo (immich/ replaced it) ---
-immich-webapp/
 
 # --- Tools ---
 .DS_Store
