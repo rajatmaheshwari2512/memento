@@ -1,0 +1,65 @@
+# Night captions for new photos: a systemd timer starts caption-night.sh at
+# memento_extras_captions_start. The script lists every photo from Immich's database, starts
+# the caption model (llama-server) at the lowest CPU priority with a memory cap, runs
+# src/scripts/caption-night.ts until memento_extras_captions_stop, then removes the model again,
+# so it uses no memory in the day. The switch (Memento Features) is checked by the script.
+
+- name: Create the folder for the model
+  ansible.builtin.file:
+    path: "{{ memento_extras_dir }}/models"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+# The photo list (owners and preview paths): only the container's user, like data/.
+- name: Create the folder for the night's photo list
+  ansible.builtin.file:
+    path: "{{ memento_extras_dir }}/night"
+    state: directory
+    owner: "{{ memento_extras_uid }}"
+    group: "{{ memento_extras_uid }}"
+    mode: "0700"
+
+# ~1.9 GB, downloaded once. The checksum pins the exact files; a changed file fails here.
+- name: Download the caption model
+  ansible.builtin.get_url:
+    url: "{{ item.url }}"
+    dest: "{{ memento_extras_dir }}/models/{{ item.name }}"
+    checksum: "sha256:{{ item.sha256 }}"
+    mode: "0644"
+    timeout: 600
+  loop: "{{ memento_extras_caption_model_files }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+# Pulled now, so a missing or broken image fails the deploy, not a night.
+- name: Pull the caption model's server
+  community.docker.docker_image:
+    name: "{{ memento_extras_llama_image }}"
+    source: pull
+
+- name: Write the night caption script
+  ansible.builtin.template:
+    src: caption-night.sh.j2
+    dest: "{{ memento_extras_dir }}/caption-night.sh"
+    mode: "0755"
+
+- name: Write the night caption service and timer
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: /etc/systemd/system/{{ item }}
+    mode: "0644"
+  loop:
+    - caption-night.service
+    - caption-night.timer
+  notify: Restart the caption timer
+
+- name: Turn on the night caption timer
+  ansible.builtin.systemd_service:
+    name: caption-night.timer
+    state: started
+    enabled: true
+    daemon_reload: true
+  # A --check preview doesn't really install the timer, so systemd can't find it yet.
+  ignore_errors: "{{ ansible_check_mode }}"

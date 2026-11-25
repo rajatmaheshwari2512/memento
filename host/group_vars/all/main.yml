@@ -1,0 +1,69 @@
+# Settings for every host in the inventory (there's only one).
+# Ansible loads every file in group_vars/all/ automatically.
+#
+# Your own values and secrets come from the repo's .env (see .env.example): dotenv.<NAME>.
+# MEMENTO_ENV_FILE=/path/to/file reads another file instead.
+dotenv: "{{ (lookup('ansible.builtin.file', lookup('ansible.builtin.env', 'MEMENTO_ENV_FILE') or (playbook_dir ~ '/../.env'), errors='ignore') or '') | dotenv }}"
+
+photos_hostname: "{{ dotenv.MEMENTO_DOMAIN | default('') }}"
+
+# --- base ---
+base_timezone: Asia/Kolkata
+
+# --- caddy ---
+# One entry per website.
+caddy_sites:
+  - hostname: "{{ photos_hostname }}"
+    upstream: localhost:2283
+    routes:
+      - prefix: /extras
+        upstream: localhost:3005 # Memento's extras service (AI edits, flags, ...)
+
+# --- immich ---
+# Photos and videos: a folder on the server's disk.
+immich_upload_location: /opt/immich/library
+immich_require_mount: false
+immich_timezone: "{{ base_timezone }}"
+immich_db_password: "{{ dotenv.IMMICH_DB_PASSWORD | default('') }}"
+# Our build of the web app (AI Edit, Memento Features; apps/web/build.sh). "" = official.
+immich_custom_web_dir: "{{ playbook_dir }}/../apps/web/dist/{{ immich_version }}"
+
+# --- memento_extras (AI edits, feature flags, ...) ---
+memento_extras_gemini_api_key: "{{ dotenv.GEMINI_API_KEY | default('') }}"
+memento_extras_secret: "{{ dotenv.MEMENTO_SECRET | default('') }}"
+memento_extras_timezone: "{{ base_timezone }}"
+
+# --- backup ---
+backup_bucket: "{{ dotenv.BACKUP_BUCKET_NAME | default('') }}"
+backup_access_key_id: "{{ dotenv.BACKUP_ACCESS_KEY_ID | default('') }}"
+backup_secret_access_key: "{{ dotenv.BACKUP_SECRET_ACCESS_KEY | default('') }}"
+# The two encryption passwords for everything copied (rclone obscure).
+backup_crypt_password_obscured: "{{ dotenv.BACKUP_CRYPT_PASSWORD_OBSCURED | default('') }}"
+backup_crypt_password2_obscured: "{{ dotenv.BACKUP_CRYPT_PASSWORD2_OBSCURED | default('') }}"
+# Copied one after the other each night. What each field means: roles/backup/defaults/main.yml.
+backup_jobs:
+  # Memento's photos, encrypted on the way (names too, in base32).
+  - name: immich
+    source: "{{ immich_upload_location }}"
+    dest_path: immich
+    encrypt_names: base32
+    # Immich's nightly database backups: the server keeps the last 14. Deep Archive gets
+    # Sunday's only, always as backups/latest.sql.gz; the bucket keeps each replaced copy
+    # 180 days, so there are about six months of weekly ones (all of them would add GBs a
+    # month that are never deleted).
+    weekly_only: backups
+    weekly_as: latest.sql.gz
+    # Memento's playback copies of videos and the clips it pulls out of motion photos.
+    # It rebuilds both from the originals after a restore (docs/runbooks.md), so Deep
+    # Archive holds only the originals and the database backup.
+    skip_folders: [encoded-video]
+  # Memento's extras service: a copy of its database (live-album rules, the encrypted keys
+  # they use, feature flags, the AI edit log), which the service rewrites every hour
+  # (memento-extras/src/db/database.ts). One small file, compared by size and time: a database
+  # often keeps its size when it changes. The bucket keeps replaced copies 180 days.
+  # The folder is /opt/memento-extras (memento_extras_dir) + /data/backup.
+  - name: memento_extras
+    source: /opt/memento-extras/data/backup
+    dest_path: memento-extras
+    encrypt_names: base32
+    compare: modtime

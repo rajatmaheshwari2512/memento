@@ -1,0 +1,89 @@
+{
+  "_comment": "SelfPhotos Adjust filters: named settings of the shared shader (adjust-core.glsl), scaled by the filter strength. Our own looks and names; each needs editor_filter_<id> in i18n/en.json. The Android app reads this same file (mobile/assets/selfphotos/adjust-filters.json links here).",
+  "filters": [
+    {
+      "brightness": 0.2,
+      "exposure": 0.12,
+      "id": "bright",
+      "saturation": 0.1,
+      "shadows": 0.25
+    },
+    {
+      "contrast": 0.3,
+      "id": "punch",
+      "saturation": 0.35,
+      "shadows": 0.1,
+      "vignette": 0.15
+    },
+    {
+      "highlights": -0.1,
+      "id": "warm",
+      "saturation": 0.1,
+      "warmth": 0.35
+    },
+    {
+      "contrast": 0.1,
+      "id": "cool",
+      "tint": -0.05,
+      "warmth": -0.3
+    },
+    {
+      "contrast": 0.1,
+      "id": "golden",
+      "toneHighlights": [0.4, 0.25, -0.2],
+      "toneShadows": [0.15, 0.0, -0.2],
+      "warmth": 0.25
+    },
+    {
+      "contrast": -0.2,
+      "fade": 0.6,
+      "id": "matte",
+      "saturation": -0.15
+    },
+    {
+      "contrast": 0.15,
+      "fade": 0.35,
+      "id": "film",
+      "saturation": -0.1,
+      "toneHighlights": [0.3, 0.15, -0.15],
+      "toneShadows": [-0.1, 0.15, 0.35]
+    },
+    {
+      "brightness": 0.1,
+      "contrast": -0.25,
+      "fade": 0.15,
+      "highlights": -0.2,
+      "id": "soft",
+      "shadows": 0.25
+    },
+    {
+      "contrast": 0.35,
+      "exposure": -0.1,
+      "highlights": -0.3,
+      "id": "moody",
+      "saturation": -0.2,
+      "toneShadows": [-0.1, 0.0, 0.15],
+      "vignette": 0.35
+    },
+    {
+      "contrast": 0.2,
+      "id": "mono",
+      "saturation": -1
+    },
+    {
+      "contrast": 0.55,
+      "exposure": -0.05,
+      "id": "noir",
+      "saturation": -1,
+      "shadows": -0.3,
+      "vignette": 0.4
+    },
+    {
+      "fade": 0.2,
+      "id": "sepia",
+      "saturation": -1,
+      "toneHighlights": [0.6, 0.35, -0.2],
+      "toneShadows": [0.35, 0.15, -0.3]
+    }
+  ]
+}

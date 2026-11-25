@@ -1,0 +1,39 @@
+# --- Your settings, dev's data and your private notes ---
+/.env
+/.env.*
+!/.env.example
+/.local/
+/private/
+.claude/
+
+# --- Terraform ---
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+*.tfvars
+!*.tfvars.example
+
+# --- Ansible ---
+*.retry
+.ansible/
+
+# --- Builds ---
+apps/web/dist/
+apps/android/dist/
+*.jks
+*.keystore
+node_modules/
+__pycache__/
+*.pyc
+.mypy_cache/
+.ruff_cache/
+
+# --- The old separate Immich repo (immich/ replaced it) ---
+immich-webapp/
+
+# --- Tools ---
+.DS_Store
+.playwright-mcp/

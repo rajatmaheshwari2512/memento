@@ -1,0 +1,9 @@
+# The one machine Ansible manages. Same shape as learn/ansible/01-inventory,
+# but over SSH instead of Docker.
+all:
+  hosts:
+    photos:
+      # SERVER_HOST in .env, else MEMENTO_DOMAIN.
+      ansible_host: "{{ dotenv.SERVER_HOST | default(photos_hostname, true) }}"
+      ansible_user: "{{ dotenv.SERVER_USER | default('ubuntu', true) }}"
+      ansible_python_interpreter: /usr/bin/python3

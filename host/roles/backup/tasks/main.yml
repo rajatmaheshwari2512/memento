@@ -1,0 +1,134 @@
+# Nightly copy of the apps' files to AWS Glacier Deep Archive, as a systemd timer.
+# A timer (not cron) because:
+#   - systemd never starts a second copy while one is still running (the first
+#     upload of 2 TB will take more than a day)
+#   - output goes to the journal: journalctl -u deep-archive-backup
+#   - Persistent=true runs a missed backup after the VM was down at 04:00
+# One run copies each folder in backup_jobs in turn, with rclone, and everything lands in
+# the bucket encrypted (see backup.sh.j2).
+
+- name: Install rclone {{ backup_rclone_version }}
+  ansible.builtin.apt:
+    deb: https://downloads.rclone.org/v{{ v }}/rclone-v{{ v }}-linux-{{ arch }}.deb
+  vars:
+    v: "{{ backup_rclone_version }}"
+    arch: "{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}"
+
+- name: Work out which backup jobs are on
+  ansible.builtin.set_fact:
+    backup_active_jobs: >-
+      {{ backup_jobs | selectattr('enabled', 'undefined') | list
+         + backup_jobs | selectattr('enabled', 'defined') | selectattr('enabled', 'truthy') | list }}
+
+- name: Check the backup settings are filled in
+  ansible.builtin.assert:
+    that:
+      - backup_bucket | length > 0
+      - backup_access_key_id | length > 0
+      - backup_secret_access_key | length > 0
+      - backup_active_jobs | length > 0
+      - backup_active_jobs | selectattr('only_subfolder', 'defined') | rejectattr('crypt_remote', 'defined') | list | length == 0
+      - backup_active_jobs | selectattr('encrypt_names', 'defined') | list | length == 0
+        or (backup_crypt_password_obscured | length > 0 and backup_crypt_password2_obscured | length > 0)
+    fail_msg: >-
+      Fill in BACKUP_* in .env (see .env.example)
+      (docs/setup.md, step 5), and give every backup_jobs entry with only_subfolder a crypt_remote too.
+    quiet: true
+
+# This job was called immich-backup (Immich only), then storagebox-backup (every folder
+# on the Storage Box). It's now deep-archive-backup. These tasks remove the old ones;
+# they can go once every VM has run them.
+- name: Look for the old backup timers
+  ansible.builtin.stat:
+    path: /etc/systemd/system/{{ item }}.timer
+  loop: [immich-backup, storagebox-backup]
+  register: backup_old_timers
+
+- name: Stop the old backup timers
+  ansible.builtin.systemd_service:
+    name: "{{ item.item }}.timer"
+    state: stopped
+    enabled: false
+  loop: "{{ backup_old_timers.results | selectattr('stat.exists') | list }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Remove the old backup files
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/systemd/system/immich-backup.timer
+    - /etc/systemd/system/immich-backup.service
+    - /etc/immich-backup
+    - /etc/systemd/system/storagebox-backup.timer
+    - /etc/systemd/system/storagebox-backup.service
+    - /etc/storagebox-backup
+
+- name: Create the backup folder (root only)
+  ansible.builtin.file:
+    path: /etc/deep-archive-backup
+    state: directory
+    mode: "0700"
+
+# rclone can define a whole remote from environment variables named
+# RCLONE_CONFIG_<REMOTE>_<OPTION>. This file defines "glacier" (and the encrypting
+# remotes over it) that way, so this role doesn't need an rclone.conf.
+- name: Write the Deep Archive login and encryption settings (env file)
+  ansible.builtin.template:
+    src: glacier.env.j2
+    dest: /etc/deep-archive-backup/glacier.env
+    mode: "0600"
+  diff: false
+
+# Only reads: rclone prints the scrambled form of a name. Runs in --check mode too, so
+# the preview shows the real script. Only for jobs copying part of a Storage Box folder.
+- name: Work out the scrambled names of the subfolders to copy
+  ansible.builtin.command:
+    argv:
+      - rclone
+      - --config
+      - /etc/rclone/rclone.conf
+      - cryptdecode
+      - --reverse
+      - "{{ item.crypt_remote }}:"
+      - "{{ item.only_subfolder }}"
+  loop: "{{ backup_active_jobs | selectattr('only_subfolder', 'defined') | list }}"
+  loop_control:
+    label: "{{ item.name }}: {{ item.only_subfolder }}"
+  register: backup_scrambled_names
+  changed_when: false
+  check_mode: false
+
+# rclone prints "files <tab> TNpP6...": the scrambled name is the last word.
+- name: Remember the scrambled names, by job
+  ansible.builtin.set_fact:
+    backup_scrambled: >-
+      {{ dict(backup_scrambled_names.results
+         | map(attribute='item.name')
+         | zip(backup_scrambled_names.results | map(attribute='stdout') | map('split') | map('last'))) }}
+
+- name: Install the backup script
+  ansible.builtin.template:
+    src: backup.sh.j2
+    dest: /etc/deep-archive-backup/backup.sh
+    mode: "0700"
+
+- name: Install the backup service and timer
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: /etc/systemd/system/{{ item }}
+    mode: "0644"
+  loop:
+    - deep-archive-backup.service
+    - deep-archive-backup.timer
+  notify: Restart the backup timer
+
+- name: Turn the timer on now and at every boot
+  ansible.builtin.systemd_service:
+    name: deep-archive-backup.timer
+    enabled: true
+    state: started
+    daemon_reload: true
+  # A --check preview doesn't really install the timer, so systemd can't find it yet.
+  ignore_errors: "{{ ansible_check_mode }}"

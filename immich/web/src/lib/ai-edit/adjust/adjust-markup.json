@@ -1,0 +1,36 @@
+{
+  "_comment": "SelfPhotos Adjust's Markup: what both apps draw with (web: markup.ts; Android: markup.dart, through mobile/assets/selfphotos/adjust-markup.json, which links here). Widths and text sizes are shares of the picture's longer side, so the preview and the full-size copy match. Each colour's text gets a thin outline in its outline colour (a share of the text's size), so it reads on any photo. Arrow heads are headLength times the line's width long (at most maxHeadShare of the arrow), each side headAngle degrees from the line.",
+  "arrow": {
+    "headAngle": 30,
+    "headLength": 4,
+    "maxHeadShare": 0.5
+  },
+  "colours": [
+    { "fill": "#e53935", "outline": "#ffffff" },
+    { "fill": "#fb8c00", "outline": "#000000" },
+    { "fill": "#fdd835", "outline": "#000000" },
+    { "fill": "#43a047", "outline": "#000000" },
+    { "fill": "#1e88e5", "outline": "#ffffff" },
+    { "fill": "#8e24aa", "outline": "#ffffff" },
+    { "fill": "#ffffff", "outline": "#000000" },
+    { "fill": "#000000", "outline": "#ffffff" }
+  ],
+  "highlighter": {
+    "opacity": 0.4,
+    "widthScale": 4
+  },
+  "minStep": 0.002,
+  "sizes": [
+    { "text": 0.035, "width": 0.003 },
+    { "text": 0.055, "width": 0.006 },
+    { "text": 0.085, "width": 0.012 }
+  ],
+  "text": {
+    "font": "GoogleSans",
+    "maxLength": 200,
+    "maxSize": 0.3,
+    "minSize": 0.015,
+    "outline": 0.1,
+    "weight": 700
+  }
+}

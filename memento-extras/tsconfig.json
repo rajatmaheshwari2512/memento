@@ -1,0 +1,20 @@
+{
+  // Type checking only (npm run check). Node runs the .ts files directly, by
+  // removing the types, so nothing is compiled and only "erasable" TypeScript is allowed.
+  "compilerOptions": {
+    "target": "es2024",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "types": ["node"],
+    "skipLibCheck": true
+  },
+  "include": ["src", "test", "creations/src"]
+}

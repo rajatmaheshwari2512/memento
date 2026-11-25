@@ -1,0 +1,79 @@
+# Managed by Ansible (host/roles/memento_extras). Changes made on the server are overwritten.
+name: memento-extras
+
+services:
+  memento-extras:
+    image: memento-extras:local # built on this VM by Ansible
+    container_name: memento_extras
+    restart: always
+    # Not root; owns {{ memento_extras_dir }}/data (see memento_extras_uid in the role's defaults).
+    user: "{{ memento_extras_uid }}:{{ memento_extras_uid }}"
+    env_file: memento-extras.env
+    environment:
+      # A heap limit under the container's memory cap: a leak stops Node, and Docker restarts it.
+      NODE_OPTIONS: "--max-old-space-size={{ memento_extras_node_heap_mb }}"
+    mem_limit: {{ memento_extras_memory }}
+    ports:
+      # Only on 127.0.0.1: Caddy forwards photos.<domain>/extras/* here.
+      - "127.0.0.1:{{ memento_extras_port }}:3005"
+    volumes:
+      - {{ memento_extras_dir }}/data:/data
+      # One folder per creations job, shared with memento-creations; emptied after each job.
+      - {{ memento_extras_creations_work }}:/work
+    networks:
+      - immich
+      - reader
+      - creations
+
+  # The trained question reader (memento-extras/reader/). No ports and no internet: it's only
+  # on the internal "reader" network, where the extras service calls http://memento-reader:8000.
+  memento-reader:
+    image: memento-reader:local # built on this VM by Ansible
+    container_name: memento_reader
+    restart: always
+    environment:
+      THREADS: "2"
+    read_only: true
+    tmpfs:
+      - /tmp
+    mem_limit: {{ memento_extras_reader_memory }}
+    networks:
+      - reader
+
+  # Collages, recap videos, animations and cinematic photos, and Reduce noise for videos
+  # (memento-extras/creations/). No ports, no internet (only the internal "creations" network), no
+  # keys: it reads and writes the work folder only.
+  memento-creations:
+    image: memento-creations:local # built on this VM by Ansible
+    container_name: memento_creations
+    restart: always
+    user: "{{ memento_extras_uid }}:{{ memento_extras_uid }}"
+    read_only: true
+    tmpfs:
+      - /tmp:size={{ memento_extras_creations_tmpfs }}
+    volumes:
+      - {{ memento_extras_creations_work }}:/work
+      - {{ memento_extras_creations_music }}:/music:ro
+    mem_limit: {{ memento_extras_creations_memory }}
+    memswap_limit: {{ memento_extras_creations_memory }}
+    cpus: {{ memento_extras_creations_cpus }}
+    cpu_shares: 2 # the lowest weight (Docker's default is 1024): Immich always goes first
+    pids_limit: 256 # ffmpeg runs a few threads per file it has open
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - creations
+
+networks:
+  # Immich's network, so this container can call http://immich-server:2283 directly.
+  immich:
+    name: {{ memento_extras_immich_network }}
+    external: true
+  # Just the extras service and the reader; "internal" means no way out to the internet.
+  reader:
+    internal: true
+  # Just the extras service and the creations container, no way out.
+  creations:
+    internal: true

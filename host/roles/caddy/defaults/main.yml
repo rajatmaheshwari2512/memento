@@ -1,0 +1,11 @@
+# One block per website in the Caddyfile. Set in group_vars/all/main.yml.
+#   hostname: the public name (needs a DNS record pointing at this VM)
+#   upstream: where Caddy forwards requests (an app listening on localhost)
+#   enabled:  optional, false = leave this site out (e.g. Crypt while it's parked)
+#   routes:   optional list checked first. Each has a prefix (matches /prefix and /prefix/...) and either:
+#               upstream: forward to another app, with the prefix removed (e.g. /extras)
+#               root:     serve files from that folder on the VM, path kept (e.g. /crypt-fonts, phase 3)
+caddy_sites: []
+
+# Ports opened in the VM's own firewall. Oracle's security list (Terraform) opens them too.
+caddy_firewall_ports: [80, 443]

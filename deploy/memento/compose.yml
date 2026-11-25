@@ -1,0 +1,72 @@
+# Memento's containers, for dev and prod. Dev adds deploy/dev/memento.yml (./memento dev up).
+#
+#   MEMENTO_ENV_FILE  memento-extras' settings file (default: memento-extras.env)
+#   MEMENTO_DATA      its data folder (default: /opt/memento-extras/data)
+#   MEMENTO_WORK      the creations work folder (default: /opt/memento-extras/creations-work)
+#   MEMENTO_MUSIC     music for recap videos (default: /opt/memento-extras/music)
+name: memento-extras
+
+services:
+  memento-extras:
+    image: memento-extras:local
+    container_name: memento_extras
+    restart: always
+    user: "10001:10001"
+    env_file: ${MEMENTO_ENV_FILE:-memento-extras.env}
+    environment:
+      NODE_OPTIONS: "--max-old-space-size=384"
+    mem_limit: 512m
+    ports:
+      - "127.0.0.1:3005:3005"
+    volumes:
+      - ${MEMENTO_DATA:-/opt/memento-extras/data}:/data
+      - ${MEMENTO_WORK:-/opt/memento-extras/creations-work}:/work
+    networks:
+      - immich
+      - reader
+      - creations
+
+  memento-reader:
+    image: memento-reader:local
+    container_name: memento_reader
+    restart: always
+    environment:
+      THREADS: "2"
+    read_only: true
+    tmpfs:
+      - /tmp
+    mem_limit: 768m
+    networks:
+      - reader
+
+  memento-creations:
+    image: memento-creations:local
+    container_name: memento_creations
+    restart: always
+    user: "10001:10001"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    volumes:
+      - ${MEMENTO_WORK:-/opt/memento-extras/creations-work}:/work
+      - ${MEMENTO_MUSIC:-/opt/memento-extras/music}:/music:ro
+    mem_limit: 1g
+    memswap_limit: 1g
+    cpus: 1.5
+    cpu_shares: 2
+    pids_limit: 256
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - creations
+
+networks:
+  immich:
+    name: immich_default
+    external: true
+  reader:
+    internal: true
+  creations:
+    internal: true

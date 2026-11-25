@@ -1,0 +1,21 @@
+# The question reader's Python settings: style and lint checks (ruff), types (mypy).
+[project]
+name = "memento-reader"
+version = "1.0.0"
+requires-python = ">=3.12"
+
+[tool.ruff]
+line-length = 99
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "A", "D", "SIM", "RUF"]
+ignore = ["D203", "D213", "D105", "D107"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["D"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+ignore_missing_imports = true

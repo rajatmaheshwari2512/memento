@@ -1,0 +1,229 @@
+# Memento's extras service (AI edits, feature flags, and later live albums and more), in
+# its own Docker Compose project in /opt/memento-extras:
+#   build/                   the source (memento-extras/ from this repo); the image is built here, on the VM
+#   data/                    edit results waiting to be saved, and the database (limits, flags)
+#   memento-extras.env       settings + Gemini key (root-only)
+#   docker-compose.yml       one container, joined to Immich's network
+# It's a separate project, not part of Immich's: the immich role runs compose with
+# remove_orphans, which would delete any container it doesn't know about.
+# Until 2026-11-19 it was called ai-edit (/opt/ai-edit, path /ai-edit); both are gone since 2026-11-23.
+
+- name: Check the Gemini key is filled in
+  ansible.builtin.assert:
+    that: memento_extras_gemini_api_key | length > 0
+    fail_msg: Fill in GEMINI_API_KEY in .env.
+    quiet: true
+
+# Checked here, not only in the service: there it's optional (AI edits run without it),
+# so a missing one would quietly leave live albums switched off.
+- name: Check the live albums secret is filled in
+  ansible.builtin.assert:
+    that:
+      - memento_extras_secret | length >= 44
+      - memento_extras_secret != "CHANGE_ME"
+    fail_msg: Fill in MEMENTO_SECRET in .env (openssl rand -base64 32).
+    quiet: true
+
+- name: Create the service's folders
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "{{ memento_extras_dir }}"
+    - "{{ memento_extras_dir }}/build"
+    - "{{ memento_extras_dir }}/build/creations/src"
+
+# The container runs as memento_extras_uid, not root, so it owns its data folder and
+# everything in it (recurse). u=rwX: folders 0700, files 0600. Only that ID (and root) can read it.
+- name: Create the data folder, owned by the container's user
+  ansible.builtin.file:
+    path: "{{ memento_extras_dir }}/data"
+    state: directory
+    owner: "{{ memento_extras_uid }}"
+    group: "{{ memento_extras_uid }}"
+    mode: u=rwX,g=,o=
+    recurse: true
+
+# Only what the image needs. Not node_modules: those are dev-only (type checking on the Mac).
+- name: Copy the source to the VM
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../memento-extras/{{ item }}"
+    dest: "{{ memento_extras_dir }}/build/{{ item }}"
+    mode: "0644"
+    directory_mode: "0755"
+  loop:
+    - Dockerfile
+    - package.json
+    - src/
+    - creations/src/job.ts # the creations container's jobs and limits, which the service shares
+  register: memento_extras_copied
+
+# Copying never deletes: a file moved or removed in the repo would stay on the VM, and in
+# the image, as an old copy that scripts (caption-night.sh, the runbooks) could still run.
+- name: List the source files in the repo
+  ansible.builtin.find:
+    paths: "{{ playbook_dir }}/../memento-extras/src"
+    recurse: true
+  delegate_to: localhost
+  become: false
+  register: memento_extras_src_repo
+
+- name: List the source files on the VM
+  ansible.builtin.find:
+    paths: "{{ memento_extras_dir }}/build/src"
+    recurse: true
+  register: memento_extras_src_vm
+
+# Compared as paths relative to each src folder: find tidies "host/../" out of the paths it
+# returns, so stripping a prefix by text never matches (it listed every file).
+- name: Work out which source files on the VM are no longer in the repo
+  ansible.builtin.set_fact:
+    memento_extras_stale: >-
+      {{ memento_extras_src_vm.files | map(attribute='path')
+         | map('relpath', memento_extras_dir ~ '/build/src')
+         | difference(memento_extras_src_repo.files | map(attribute='path')
+                      | map('relpath', playbook_dir ~ '/../memento-extras/src'))
+         | list }}
+
+# A guard: a mistake above must never empty the VM's source (the image would have no code).
+- name: Check that most of the VM's source stays
+  ansible.builtin.assert:
+    that:
+      - memento_extras_src_repo.files | length > 0
+      - memento_extras_stale | length < memento_extras_src_vm.files | length
+      - "'server.ts' not in memento_extras_stale"
+    fail_msg: "Would remove {{ memento_extras_stale | length }} of {{ memento_extras_src_vm.files | length }} source files on the VM; stopping."
+    quiet: true
+
+- name: Remove source files that are no longer in the repo
+  ansible.builtin.file:
+    path: "{{ memento_extras_dir }}/build/src/{{ item }}"
+    state: absent
+  loop: "{{ memento_extras_stale }}"
+  register: memento_extras_removed
+
+# Built on the VM, so there's no image registry and nothing is published. The build is
+# small (no npm install), about a minute on the 2-core VM. Rebuilt only when the source changed.
+- name: Build the memento-extras image
+  community.docker.docker_image:
+    name: memento-extras
+    tag: local
+    source: build
+    build:
+      path: "{{ memento_extras_dir }}/build"
+    force_source: "{{ memento_extras_copied is changed or memento_extras_removed is changed }}"
+  register: memento_extras_image
+
+# The trained question reader: its code, the word splitter it was trained with, and the model,
+# built into a small image of its own (memento-extras/reader/). Whenever it's slow or down,
+# Ask searches the question as typed.
+- name: Check the question reader's model is on this Mac
+  tags: reader
+  ansible.builtin.stat:
+    path: "{{ memento_extras_reader_model }}/model.onnx"
+  delegate_to: localhost
+  become: false
+  register: memento_extras_reader_model_stat
+
+- name: Stop if it isn't
+  tags: reader
+  ansible.builtin.assert:
+    that: memento_extras_reader_model_stat.stat.exists
+    fail_msg: "No reader model in {{ memento_extras_reader_model }} (config.json, tokenizer.json, model.onnx from huggingface.co/mahesraj/memento-ask-reader)."
+    quiet: true
+
+- name: Create the question reader's build folders
+  tags: reader
+  ansible.builtin.file:
+    path: "{{ memento_extras_dir }}/reader-build/{{ item }}"
+    state: directory
+    mode: "0755"
+  loop: ["", model]
+  register: memento_extras_reader_dirs
+
+- name: Copy the question reader's code to the VM
+  tags: reader
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../memento-extras/{{ item.src }}"
+    dest: "{{ memento_extras_dir }}/reader-build/{{ item.dest }}"
+    mode: "0644"
+    directory_mode: "0755"
+  loop:
+    - { src: reader/Dockerfile, dest: Dockerfile }
+    - { src: reader/.dockerignore, dest: .dockerignore }
+    - { src: reader/requirements.txt, dest: requirements.txt }
+    - { src: reader/reader/, dest: reader/ }
+    - { src: reader/common.py, dest: common.py }
+  register: memento_extras_reader_code
+
+- name: Copy the question reader's model to the VM
+  tags: reader
+  ansible.builtin.copy:
+    src: "{{ memento_extras_reader_model }}/{{ item }}"
+    dest: "{{ memento_extras_dir }}/reader-build/model/{{ item }}"
+    mode: "0644"
+  loop: [config.json, tokenizer.json, model.onnx]
+  register: memento_extras_reader_model_files
+
+- name: Build the question reader's image
+  community.docker.docker_image:
+    name: memento-reader
+    tag: local
+    source: build
+    build:
+      path: "{{ memento_extras_dir }}/reader-build"
+    force_source: "{{ memento_extras_reader_code is changed or memento_extras_reader_model_files is changed }}"
+  register: memento_extras_reader_image
+  # A dry run (--check) creates no folders, so on the first deploy there's nothing to build from.
+  when: not (ansible_check_mode and memento_extras_reader_dirs is changed)
+  tags: reader
+
+# A new model alone: `ansible-playbook site.yml --tags reader` runs only the reader's tasks above
+# and this one, which restarts just the reader, so the rest of the service isn't redeployed with
+# it. A full deploy restarts the reader with everything else (below) and skips this.
+- name: Restart only the question reader (--tags reader)
+  ansible.builtin.command:
+    cmd: docker compose up -d --no-deps --force-recreate memento-reader
+    chdir: "{{ memento_extras_dir }}"
+  when: memento_extras_reader_image is changed
+  changed_when: true
+  tags: [reader, never]
+
+- name: Collages, recap videos, animations and cinematic photos (the creations container)
+  ansible.builtin.import_tasks: creations.yml
+
+- name: Write memento-extras.env (settings + Gemini key)
+  ansible.builtin.template:
+    src: memento-extras.env.j2
+    dest: "{{ memento_extras_dir }}/memento-extras.env"
+    mode: "0600"
+  diff: false
+  register: memento_extras_env
+
+- name: Write docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ memento_extras_dir }}/docker-compose.yml"
+    mode: "0644"
+  register: memento_extras_compose
+
+# Recreate the container when the image, settings or compose file changed. Compose
+# alone doesn't notice a rebuilt image that kept the same tag.
+- name: Start the service (docker compose up)
+  community.docker.docker_compose_v2:
+    project_src: "{{ memento_extras_dir }}"
+    state: present
+    pull: never
+    remove_orphans: true
+    recreate: >-
+      {{ 'always' if (memento_extras_image is changed or memento_extras_reader_image is changed
+         or memento_extras_creations_image is changed or memento_extras_env is changed
+         or memento_extras_compose is changed) else 'auto' }}
+    wait: true
+    wait_timeout: 120
+
+- name: Night captions for new photos
+  ansible.builtin.import_tasks: caption-night.yml

@@ -1,0 +1,17 @@
+# Dev's changes to Immich's own docker-compose.yml (./memento dev up).
+# Machine learning is the "ml" profile; DEV_ML=0 leaves it off.
+services:
+  immich-server:
+    ports: !override
+      - '127.0.0.1:2283:2283'
+    restart: on-failure
+
+  immich-machine-learning:
+    profiles: [ml]
+    restart: on-failure
+
+  redis:
+    restart: on-failure
+
+  database:
+    restart: on-failure

@@ -1,0 +1,32 @@
+# Managed by Ansible (host/roles/caddy). Changes made on the server are overwritten.
+# Each block: Caddy gets a certificate for the name and forwards requests to the app.
+# Optional routes handle one path prefix first, in one of two ways:
+#   upstream: forwarded to another app, with the prefix removed. /extras, /extras/ and
+#             /extras/edits go to the memento-extras service as /, / and /edits.
+#   root:     files served straight from a folder on the VM, path kept as is.
+#             /crypt-fonts/GoogleSans.ttf is <root>/crypt-fonts/GoogleSans.ttf.
+# (Not /extrasfoo: only the exact prefix or the prefix followed by a slash matches.)
+{% for site in caddy_sites if site.enabled | default(true) | bool %}
+
+{{ site.hostname }} {
+{% for route in site.routes | default([]) %}
+	@route{{ loop.index }} path {{ route.prefix }} {{ route.prefix }}/*
+	handle @route{{ loop.index }} {
+{% if route.root is defined %}
+		root * {{ route.root }}
+		encode zstd gzip
+		header Cache-Control "public, max-age=31536000"
+		file_server
+{% else %}
+		uri strip_prefix {{ route.prefix }}
+		# Compresses JSON (Ask's photo lists); images and other binary replies pass as they are.
+		encode zstd gzip
+		reverse_proxy {{ route.upstream }}
+{% endif %}
+	}
+{% endfor %}
+	handle {
+		reverse_proxy {{ site.upstream }}
+	}
+}
+{% endfor %}

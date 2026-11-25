@@ -1,0 +1,91 @@
+#!/bin/sh
+# Managed by Ansible (host/roles/backup). Changes made on the server are overwritten.
+# Copies each app's files to Glacier Deep Archive, one folder after the other. Run by
+# deep-archive-backup.service, which also defines the rclone remotes (glacier.env).
+#
+# Everything arrives in the bucket encrypted, names included:
+#   - plain files on the VM's disk go through an encrypting remote (archive_<name>)
+#   - files on the Storage Box are already encrypted and are copied as they are
+#   copy (not sync): never deletes anything in the bucket, so files deleted in the apps
+#                    stay in the backup.
+#   --size-only:     compare sizes, not checksums (checksums would mean reading every
+#                    file every night). Encryption adds a fixed amount to each file, so
+#                    the sizes still match what's already archived. Jobs with
+#                    compare: modtime use size and time instead (rclone's default), for a
+#                    file that changes without changing size, like a database.
+#   --fast-list:     list the bucket 1,000 files per request instead of one request per
+#                    folder (~1,850 folders): S3 charges for every request. Costs ~1 KB of
+#                    memory per file while it runs.
+# A failed copy doesn't stop the next one, but the script still ends with an error, so
+# `systemctl status deep-archive-backup` shows it.
+
+failed=""
+{% for job in backup_jobs if job.enabled | default(true) | bool %}
+
+{% if job.encrypt_names is defined %}
+{% set left_out = ([job.weekly_only] if job.weekly_only is defined else []) + (job.skip_folders | default([])) %}
+# {{ job.name }}: the plain files in {{ job.source }}, encrypted on the way.
+{% if job.weekly_only is defined %}
+# Its {{ job.weekly_only }}/ folder is left out here and copied once a week, below.
+{% endif %}
+{% for folder in job.skip_folders | default([]) %}
+# {{ folder }}/ is left out: the app rebuilds it from the originals.
+{% endfor %}
+echo "{{ job.name }}: copying {{ job.source }} to glacier:{{ backup_bucket }}/{{ job.dest_path }}, encrypted"
+if ! /usr/bin/rclone copy {{ job.source }} archive_{{ job.name }}: \
+{% for folder in left_out %}
+  --exclude '/{{ folder }}/**' \
+{% endfor %}
+{% else %}
+{% if job.only_subfolder is defined %}
+# {{ job.name }}: only each "{{ job.only_subfolder }}" folder ({{ backup_scrambled[job.name] }} is its
+# scrambled name), so versions, trash, previews and logs stay out of Deep Archive.
+{% else %}
+# {{ job.name }}: the whole folder, already encrypted on the Storage Box.
+{% endif %}
+echo "{{ job.name }}: copying {{ job.source }} to glacier:{{ backup_bucket }}/{{ job.dest_path }}"
+if ! /usr/bin/rclone copy {{ job.source }} glacier:{{ backup_bucket }}/{{ job.dest_path }} \
+  --config /etc/rclone/rclone.conf \
+{% if job.only_subfolder is defined %}
+  --include '/*/{{ backup_scrambled[job.name] }}/**' \
+{% endif %}
+{% endif %}
+{% if job.compare | default('size') == 'size' %}
+  --size-only \
+{% endif %}
+  --fast-list \
+  --transfers {{ backup_transfers }} \
+  --checkers {{ backup_checkers }} \
+  --stats 10m --stats-one-line -v; then
+  failed="$failed {{ job.name }}"
+fi
+{% if job.weekly_only is defined %}
+
+# {{ job.name }}, once a week (day {{ backup_weekly_day }} of the week, 7 = Sunday): the newest file in
+# {{ job.weekly_only }}/ (that night's database backup), always under the same name,
+# {{ job.weekly_only }}/{{ job.weekly_as }}. Each week replaces the last; the bucket keeps every replaced
+# copy 180 days and then deletes it (Terraform's lifecycle rule), so Deep Archive holds about
+# six months of weekly copies and never grows past that. Copying every night's file under its
+# own name would pile up forever, since this job can't delete anything there.
+if [ "$(date +%u)" = "{{ backup_weekly_day }}" ]; then
+  newest=$(find {{ job.source }}/{{ job.weekly_only }} -maxdepth 1 -type f ! -name '.*' -printf '%T@ %p\n' | sort -n | tail -1 | cut -d' ' -f2-)
+  if [ -n "$newest" ]; then
+    echo "{{ job.name }}: weekly copy of $newest as {{ job.weekly_only }}/{{ job.weekly_as }}"
+    # --ignore-times: always upload, even if the size happens to match last week's
+    if ! /usr/bin/rclone copyto "$newest" archive_{{ job.name }}:{{ job.weekly_only }}/{{ job.weekly_as }} \
+      --ignore-times -v; then
+      failed="$failed {{ job.name }}-weekly"
+    fi
+  else
+    echo "{{ job.name }}: no file found in {{ job.weekly_only }}/ for the weekly copy"
+    failed="$failed {{ job.name }}-weekly"
+  fi
+fi
+{% endif %}
+{% endfor %}
+
+if [ -n "$failed" ]; then
+  echo "These copies failed:$failed"
+  exit 1
+fi
+echo "All copies done"

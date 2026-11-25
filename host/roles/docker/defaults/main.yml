@@ -1,0 +1,21 @@
+# Written to /etc/docker/daemon.json. Without a size cap, container logs grow
+# until the disk is full. This keeps at most 3 files of 10 MB per container.
+docker_daemon_config:
+  # Containers keep running while Docker itself restarts or updates (the nightly automatic
+  # updates below), instead of all of them, Immich included, restarting with it.
+  live-restore: true
+  log-driver: json-file
+  log-opts:
+    max-size: 10m
+    max-file: "3"
+
+# Automatic updates (base role's nightly run) install Docker's new releases, but only within
+# these major versions: a new major version waits until it's changed here and the role runs
+# (docs/runbooks.md, "Automatic updates").
+docker_major_versions:
+  docker-ce: "5:29"
+  docker-ce-cli: "5:29"
+  docker-ce-rootless-extras: "5:29"
+  containerd.io: "2"
+  docker-buildx-plugin: "0"
+  docker-compose-plugin: "5"

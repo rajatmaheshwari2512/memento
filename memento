@@ -1,0 +1,518 @@
+#!/usr/bin/env bash
+# Memento's one command (docs/setup-dev.md).
+#
+#   ./memento dev up                             start dev, then print the login link
+#   ./memento dev down                           stop it; the data stays
+#   ./memento dev reset                          stop it and delete .local/dev/
+#   ./memento dev logs [service] [--no-follow]   the logs: all, or one (memento-extras, immich-server, ...)
+#   ./memento dev status                         what's running, and the link
+#   ./memento dev sample-memories                add two "on this day" memories, one with a Memento title
+#   ./memento dev config immich|memento [options]   the merged compose files (shows dev's secrets)
+#
+# Settings: .env (see .env.example), or for one run: DEV_ML=0 ./memento dev up
+set -euo pipefail
+
+root="$(cd "$(dirname "$0")" && pwd)"
+dev="$root/.local/dev"
+link="http://localhost:8091/__local_login"
+python_image="python:3.12-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b"
+reader_url="https://huggingface.co/mahesraj/memento-ask-reader/resolve"
+reader_revision="244f299bef1aaf02a6371fd02fa5373957fe7a02"
+reader_files="model.onnx:3de07a9fc485797d14afc805e161774ee3bd709ec32249b826e12d30165d55ac
+tokenizer.json:1fa801c30153c1ad7f0c1455096152aa100c7faa7b2b36cb3fef7fb027b4bdec
+config.json:56558173fb9eddd0f9f91755f57cd6af6c23cb058b3b39104cac9937e30374e9"
+reader_download="$root/.local/reader-model/$reader_revision"
+owner_reader_copy="$root/.local/train-intent/reader-model"
+compose_names="COMPOSE_PROJECT_NAME COMPOSE_FILE COMPOSE_PROFILES COMPOSE_ENV_FILES COMPOSE_PATH_SEPARATOR
+IMMICH_VERSION UPLOAD_LOCATION DB_DATA_LOCATION DB_PASSWORD DB_USERNAME DB_DATABASE_NAME DEV_WEB_DIST
+MEMENTO_ENV_FILE MEMENTO_DATA MEMENTO_WORK MEMENTO_MUSIC IMMICH_SRC DEV_UID DEV_GID DEV_SESSION_FILE DEV_WEB_UPSTREAM"
+
+say() { printf '%s\n' "$*"; }
+fail() {
+  printf '\n%s\n' "$*" >&2
+  exit 1
+}
+
+# setting NAME [default]: from the environment, else from .env, else the default.
+setting() {
+  local name=$1 default=${2-} value=""
+  value=$(printenv "$name" 2>/dev/null || true)
+  if [ -z "$value" ] && [ -f "$root/.env" ]; then
+    value=$(sed -n "s/^[[:space:]]*${name}=//p" "$root/.env" | tail -n 1 |
+      sed -e 's/[[:space:]]#.*$//' -e 's/[[:space:]]*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/")
+  fi
+  printf '%s' "${value:-$default}"
+}
+
+path_setting() {
+  local value
+  value=$(setting "$1")
+  case "$value" in
+    "") ;;
+    /*) printf '%s' "$value" ;;
+    *) printf '%s' "$root/$value" ;;
+  esac
+}
+
+load_settings() {
+  immich_src=$(path_setting IMMICH_SRC)
+  [ -n "$immich_src" ] || immich_src="$root/immich"
+  immich_version=$(sed -n 's/^immich_version: *//p' "$root/host/roles/immich/defaults/main.yml" 2>/dev/null || true)
+  [ -n "$immich_version" ] || fail "Can't find immich_version in host/roles/immich/defaults/main.yml."
+  web=$(setting DEV_WEB container)
+  case "$web" in
+    container | dist) ;;
+    *) fail "DEV_WEB must be container or dist, not \"$web\"." ;;
+  esac
+  web_dist=$(path_setting DEV_WEB_DIST)
+  [ -n "$web_dist" ] || web_dist="$root/apps/web/dist/$immich_version"
+  tz=$(setting DEV_TZ)
+  [ -n "$tz" ] || tz=$(readlink /etc/localtime 2>/dev/null | sed -n 's|.*/zoneinfo/||p')
+  [ -n "$tz" ] || tz=Etc/UTC
+  ml=1
+  [ "$(setting DEV_ML 1)" != 0 ] || ml=0
+  gemini_key=$(setting DEV_GEMINI_API_KEY)
+  night_rules=$(setting DEV_NIGHT_RULES)
+  music=$(path_setting MUSIC_DIR)
+  if [ -z "$music" ]; then
+    music="$root/.local/recap-music/tracks"
+    [ -d "$music" ] || music="$dev/music"
+  fi
+}
+
+generated() {
+  sed -n "s/^$1=//p" "$2" 2>/dev/null | tail -n 1
+}
+
+sha256_of() {
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1"; else shasum -a 256 "$1"; fi | cut -d' ' -f1
+}
+
+need_docker() {
+  if ! command -v docker >/dev/null 2>&1; then
+    fail "MANUAL: install Docker first, then run this again.
+  Mac:   Docker Desktop, https://docs.docker.com/desktop/setup/install/mac-install/
+  Linux: Docker Engine with the Compose plugin, https://docs.docker.com/engine/install/"
+  fi
+  local out pid waited=0
+  out=$(mktemp)
+  docker version --format '{{.Server.Version}}' >"$out" 2>&1 &
+  pid=$!
+  while kill -0 "$pid" 2>/dev/null && [ "$waited" -lt 20 ]; do
+    sleep 1
+    waited=$((waited + 1))
+  done
+  if kill -0 "$pid" 2>/dev/null || ! wait "$pid"; then
+    kill "$pid" 2>/dev/null || true
+    if grep -q -i "permission denied" "$out"; then
+      rm -f "$out"
+      fail "MANUAL: your user isn't allowed to use Docker yet. Add it to the docker group, then log out
+and back in (or restart), and run this again:
+  sudo usermod -aG docker \$USER"
+    fi
+    rm -f "$out"
+    fail "MANUAL: Docker is installed but not answering. Start it and wait until it's running:
+  Mac:   open -a Docker   (or open Docker Desktop from Applications)
+  Linux: sudo systemctl start docker
+Then run this again. If Docker Desktop is open but stuck, quit it and open it again."
+  fi
+  rm -f "$out"
+  local compose
+  compose=$(docker compose version --short 2>/dev/null | sed 's/^v//') ||
+    fail "MANUAL: Docker's Compose plugin is missing (docker compose). Install it, then run this again."
+  if ! printf '%s\n%s\n' 2.24.4 "$compose" | sort -t. -k1,1n -k2,2n -k3,3n -C; then
+    fail "MANUAL: Docker Compose $compose is too old; 2.24.4 or newer is needed. Update Docker."
+  fi
+}
+
+need_setup() {
+  [ -f "$dev/memento/compose.env" ] || fail "Dev isn't set up yet: ./memento dev up"
+}
+
+need_immich_src() {
+  [ -f "$immich_src/docker/docker-compose.yml" ] ||
+    fail "Immich's source (with Memento's website and app) isn't in $immich_src/. It comes with the repo as immich/; if you set IMMICH_SRC, point it at a copy of that folder."
+}
+
+clean_compose() {
+  local unset_args=() name
+  for name in $compose_names; do unset_args+=(-u "$name"); done
+  env "${unset_args[@]}" BUILDX_NO_DEFAULT_ATTESTATIONS=1 docker compose "$@"
+}
+
+immich_compose() {
+  need_immich_src
+  local files=(-f "$immich_src/docker/docker-compose.yml" -f "$root/deploy/dev/immich.yml")
+  if [ "$web" = dist ]; then files+=(-f "$root/deploy/dev/immich-web-dist.yml"); fi
+  clean_compose -p immich --project-directory "$dev/immich" --env-file "$dev/immich/.env" \
+    --env-file "$dev/immich/compose.env" "${files[@]}" "$@"
+}
+
+memento_compose() {
+  local files=(-f "$root/deploy/memento/compose.yml" -f "$root/deploy/dev/memento.yml")
+  if [ "$web" = container ]; then files+=(-f "$root/deploy/dev/web.yml"); fi
+  clean_compose -p memento-extras --project-directory "$root" --env-file "$dev/memento/compose.env" \
+    "${files[@]}" "$@"
+}
+
+immich_profiles() { if [ "$ml" = 1 ]; then printf '%s\n' --profile ml; fi; }
+
+# foreign_dirs PROJECT DIR: the folders of PROJECT's containers that aren't DIR.
+foreign_dirs() {
+  docker ps -a --filter "label=com.docker.compose.project=$1" \
+    --format '{{.Label "com.docker.compose.project.working_dir"}}' | sort -u | grep -v -x -F "$2" || true
+}
+
+stop_hint() {
+  local project=$1 dir=$2 clone
+  case "$dir" in
+    */.local/dev/immich) clone=${dir%/.local/dev/immich} ;;
+    *) if [ -x "$dir/memento" ]; then clone=$dir; else clone=""; fi ;;
+  esac
+  if [ -n "$clone" ]; then say "cd \"$clone\" && ./memento dev down"; else say "docker compose -p $project down"; fi
+}
+
+check_clashes() {
+  local project dir dirs port users
+  for project in immich memento-extras; do
+    if [ "$project" = immich ]; then dir="$dev/immich"; else dir="$root"; fi
+    dirs=$(foreign_dirs "$project" "$dir")
+    if [ -n "$dirs" ]; then
+      fail "Another \"$project\" project is on this computer (from $(say "$dirs" | head -n 1)).
+Dev uses the same names, so stop it first (its data stays where it is):
+  $(stop_hint "$project" "$(say "$dirs" | head -n 1)")"
+    fi
+  done
+  for port in 2283 3005 8091; do
+    users=$(docker ps --filter "publish=$port" --format '{{.Names}}' | grep -v -x -E 'immich_server|memento_extras|memento_dev_proxy' || true)
+    [ -z "$users" ] || fail "Port $port is taken by another container: $users. Stop it first."
+  done
+}
+
+check_immich_file() {
+  local want got file="$immich_src/docker/docker-compose.yml"
+  want=$(sed -n 's/^immich_compose_sha256: *//p' "$root/host/roles/immich/defaults/main.yml")
+  got=$(sha256_of "$file")
+  [ "$got" = "$want" ] ||
+    fail "$file isn't Immich's $immich_version release file, unedited (its sha256 should be immich_compose_sha256 in host/roles/immich/defaults/main.yml)."
+}
+
+write_private() {
+  (umask 077 && cat > "$1")
+}
+
+random_letters() { LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c "$1"; }
+
+make_secrets() {
+  local file="$dev/secrets.env"
+  [ -f "$file" ] && return 0
+  {
+    printf 'DB_PASSWORD=%s\n' "$(random_letters 32)"
+    printf 'MEMENTO_SECRET=%s\n' "$(head -c 32 /dev/urandom | base64)"
+  } | write_private "$file"
+}
+
+write_immich_env() {
+  write_private "$dev/immich/.env" <<EOF
+# Written by ./memento dev up.
+UPLOAD_LOCATION=./library
+DB_DATA_LOCATION=./postgres
+TZ=$tz
+IMMICH_VERSION=$immich_version
+DB_PASSWORD=$(generated DB_PASSWORD "$dev/secrets.env")
+DB_USERNAME=postgres
+DB_DATABASE_NAME=immich
+EOF
+  write_private "$dev/immich/compose.env" <<EOF
+# Written by ./memento dev up.
+DEV_WEB_DIST=$web_dist
+EOF
+}
+
+write_extras_env() {
+  local key=$gemini_key url="" quiet=""
+  if [ -z "$key" ]; then
+    key="dev-fake-gemini-key"
+    url="http://fake-gemini:9911/v1beta/interactions"
+  fi
+  if [ "$night_rules" = 1 ]; then quiet="00:30-07:00"; fi
+  {
+    printf '# Written by ./memento dev up.\n'
+    printf 'GEMINI_API_KEY=%s\n' "$key"
+    if [ -n "$url" ]; then printf 'GEMINI_URL=%s\n' "$url"; fi
+    printf 'MEMENTO_SECRET=%s\n' "$(generated MEMENTO_SECRET "$dev/secrets.env")"
+    printf 'IMMICH_URL=http://immich-server:2283\n'
+    printf 'DATA_DIR=/data\nPORT=3005\n'
+    printf 'CREATIONS_URL=http://memento-creations:8000\nCREATIONS_WORK_DIR=/work\n'
+    printf 'DAILY_LIMIT_PER_USER=10\nMONTHLY_LIMIT_TOTAL=75\n'
+    printf 'LIMITS_TIMEZONE=%s\n' "$tz"
+    printf 'RENDER_QUIET_HOURS=%s\n' "$quiet"
+    printf 'MEMORIES_CHECK_SECONDS=86400\nLIVE_ALBUMS_INTERVAL_SECONDS=86400\n'
+  } | write_private "$dev/memento/extras.env"
+}
+
+write_compose_env() {
+  local upstream=immich-web:3000
+  if [ "$web" = dist ]; then upstream=immich-server:2283; fi
+  write_private "$dev/memento/compose.env" <<EOF
+# Written by ./memento dev up.
+MEMENTO_ENV_FILE=$dev/memento/extras.env
+MEMENTO_DATA=$dev/memento/data
+MEMENTO_WORK=$dev/memento/work
+MEMENTO_MUSIC=$music
+IMMICH_VERSION=$immich_version
+IMMICH_SRC=$immich_src
+DEV_UID=$(id -u)
+DEV_GID=$(id -g)
+DEV_SESSION_FILE=$dev/seed/session.env
+DEV_WEB_UPSTREAM=$upstream
+EOF
+}
+
+prepare_web_mounts() {
+  local dir
+  for dir in node_modules web/node_modules packages/sdk/node_modules packages/sdk/build web/.svelte-kit; do
+    mkdir -p "$immich_src/$dir"
+  done
+}
+
+prepare_files() {
+  mkdir -p "$dev"
+  chmod 700 "$dev"
+  mkdir -p "$dev/immich/library" "$dev/immich/postgres" "$dev/memento/data" "$dev/memento/work" \
+    "$dev/seed/photos" "$dev/music"
+  [ -f "$dev/seed/session.env" ] || : | write_private "$dev/seed/session.env"
+  make_secrets
+  write_immich_env
+  write_extras_env
+  write_compose_env
+}
+
+copy_if_changed() {
+  cmp -s "$1" "$2" 2>/dev/null || cp "$1" "$2"
+}
+
+download_reader() {
+  local entry file
+  mkdir -p "$reader_download"
+  for entry in $reader_files; do
+    file=${entry%%:*}
+    [ -f "$reader_download/$file" ] && continue
+    say "Downloading Ask's reader model ($file) from Hugging Face..."
+    docker run --rm --user "$(id -u):$(id -g)" -v "$reader_download:/out" \
+      -v "$root/deploy/dev/fetch.py:/fetch.py:ro" "$python_image" \
+      python -I /fetch.py "$reader_url/$reader_revision/$file" "${entry#*:}" "/out/$file" || return 1
+  done
+}
+
+# Sets reader_dir: READER_MODEL_DIR, else the owner's copy, else the download; empty if none.
+find_reader() {
+  local dir file
+  reader_dir=""
+  [ -f "$root/memento-extras/reader/common.py" ] || return 0
+  dir=$(path_setting READER_MODEL_DIR)
+  if [ -n "$dir" ]; then
+    for file in config.json tokenizer.json model.onnx; do
+      [ -f "$dir/$file" ] || fail "READER_MODEL_DIR ($dir) needs config.json, tokenizer.json and model.onnx."
+    done
+    reader_dir=$dir
+  elif [ -f "$owner_reader_copy/model.onnx" ]; then
+    reader_dir=$owner_reader_copy
+  elif download_reader; then
+    reader_dir=$reader_download
+  fi
+}
+
+stage_reader() {
+  local build="$dev/reader-build" src="$root/memento-extras" file
+  mkdir -p "$build/model" "$build/reader"
+  copy_if_changed "$src/reader/Dockerfile" "$build/Dockerfile"
+  copy_if_changed "$src/reader/.dockerignore" "$build/.dockerignore"
+  copy_if_changed "$src/reader/requirements.txt" "$build/requirements.txt"
+  copy_if_changed "$src/reader/common.py" "$build/common.py"
+  for file in "$src/reader/reader/"*.py; do copy_if_changed "$file" "$build/reader/$(basename "$file")"; done
+  for file in config.json tokenizer.json model.onnx; do copy_if_changed "$reader_dir/$file" "$build/model/$file"; done
+}
+
+make_photos() {
+  [ -f "$dev/seed/photos/goa.jpg" ] && return 0
+  say "Making the test photos..."
+  docker run --rm --user "$(id -u):$(id -g)" -v "$dev/seed/photos:/out" \
+    -v "$root/deploy/dev/make-photos.mjs:/make-photos.mjs:ro" \
+    --entrypoint node "ghcr.io/immich-app/immich-server:$immich_version" /make-photos.mjs
+  if command -v sips >/dev/null 2>&1; then
+    sips -s format heic "$dev/seed/photos/goa.jpg" --out "$dev/seed/photos/photo.heic" >/dev/null
+  fi
+}
+
+seed() {
+  docker run --rm --user "$(id -u):$(id -g)" --network immich_default \
+    -e IMMICH_API=http://immich-server:2283/api -e DEV_ML="$ml" \
+    -v "$dev/seed:/seed" -v "$root/deploy/dev/seed.py:/seed.py:ro" \
+    "$python_image" python -I /seed.py /seed
+}
+
+up() {
+  local started=$SECONDS session timeout=600 profiles=""
+  need_docker
+  need_immich_src
+  check_immich_file
+  check_clashes
+  if [ "$web" = dist ] && [ ! -f "$web_dist/index.html" ]; then
+    fail "DEV_WEB=dist, but $web_dist has no built website. Build it (apps/web/build.sh) or set DEV_WEB_DIST."
+  fi
+  prepare_files
+  if [ "$web" = container ]; then prepare_web_mounts; fi
+  if [ -n "$gemini_key" ]; then say "AI Edit uses the REAL Gemini: every edit costs money."; fi
+
+  say "Starting Immich $immich_version (the first time downloads its images, a few GB)..."
+  immich_compose up -d --wait --wait-timeout 600 database redis ||
+    fail "Immich's database didn't start. If this was the first up, run ./memento dev up again; to see why: ./memento dev logs database"
+  # shellcheck disable=SC2046
+  immich_compose $(immich_profiles) up -d --wait --wait-timeout 600 ||
+    fail "Immich didn't start. If this was the first up, run ./memento dev up again; to see why: ./memento dev logs immich-server"
+  if [ "$ml" = 0 ]; then immich_compose --profile ml rm -sf immich-machine-learning >/dev/null 2>&1 || true; fi
+
+  make_photos
+  session=$(cksum < "$dev/seed/session.env")
+  seed
+
+  find_reader
+  if [ -n "$reader_dir" ]; then
+    stage_reader
+    profiles="--profile reader"
+  else
+    say ""
+    say "WARNING: Ask's reader isn't started (no model, or no memento-extras/reader/common.py)."
+    say "Ask still works: it searches the question as typed, without picking out people, dates or places."
+    say ""
+    memento_compose --profile reader rm -sf memento-reader >/dev/null 2>&1 || true
+  fi
+
+  if [ "$(cksum < "$dev/seed/session.env")" != "$session" ]; then
+    memento_compose rm -sf proxy >/dev/null 2>&1 || true
+  fi
+  docker volume inspect memento-extras_web-root-modules >/dev/null 2>&1 || timeout=1800
+  say "Building and starting Memento (the first time takes several minutes)..."
+  # shellcheck disable=SC2086
+  memento_compose $profiles up -d --build --remove-orphans --wait --wait-timeout "$timeout" ||
+    fail "Memento didn't start in time. The first up installs the website's packages: if it timed out, run
+./memento dev up again. To see why: ./memento dev logs <service> --no-follow"
+
+  say ""
+  say "Dev is up after $(((SECONDS - started) / 60))m$(((SECONDS - started) % 60))s. Open: $link"
+  say "(Logged in as the test admin. Stop with ./memento dev down; data stays in .local/dev/.)"
+}
+
+project_down() {
+  if [ -n "$(foreign_dirs "$1" "$2")" ]; then
+    say "Left alone: the \"$1\" project on this computer isn't this dev's."
+  else
+    clean_compose -p "$1" --project-directory "$dev" down
+  fi
+}
+
+down() {
+  need_docker
+  [ -d "$dev" ] || { say "Dev isn't set up: nothing to stop."; return 0; }
+  project_down memento-extras "$root"
+  project_down immich "$dev/immich"
+}
+
+reset() {
+  if [ -d "$dev" ]; then
+    down
+    say "Deleting .local/dev/ (dev's photos, database and settings)..."
+    if ! rm -rf "$dev" 2>/dev/null; then
+      docker run --rm -v "$dev:/dev-data" "ghcr.io/immich-app/immich-server:$immich_version" \
+        sh -c 'rm -rf /dev-data/* /dev-data/.[!.]*'
+      rm -rf "$dev"
+    fi
+  fi
+  say "Dev is reset. ./memento dev up starts a fresh one (downloads stay, so it's quicker)."
+}
+
+logs() {
+  need_docker
+  need_setup
+  local service="" arg follow=(-f)
+  for arg in "$@"; do
+    case "$arg" in
+      --no-follow) follow=() ;;
+      *) service=$arg ;;
+    esac
+  done
+  case "$service" in
+    "")
+      if [ ${#follow[@]} -eq 0 ]; then
+        immich_compose --profile ml logs --tail 20
+        memento_compose --profile reader logs --tail 20
+      else
+        trap 'kill 0' INT TERM
+        immich_compose --profile ml logs -f --tail 20 &
+        memento_compose --profile reader logs -f --tail 20 &
+        wait
+      fi
+      ;;
+    immich-server | immich-machine-learning | redis | database)
+      immich_compose --profile ml logs ${follow[@]+"${follow[@]}"} --tail 100 "$service" ;;
+    *) memento_compose --profile reader logs ${follow[@]+"${follow[@]}"} --tail 100 "$service" ;;
+  esac
+}
+
+status() {
+  need_docker
+  [ -f "$dev/memento/compose.env" ] || { say "Dev isn't set up yet: ./memento dev up"; return 0; }
+  immich_compose --profile ml ps --format 'table {{.Service}}\t{{.Status}}\t{{.Ports}}'
+  memento_compose --profile reader ps --format 'table {{.Service}}\t{{.Status}}\t{{.Ports}}'
+  if [ -n "$(docker ps -q --filter name=^memento_dev_proxy$)" ]; then say "" && say "Open: $link"; fi
+}
+
+sample_memories() {
+  need_docker
+  need_setup
+  [ -n "$(docker ps -q --filter name=^memento_extras$)" ] || fail "Dev isn't running: ./memento dev up"
+  docker run --rm --user "$(id -u):$(id -g)" --network immich_default \
+    -e IMMICH_API=http://immich-server:2283/api \
+    -v "$dev/seed:/seed:ro" -v "$dev/memento/data:/data" \
+    -v "$root/deploy/dev/sample-memories.py:/sample-memories.py:ro" \
+    "$python_image" python -I /sample-memories.py /seed /data
+}
+
+config() {
+  need_docker
+  need_setup
+  local project=${1-}
+  shift || true
+  case "$project" in
+    immich) immich_compose --profile ml config "$@" ;;
+    memento) memento_compose --profile reader config "$@" ;;
+    *) fail "Usage: ./memento dev config immich|memento [docker compose config options]" ;;
+  esac
+}
+
+usage() {
+  sed -n '2,/^set -euo/p' "$0" | sed -e '$d' -e 's/^# \{0,1\}//'
+  exit 1
+}
+
+[ "$(id -u)" != 0 ] || fail "Don't run ./memento as root or with sudo: dev's files must belong to you.
+On Linux, if Docker says \"permission denied\", see docs/setup-dev.md (the docker group)."
+[ "${1-}" = dev ] || usage
+load_settings
+case "${2-}" in
+  up) up ;;
+  down) down ;;
+  reset) reset ;;
+  logs)
+    shift 2
+    logs "$@"
+    ;;
+  status) status ;;
+  sample-memories) sample_memories ;;
+  config)
+    shift 2
+    config "$@"
+    ;;
+  *) usage ;;
+esac

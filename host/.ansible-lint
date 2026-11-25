@@ -1,0 +1,7 @@
+# ansible-lint settings. Run from host/. On this Mac, ansible-lint can't find the
+# collections that come with Homebrew's ansible by itself, so point it at them:
+#   ANSIBLE_COLLECTIONS_PATH="$(brew --prefix ansible)/libexec/lib/python3.15/site-packages" ansible-lint --offline
+exclude_paths:
+  # The built web app and other non-Ansible files outside host/ are never linted.
+  - ../memento-extras/
+  - ../apps/

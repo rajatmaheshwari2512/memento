@@ -1,0 +1,22 @@
+# Managed by Ansible (host/roles/immich). Our changes on top of Immich's
+# docker-compose.yml. Compose merges this file into that one.
+# See the merged result on the server with: cd /opt/immich && docker compose config
+
+services:
+  immich-server:
+    # Only reachable from the VM itself (Caddy), never straight from the internet.
+    # Docker's published ports skip the VM's iptables rules, so '2283:2283' would be
+    # exposed whenever Oracle's security list allowed it.
+    # `!override` replaces Immich's port list instead of adding to it.
+    ports: !override
+      - '127.0.0.1:2283:2283'
+    volumes:
+      # Thumbnails on the VM's disk. This sits on top of /data (the Storage Box),
+      # so only the thumbs/ folder is local.
+      - ${THUMB_LOCATION}:/data/thumbs
+{% if immich_custom_web_dir | length > 0 %}
+      # SelfPhotos phase 2: our build of Immich's web app (with the AI Edit button),
+      # mounted over the one inside the official image. Same Immich release, checked by
+      # the role. Remove by setting immich_custom_web_dir to "".
+      - {{ immich_web_builds_dir }}/{{ immich_custom_web_build_id }}:/build/www:ro
+{% endif %}

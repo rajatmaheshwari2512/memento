@@ -1,0 +1,15 @@
+# Copy to terraform.tfvars (gitignored) and fill in. Terraform reads it automatically.
+
+oci_tenancy_ocid   = "ocid1.tenancy.oc1..CHANGE_ME"
+budget_amount      = 100 # rate-card currency, e.g. INR. Check Billing → Subscriptions.
+budget_alert_email = "you@example.com"
+backup_bucket_name = "selfphotos-backup-CHANGE_ME"
+domain             = "example.com" # your domain in Cloudflare; Memento is at photos.<domain>
+
+# Optional overrides (defaults shown):
+# oci_region          = "ap-hyderabad-1"
+# ssh_public_key_path = "~/.ssh/id_ed25519.pub"
+# ssh_allowed_cidr    = "0.0.0.0/0"
+# aws_region          = "us-east-1"
+# aws_profile         = "selfphotos-admin"   # must exist: aws sts get-caller-identity --profile selfphotos-admin
+# subdomains          = ["photos"]

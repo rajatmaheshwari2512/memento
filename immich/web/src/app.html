@@ -1,0 +1,114 @@
+<!doctype html>
+<html class="dark">
+  <head>
+    <!-- (used for SSR) -->
+    <!-- metadata:tags -->
+
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+    <link rel="icon" type="image/x-icon" sizes="32x32" href="/favicon.ico" />
+    <link rel="icon" type="image/svg+xml" sizes="any" href="/icon.svg" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-icon-180.png" />
+    <link rel="preload" as="font" type="font/ttf" href="%app.font%" crossorigin="anonymous" />
+    <link rel="preload" as="font" type="font/ttf" href="%app.monofont%" crossorigin="anonymous" />
+
+    <script>
+      try {
+        const preference = JSON.parse(localStorage.getItem('immich-ui-theme'));
+        const prefersDark = globalThis.matchMedia('(prefers-color-scheme: dark)').matches;
+        if (preference === 'light' || (preference !== 'dark' && !prefersDark)) {
+          document.documentElement.classList.remove('dark');
+          document.documentElement.classList.add('light');
+        }
+      } catch {
+        // noop
+      }
+    </script>
+
+    %sveltekit.head%
+
+    <style>
+      /* prevent FOUC */
+      html {
+        height: 100%;
+        width: 100%;
+      }
+
+      html.dark {
+        background-color: black;
+      }
+
+      html.light {
+        background-color: white;
+      }
+
+      body,
+      html {
+        margin: 0;
+        padding: 0;
+      }
+
+      @keyframes delayedVisibility {
+        to {
+          visibility: visible;
+        }
+      }
+
+      @keyframes loadpulse {
+        from {
+          opacity: 0.55;
+          transform: scale(0.96);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+
+      @keyframes loadspin {
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      /* SelfPhotos: the loading mark's colour follows the theme class set above */
+      #stencil {
+        color: black;
+      }
+
+      html.dark #stencil {
+        color: white;
+      }
+
+      #stencil {
+        --stencil-width: 72px;
+        display: flex;
+        width: var(--stencil-width);
+        margin-left: auto;
+        margin-right: auto;
+        margin-top: calc(50vh - var(--stencil-width) / 2);
+        margin-bottom: 100vh;
+        place-items: center;
+        justify-content: center;
+        overflow: hidden;
+        visibility: hidden;
+        animation:
+          0s linear 0.3s forwards delayedVisibility,
+          loadpulse 1.4s ease-in-out infinite alternate;
+      }
+    </style>
+    <link rel="stylesheet" href="/custom.css" />
+  </head>
+
+  <noscript style="position: absolute; top: 0px; z-index: 1000; color: black; background-color: white">
+    To use Memento, you must enable JavaScript or use a JavaScript compatible browser.
+  </noscript>
+
+  <body class="bg-light text-dark">
+    <div id="stencil">
+      <!-- SelfPhotos: the Memento mark while the app loads (black, white in dark mode) -->
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="21 21 58 58" fill="none" stroke="currentColor"><rect x="24" y="26" width="52" height="48" rx="9" stroke-width="4.5"/><path d="M32 64 L41 44 L50 57 L59 44 L68 64" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="66" cy="36" r="3.8" fill="currentColor" stroke="none"/></svg>
+    </div>
+    <div>%sveltekit.body%</div>
+  </body>
+</html>

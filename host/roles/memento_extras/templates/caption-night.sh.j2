@@ -1,0 +1,80 @@
+#!/bin/sh
+# Managed by Ansible (host/roles/memento_extras). Changes made on the server are overwritten.
+# Night captions for new photos, started by caption-night.timer at {{ memento_extras_captions_start }}.
+# Run by hand:  sudo systemctl start caption-night     Watch it:  journalctl -u caption-night -f
+# By day (a test), with its own stop time:  sudo CAPTION_UNTIL="+20 min" {{ memento_extras_dir }}/caption-night.sh
+#
+# 1. List every photo and its preview from Immich's database (trashed, hidden and locked
+#    photos left out), as the backlog did, and every photo Immich still has in any state.
+# 2. Remove the captions of photos gone for good (not trashed or locked: gone).
+# 3. Stop here if the switch is off, every photo has a caption, or it's already past the stop time.
+# 4. Start the caption model: lowest CPU priority, {{ memento_extras_captions_memory }} memory cap, prompt cache off
+#    (with it, the model grows to ~11 GB).
+# 5. Caption until {{ memento_extras_captions_stop }} (src/scripts/caption-night.ts), then remove the model again.
+set -eu
+
+work={{ memento_extras_dir }}/night
+image=memento-extras:local
+until=$(date -d "${CAPTION_UNTIL:-{{ memento_extras_captions_stop }}}" --iso-8601=seconds) # today
+
+# The model goes, however this ends. The unit's ExecStopPost does it too, for a kill.
+cleanup() {
+  if docker inspect caption-model > /dev/null 2>&1; then
+    # What happened to it (e.g. the memory cap) before its log goes with it.
+    docker inspect -f 'caption model: exit {{ '{{' }}.State.ExitCode{{ '}}' }}, out of memory: {{ '{{' }}.State.OOMKilled{{ '}}' }}' caption-model
+    docker logs --tail 5 caption-model 2>&1 | sed 's/^/caption model: /'
+    docker rm -f caption-model > /dev/null 2>&1 || true
+  fi
+}
+trap cleanup EXIT
+trap 'exit 143' TERM HUP INT
+docker rm -f caption-model > /dev/null 2>&1 || true # one left from a run that was killed
+
+# The service's own image, settings and database, as a second process next to it (the
+# database allows that). Its data folder is at /memento here, so that the previews can sit
+# at /data/thumbs, the paths Immich's database has.
+night() {
+  docker run --rm --name caption-night --network host --cpu-shares 2 --user {{ memento_extras_uid }}:{{ memento_extras_uid }} \
+    --env-file {{ memento_extras_dir }}/memento-extras.env -e DATA_DIR=/memento \
+    -v {{ memento_extras_dir }}/data:/memento -v "$work":/work:ro -v {{ memento_extras_immich_thumbs }}:/data/thumbs:ro \
+    "$image" node --disable-warning=ExperimentalWarning src/scripts/caption-night.ts --photos /work/photos.tsv "$@"
+}
+
+docker exec {{ memento_extras_immich_db_container }} psql -U postgres -d immich -At -F "$(printf '\t')" -c '
+  select distinct on (a.id) a.id, a."ownerId", a.type, f.path, a."createdAt"
+  from asset a join asset_file f on f."assetId" = a.id and f.type = '"'preview'"'
+  where a."deletedAt" is null and a.visibility in ('"'timeline', 'archive'"')
+  order by a.id, f."isEdited" desc' > "$work/photos.tsv.new"
+docker exec {{ memento_extras_immich_db_container }} psql -U postgres -d immich -At -c 'select id from asset' > "$work/existing.txt.new"
+for list in photos.tsv existing.txt; do
+  chown {{ memento_extras_uid }}:{{ memento_extras_uid }} "$work/$list.new"
+  chmod 0600 "$work/$list.new"
+  mv "$work/$list.new" "$work/$list"
+done
+
+# Housekeeping, whether or not captioning is on; a failure here doesn't stop the night.
+night --clean-up --existing /work/existing.txt || echo "The clean-up failed; captioning anyway." >&2
+
+waiting=$(night --count)
+if [ "$waiting" = off ]; then echo "Switched off in Memento Features."; exit 0; fi
+if [ "$waiting" = 0 ]; then echo "Every photo has a caption."; exit 0; fi
+if [ "$(date +%s)" -ge "$(date -d "$until" +%s)" ]; then echo "Past the stop time ($until); $waiting photos wait."; exit 0; fi
+echo "$waiting photos without a caption; captioning until $until."
+
+# --cpu-shares 2: the lowest CPU weight (Docker's default is 1024), so everything else goes first.
+docker run -d --name caption-model --cpu-shares 2 \
+  --memory {{ memento_extras_captions_memory }} --memory-swap {{ memento_extras_captions_memory }} \
+  -p 127.0.0.1:{{ memento_extras_captions_port }}:8080 -v {{ memento_extras_dir }}/models:/models:ro \
+  {{ memento_extras_llama_image }} \
+  -m /models/{{ memento_extras_caption_model_files[0].name }} -mm /models/{{ memento_extras_caption_model_files[1].name }} \
+  --alias {{ memento_extras_caption_model_name }} --host 0.0.0.0 --port 8080 \
+  --image-max-tokens 400 --reasoning off -np 1 -c 4096 -t {{ memento_extras_captions_threads }} --cache-ram 0 > /dev/null
+
+ready=0
+for _ in $(seq 1 60); do
+  if curl -sf http://127.0.0.1:{{ memento_extras_captions_port }}/health > /dev/null; then ready=1; break; fi
+  sleep 5
+done
+if [ "$ready" != 1 ]; then echo "The caption model didn't start." >&2; exit 1; fi
+
+night --llama http://127.0.0.1:{{ memento_extras_captions_port }} --until "$until"

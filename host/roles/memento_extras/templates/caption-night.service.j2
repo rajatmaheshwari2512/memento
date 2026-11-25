@@ -1,0 +1,19 @@
+# Managed by Ansible (host/roles/memento_extras). Changes made on the server are overwritten.
+# Run by hand:  sudo systemctl start caption-night
+# Watch it:     journalctl -u caption-night -f
+[Unit]
+Description=Caption new photos at night (Memento)
+Wants=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart={{ memento_extras_dir }}/caption-night.sh
+# However it ends (stopped, timed out, killed): the containers go, so the model never
+# stays in memory by day. The script removes them too; this covers a kill.
+ExecStopPost=-/usr/bin/docker rm -f caption-model caption-night
+# It stops itself at {{ memento_extras_captions_stop }}; this is only a safety net.
+TimeoutStartSec=9h
+# The low CPU priority that matters is the containers' (--cpu-shares in the script);
+# this only covers the script and the docker commands.
+Nice=19

@@ -1,0 +1,8 @@
+# Picks up a changed schedule. Doesn't start a run.
+- name: Restart the caption timer
+  ansible.builtin.systemd_service:
+    name: caption-night.timer
+    state: restarted
+    daemon_reload: true
+  # A --check preview doesn't really install the timer, so systemd can't find it yet.
+  ignore_errors: "{{ ansible_check_mode }}"

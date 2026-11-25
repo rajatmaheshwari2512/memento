@@ -1,0 +1,5 @@
+# DEV_WEB=dist: Immich serves the built website in DEV_WEB_DIST (./memento dev up).
+services:
+  immich-server:
+    volumes:
+      - ${DEV_WEB_DIST:?}:/build/www:ro

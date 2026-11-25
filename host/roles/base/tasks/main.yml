@@ -1,0 +1,118 @@
+# Basic machine setup that every other role relies on.
+
+- name: Refresh the apt package list (at most once an hour)
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install basic packages
+  ansible.builtin.apt:
+    name:
+      - unattended-upgrades # installs security updates every day on its own
+      - python3-debian # needed by Ansible's deb822_repository module (docker, caddy roles)
+      - ca-certificates
+    state: present
+
+# Ubuntu cloud images usually have this already; writing it makes it certain.
+# Kernel updates still need a reboot. See docs/runbooks.md.
+# CleanInterval: every {{ base_apt_clean_days }} days the downloaded update files are deleted
+# (apt-get clean). They're only needed while installing, and otherwise pile up (390 MB by 24 Nov).
+- name: Turn on daily automatic security updates
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+      APT::Periodic::CleanInterval "{{ base_apt_clean_days }}";
+    mode: "0644"
+
+# The system logs (journald) are capped at {{ base_journal_max }}; the oldest are dropped first.
+# Ubuntu's default lets them grow to 10% of the disk (up to 4 GB). 85 MB covered 19 days.
+- name: Make the folder for the log settings
+  ansible.builtin.file:
+    path: /etc/systemd/journald.conf.d
+    state: directory
+    mode: "0755"
+
+- name: Cap the system logs at {{ base_journal_max }}
+  ansible.builtin.copy:
+    dest: /etc/systemd/journald.conf.d/selfphotos.conf
+    content: |
+      # Managed by Ansible (host/roles/base).
+      [Journal]
+      SystemMaxUse={{ base_journal_max }}
+    mode: "0644"
+  register: base_journal_cap
+
+- name: Apply the log cap
+  ansible.builtin.systemd_service:
+    name: systemd-journald
+    state: restarted
+  when: base_journal_cap is changed
+
+# The updates run at {{ base_upgrade_time }}, outside the night captions (00:30-07:05), the
+# 04:00 backup and the 07:05 memories, instead of Ubuntu's default 06:00-07:00. Docker and
+# Caddy updates are included (their roles); Docker's live-restore keeps the containers
+# running while Docker updates, and a Caddy update is a second's restart.
+- name: Make the folder for the update timer's settings
+  ansible.builtin.file:
+    path: /etc/systemd/system/apt-daily-upgrade.timer.d
+    state: directory
+    mode: "0755"
+
+- name: Run the automatic updates at {{ base_upgrade_time }}
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/apt-daily-upgrade.timer.d/selfphotos.conf
+    content: |
+      # Managed by Ansible (host/roles/base).
+      [Timer]
+      OnCalendar=
+      OnCalendar=*-*-* {{ base_upgrade_time }}
+      RandomizedDelaySec=0
+    mode: "0644"
+  register: base_upgrade_timer
+
+- name: Apply the new update time
+  ansible.builtin.systemd_service:
+    name: apt-daily-upgrade.timer
+    daemon_reload: true
+    state: restarted
+  when: base_upgrade_timer is changed
+
+- name: Set the timezone to {{ base_timezone }}
+  community.general.timezone:
+    name: "{{ base_timezone }}"
+
+# When memory runs out, the kernel moves memory nobody is using to this file on disk,
+# instead of killing an app. Nothing is changed once the file exists.
+- name: Add a swap file
+  when: base_swap_size_mb | int > 0
+  block:
+    # Built under a temporary name and renamed at the end, so a half-made file never
+    # ends up at {{ base_swap_file }} (where `creates` would then skip it forever).
+    - name: Create the swap file (first run only)
+      ansible.builtin.shell: |
+        set -eu
+        fallocate -l {{ base_swap_size_mb }}M {{ base_swap_file }}.tmp
+        chmod 600 {{ base_swap_file }}.tmp
+        mkswap {{ base_swap_file }}.tmp
+        mv {{ base_swap_file }}.tmp {{ base_swap_file }}
+      args:
+        creates: "{{ base_swap_file }}"
+
+    - name: Use the swap file at every boot
+      ansible.builtin.lineinfile:
+        path: /etc/fstab
+        regexp: '^{{ base_swap_file }}\s'
+        line: "{{ base_swap_file }} none swap sw 0 0"
+
+    - name: Check whether the swap file is on
+      ansible.builtin.command: swapon --show=NAME --noheadings
+      register: base_swap_active
+      changed_when: false
+      check_mode: false # read-only, so it also runs in --check
+
+    - name: Turn the swap file on now
+      ansible.builtin.command: swapon {{ base_swap_file }}
+      changed_when: true
+      when: base_swap_file not in base_swap_active.stdout_lines

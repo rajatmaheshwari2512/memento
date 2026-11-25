@@ -1,0 +1,21 @@
+{
+  "name": "memento-extras",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Memento's extras for Immich: AI edits, feature flags and more (SelfPhotos). See AI.md and FEATURES.md.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning src/server.ts",
+    "check": "tsc --noEmit",
+    "test": "node --test --disable-warning=ExperimentalWarning test/*.test.ts",
+    "bench:edits": "node --disable-warning=ExperimentalWarning test/edits-memory.bench.ts",
+    "bench:reduce-noise": "node --disable-warning=ExperimentalWarning test/reduce-noise-memory.bench.ts"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "typescript": "7.0.2"
+  }
+}

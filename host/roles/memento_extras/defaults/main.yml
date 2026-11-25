@@ -1,0 +1,107 @@
+# Memento's extras service: AI edits (phase 2, AI.md), feature flags, and the features in
+# FEATURES.md. Source code: memento-extras/ at the repo root. Was called ai-edit until 2026-11-19.
+
+memento_extras_dir: /opt/memento-extras
+# Where Caddy reaches it. Only on 127.0.0.1, so it's never reachable from outside directly.
+memento_extras_port: 3005
+
+# The user ID the container runs as, and that owns /opt/memento-extras/data. Not 1000: on the VM
+# that's Oracle's built-in "opc" account. Pick an ID no account on the VM has.
+memento_extras_uid: 10001
+
+# Set from .env in group_vars/all/main.yml. Empty = the role stops with an error.
+memento_extras_gemini_api_key: ""
+# Encrypts the per-user keys live albums keep (32+ random bytes, base64). From .env (MEMENTO_SECRET).
+memento_extras_secret: ""
+
+# Gemini model. Prices from Google's pricing page (Nov 2026), per edit:
+#   gemini-nano-banana-2.1   1K $0.034, 2K $0.050, 4K $0.113   (Google's recommended default)
+#   gemini-3-pro-image       1K/2K $0.134, 4K $0.24             (set the costs below to match)
+memento_extras_model: gemini-nano-banana-2.1
+# Result size: auto (4K for photos bigger than ~5 MP, else 2K), or 1K, 2K, 4K for all.
+memento_extras_image_size: auto
+# Only for the log and the monthly estimate; Google bills the real amount.
+memento_extras_cost_usd_1k: 0.0336
+memento_extras_cost_usd_2k: 0.0504
+memento_extras_cost_usd_4k: 0.113
+# What Gemini gets: auto (the original when Gemini can read it and it's under 14 MB,
+# else Immich's preview) or preview (always the smaller, re-compressed preview).
+memento_extras_source: auto
+
+# Limits, so a leaked login can't run up a bill. The Google prepaid balance is the hard cap.
+# These are the defaults: an admin can override them in Administration → Settings →
+# Memento features (stored in the service's database, /opt/memento-extras/data/data.db).
+memento_extras_daily_limit_per_user: 10
+memento_extras_monthly_limit_total: 75
+# An edit's instruction: up to 3 AI tools' instructions joined with the typed words (500 at most).
+memento_extras_max_prompt_chars: 1500
+memento_extras_result_ttl_minutes: 60
+memento_extras_timezone: Etc/UTC
+
+# Immich's Docker network (created by Immich's compose project), so the service can
+# reach Immich at http://immich-server:2283 without going through Caddy.
+memento_extras_immich_network: immich_default
+memento_extras_immich_url: http://immich-server:2283
+
+# --- Night captions for new photos (memento-extras/src/scripts/caption-night.ts) ---
+# Every night the caption model runs on this VM and captions photos that have none yet
+# (new uploads, and any the backlog missed), newest first, into the database Ask searches.
+# The switch is in Administration → Settings → Memento Features. DECISIONS.md, "Captions for
+# new photos"; docs/runbooks.md, "Night captions".
+memento_extras_captions_start: "00:30" # after midnight: the stop time is read as "today"
+memento_extras_captions_stop: "07:00" # nothing new starts after this; the photo in hand finishes
+# Lowest CPU priority (Immich, Ask and the 04:00 backup always go first) and a hard memory
+# cap: if anything goes wrong, only the caption model is stopped. It uses ~2.2 GB.
+memento_extras_captions_threads: 2
+memento_extras_captions_memory: 3g
+memento_extras_captions_port: 8090 # on 127.0.0.1 only, while it runs
+# llama.cpp's server: the same build that captioned the backlog.
+memento_extras_llama_image: ghcr.io/ggml-org/llama.cpp:server@sha256:5b43086e3ba7ea5794d72904654f6cd41224a9b1c6ac0398f4940ee380d30f23
+# The model, pinned to the exact files that captioned the backlog (Hugging Face revision
+# f6d5376, checked against the temporary server's copies), so old and new captions match.
+memento_extras_caption_model_files:
+  - name: Qwen3.5-2B-Q4_K_M.gguf
+    url: https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/f6d5376be1edb4d416d56da11e5397a961aca8ae/Qwen3.5-2B-Q4_K_M.gguf
+    sha256: aaf42c8b7c3cab2bf3d69c355048d4a0ee9973d48f16c731c0520ee914699223
+  - name: mmproj-F16.gguf # the image part in F16: these Arm cores have no BF16, which is twice as slow
+    url: https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/f6d5376be1edb4d416d56da11e5397a961aca8ae/mmproj-F16.gguf
+    sha256: 7035e9cb8d7c6a9681d07eef9a364783e86ea4cd73faab2eabb4f43a101830c7
+# Recorded with each caption; the same name the backlog's captions carry.
+memento_extras_caption_model_name: Qwen3.5-2B-GGUF:Q4_K_M
+# Immich's side, which the night run reads: its database container (for the photo list)
+# and its thumbnails folder (the previews).
+memento_extras_immich_db_container: immich_postgres
+memento_extras_immich_thumbs: "{{ immich_thumb_location | default('/opt/immich/thumbs') }}"
+
+# --- The trained question reader (memento-extras/reader/) ---
+# The model to ship, on your computer: config.json, tokenizer.json and model.onnx, from
+# huggingface.co/mahesraj/memento-ask-reader. Not in git.
+memento_extras_reader_model: "{{ playbook_dir }}/../.local/train-intent/reader-model"
+memento_extras_reader_memory: 768m
+
+# --- Themed memories and creations (memento-extras/src/services/memories.service.ts, creations.service.ts) ---
+# The extras service's own caps, so a leak restarts it instead of squeezing Immich. It uses
+# ~45 MB by day; the nightly memories run for one person peaks well under these (docs/runbooks.md,
+# "Themed memories and creations").
+memento_extras_memory: 512m
+memento_extras_node_heap_mb: 384
+# The creations container (memento-extras/creations/): collages with vips, recap videos,
+# animations and cinematic photos with ffmpeg (and a small depth model for those), and videos'
+# sound cleaned up for Reduce noise (DeepFilterNet; ~250 MB for a 10-minute video, measured on
+# the Mac). No internet and no access to Immich: it only sees the work folder below, which the
+# extras service fills with one job's files and empties after. One job at a time (the biggest
+# take up to 15 minutes), never started during the night captions' hours
+# (memento_extras_captions_start–stop) or if it couldn't finish before them. A video being
+# cleaned needs room in the work folder: about 3 times its size (up to 2 GB) and 4 GB more.
+memento_extras_creations_memory: 1g
+memento_extras_creations_cpus: "1.5" # at most 1.5 of the 2 cores, at the lowest CPU weight
+memento_extras_creations_tmpfs: 64m
+memento_extras_creations_work: "{{ memento_extras_dir }}/creations-work"
+# When the day's themed memories are made (local time): just after the night captions stop
+# (memento_extras_captions_stop), so their photo checks and Sunday's renders never overlap them.
+memento_extras_memories_run_at: "07:05"
+# Music for recap videos (docs/runbooks.md, "Music for recaps"): the deploy copies every .mp3 from
+# the source folder on the Mac (outside git) to the server's folder. Each recap picks one that
+# fits its memory's mood, faded in and out. None: videos are silent.
+memento_extras_creations_music: "{{ memento_extras_dir }}/music"
+memento_extras_creations_music_source: "{{ playbook_dir }}/../.local/recap-music/tracks"

@@ -1,0 +1,47 @@
+# DEV_WEB=container: the website dev server from Immich's source (IMMICH_SRC), in Immich's web dev
+# image (./memento dev up).
+services:
+  immich-web:
+    image: memento-web-dev:local
+    build:
+      context: ${IMMICH_SRC:?}
+      dockerfile: server/Dockerfile.dev
+      target: dev
+    container_name: memento_dev_web
+    command:
+      - |
+        set -e
+        mise install node pnpm
+        pnpm install --frozen-lockfile --filter 'immich-web...'
+        pnpm --filter @immich/sdk build
+        cd web
+        exec pnpm exec vite dev --host 0.0.0.0 --port 3000
+    environment:
+      IMMICH_SERVER_URL: http://immich-server:2283/
+      MISE_LOCKFILE: "false"
+    volumes:
+      - ${IMMICH_SRC:?}:/usr/src/app:ro
+      - web-buildcache:/buildcache
+      - web-root-modules:/usr/src/app/node_modules
+      - web-modules:/usr/src/app/web/node_modules
+      - web-sdk-modules:/usr/src/app/packages/sdk/node_modules
+      - web-sdk-build:/usr/src/app/packages/sdk/build
+      - web-sveltekit:/usr/src/app/web/.svelte-kit
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: wget -q -O /dev/null http://127.0.0.1:3000/ || exit 1
+      interval: 5s
+      start_period: 15m
+      start_interval: 5s
+    networks:
+      - immich
+    restart: on-failure
+
+volumes:
+  web-buildcache:
+  web-root-modules:
+  web-modules:
+  web-sdk-modules:
+  web-sdk-build:
+  web-sveltekit:

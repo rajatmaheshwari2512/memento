@@ -1,0 +1,62 @@
+# Set from .env in group_vars/all/main.yml. Empty = the role stops with an error.
+backup_bucket: ""
+backup_access_key_id: ""
+backup_secret_access_key: ""
+backup_aws_region: us-east-1
+backup_rclone_version: "1.76.0"
+# The Storage Box's two encryption passwords (obscured), for jobs with encrypt_names.
+backup_crypt_password_obscured: ""
+backup_crypt_password2_obscured: ""
+
+# What to copy: one entry per app folder, copied one after the other in the
+# same nightly run. The full list is in group_vars/all/main.yml.
+#   name:           a short label for the log
+#   enabled:        optional, false = skip this job (e.g. Nextcloud while Crypt is parked)
+#   source:         either a folder on the VM's disk, with encrypt_names set (stage 1,
+#                   STORAGE.md), or the box's ENCRYPTED folder (storagebox:<folder>), not
+#                   the decrypted view: those scrambled files are copied as they are
+#                   (rclone's recommended way), so AWS gets the same data as Hetzner.
+#   encrypt_names:  for a plain folder on the VM: base32 or base64. Files are encrypted on
+#                   the way with backup_crypt_password*, and names written in this style.
+#                   Use what the Storage Box used for that folder (Immich base32), so a
+#                   folder that moves between the VM and the box matches what's archived.
+#   dest_path:      the folder in the bucket
+#   weekly_only:    optional, with encrypt_names: a subfolder (e.g. Immich's backups/, its
+#                   nightly database backups) left out of the nightly copy. Once a week
+#                   (backup_weekly_day) only its newest file is copied, always as weekly_as,
+#                   replacing last week's; the bucket keeps replaced copies 180 days.
+#   weekly_as:      the file name for that weekly copy (e.g. latest.sql.gz)
+#   skip_folders:   optional, with encrypt_names: subfolders never copied, because the app
+#                   rebuilds them from the originals (e.g. Immich's encoded-video/).
+#   only_subfolder: optional. Copy only <each top folder>/<this folder>/. Nextcloud keeps
+#                   each user's own files in <user>/files; next to it are versions, trash,
+#                   previews and logs that change all the time, and every changed file
+#                   would be a new Deep Archive upload, billed for 180 days.
+#   compare:        optional: size (the default, --size-only) or modtime (size and time,
+#                   for a file that can change without changing size, e.g. a database
+#                   copy). modtime costs one extra request per file whose size matches.
+#   crypt_remote:   needed with only_subfolder. The crypt remote over the source folder
+#                   (from the storagebox_mount role), used to work out the scrambled name
+#                   of only_subfolder. rclone scrambles a name the same way in every
+#                   folder, so one scrambled name matches every user's folder.
+# From the VM's disk (stage 1), group_vars leaves out Immich's encoded-video/ by name. From the
+# box (stage 3) folder names are scrambled, so Immich's folder is copied whole and its re-encoded
+# videos get archived too. Thumbnails are never in this folder (they're on the VM disk).
+backup_jobs:
+  - name: immich
+    source: /opt/immich/library
+    dest_path: immich
+    encrypt_names: base32
+
+# Day of the week for weekly_only copies, as `date +%u` counts: 1 = Monday ... 7 = Sunday.
+backup_weekly_day: 7
+
+# systemd calendar format, in the server's timezone (set by the base role).
+# 04:00 is after Immich's 02:00 database dump.
+backup_schedule: "*-*-* 04:00:00"
+
+# Copies from the Storage Box: it allows 10 connections at once, each transfer and checker
+# can hold one, and the mounts need some too. 4 + 4 leaves room, because the copies run
+# one after the other, never together.
+backup_transfers: 4
+backup_checkers: 4

@@ -1,0 +1,77 @@
+# Docker Engine and the compose plugin, from Docker's own apt repository.
+# (PLAN.md used the get.docker.com script. A repo is the same packages, but
+# Ansible can check it and it updates with apt.)
+
+# deb822_repository writes /etc/apt/sources.list.d/docker.sources and downloads
+# Docker's signing key into /etc/apt/keyrings/, in one step.
+- name: Add Docker's apt repository
+  ansible.builtin.deb822_repository:
+    name: docker
+    types: [deb]
+    uris: https://download.docker.com/linux/ubuntu
+    suites: ["{{ ansible_facts['distribution_release'] }}"] # "noble" for 24.04
+    components: [stable]
+    # Oracle's A1 VM is ARM: Ansible calls it aarch64, Debian/Ubuntu call it arm64.
+    architectures: ["{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}"]
+    signed_by: https://download.docker.com/linux/ubuntu/gpg
+    state: present
+  register: docker_repo
+
+- name: Install Docker Engine and the compose plugin
+  ansible.builtin.apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    state: present
+    # Refresh the package list only when the repo was just added, so apt can see it.
+    update_cache: "{{ docker_repo is changed }}"
+
+# Docker's packages aren't from Ubuntu, so Ubuntu's automatic updates skip them unless told
+# to include Docker's repository. Each package stays within docker_major_versions.
+- name: Include Docker's repository in the automatic updates
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/51docker-unattended
+    content: |
+      // Managed by Ansible (host/roles/docker). Docker's releases, within the pinned
+      // major versions (/etc/apt/preferences.d/docker-major).
+      Unattended-Upgrade::Origins-Pattern {
+          "origin=Docker,archive=${distro_codename},label=Docker CE";
+      };
+    mode: "0644"
+
+# The first record that matches a version decides its priority: the pinned major versions
+# are allowed (500), any other version from Docker's repository never installs (-1).
+- name: Keep Docker within its major versions
+  ansible.builtin.copy:
+    dest: /etc/apt/preferences.d/docker-major
+    content: |
+      # Managed by Ansible (host/roles/docker, docker_major_versions).
+      {% for package, major in docker_major_versions.items() %}
+      Package: {{ package }}
+      Pin: version {{ major }}.*
+      Pin-Priority: 500
+
+      {% endfor %}
+      Package: {{ docker_major_versions.keys() | join(' ') }}
+      Pin: release o=Docker
+      Pin-Priority: -1
+    mode: "0644"
+
+# A reload applies these (log size for new containers, live-restore) without restarting
+# anything. A setting that only takes effect on a full restart (rare, e.g. a new data folder)
+# needs `sudo systemctl restart docker`; with live-restore on, the containers keep running.
+- name: Write Docker's settings (log size, live restore)
+  ansible.builtin.copy:
+    dest: /etc/docker/daemon.json
+    content: "{{ docker_daemon_config | to_nice_json }}\n"
+    mode: "0644"
+  notify: Reload Docker
+
+- name: Start Docker now and at every boot
+  ansible.builtin.systemd_service:
+    name: docker
+    enabled: true
+    state: started

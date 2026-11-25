@@ -1,0 +1,38 @@
+# An email if Oracle ever starts charging. Everything here should be free, so any
+# spend means something left the Always Free limits (e.g. extra disk, or a change
+# in what Oracle gives away).
+
+# The budget covers the whole tenancy (the root compartment), not just ours,
+# so a charge anywhere in the account is caught.
+resource "oci_budget_budget" "this" {
+  compartment_id = var.tenancy_ocid
+  display_name   = "selfphotos-monthly"
+  description    = "Alert on any real spend. Managed by Terraform."
+  amount         = var.amount
+  reset_period   = "MONTHLY"
+  target_type    = "COMPARTMENT"
+  targets        = [var.tenancy_ocid]
+}
+
+# Email when actual spend this month reaches the budget.
+resource "oci_budget_alert_rule" "actual" {
+  budget_id      = oci_budget_budget.this.id
+  display_name   = "actual-spend"
+  type           = "ACTUAL"
+  threshold_type = "PERCENTAGE"
+  threshold      = 100
+  recipients     = var.alert_email
+  message        = "SelfPhotos: Oracle spend has reached the monthly budget. Check Billing → Cost Analysis."
+}
+
+# Email when Oracle predicts the month will end over budget. This usually fires
+# earlier than the rule above.
+resource "oci_budget_alert_rule" "forecast" {
+  budget_id      = oci_budget_budget.this.id
+  display_name   = "forecast-spend"
+  type           = "FORECAST"
+  threshold_type = "PERCENTAGE"
+  threshold      = 100
+  recipients     = var.alert_email
+  message        = "SelfPhotos: Oracle forecasts spend over the monthly budget. Check Billing → Cost Analysis."
+}

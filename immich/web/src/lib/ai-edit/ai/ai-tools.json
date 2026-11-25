@@ -1,0 +1,99 @@
+{
+  "_comment": "SelfPhotos AI tools: our own saved instructions sent to Gemini (Gemini has no presets of its own), and how a highlighted area is sent and pasted back. Each tool needs editor_ai_tool_<id> in i18n/en.json, and an icon in each app. The Android app reads this same file (mobile/assets/selfphotos/ai-tools.json links here). highlight: 'optional' (with a highlight, only that area changes and only it is pasted back), 'required' (needs one), 'ignored' (always the whole photo). pasteBack false: the whole result is used even with a highlight (Move takes the thing elsewhere; styles and reframing redraw everything). ask: the tool needs a few words from the user, appended to its instruction (editor_ai_tool_<id>_ask is the hint). group: 'fix' (several can be picked together) or 'style' (at most one). alone: true (Move) is never combined with another tool. maxMegapixels and maxLongSide: the largest photo AI edits take, by its size as shown (memento-extras refuses larger ones too). maxSelected: how many tools one edit may combine; the app joins their instructions and the typed words into one (ai-tools.ts/ai_tools.dart combinedInstruction). The service picks a provider per tool id (memento-extras edit-providers.service.ts).",
+  "area": {
+    "alignLongSide": 1024,
+    "feather": 0.002,
+    "markLongSide": 1536,
+    "markQuality": 0.85,
+    "maskLongSide": 1024,
+    "maxMisalignment": 0.0006,
+    "photoLongSide": 3072,
+    "photoQuality": 0.9,
+    "shapeTolerance": 0.02,
+    "tint": [255, 0, 0, 0.5]
+  },
+  "maxLongSide": 12000,
+  "maxMegapixels": 100,
+  "maxSelected": 3,
+  "tools": [
+    {
+      "group": "fix",
+      "highlight": "optional",
+      "id": "enhance",
+      "instruction": "Enhance this photo the way a skilled photo editor would: balanced exposure, natural colour and white balance, more clarity and detail, less noise. Keep it realistic, and keep the content, the framing and every person's face exactly the same."
+    },
+    {
+      "group": "fix",
+      "highlight": "optional",
+      "id": "unblur",
+      "instruction": "Make this photo sharp: remove motion blur, camera shake and focus blur, and bring back natural detail, especially in faces, eyes and text. Don't add or remove anything, and keep every person's face and expression exactly the same."
+    },
+    {
+      "group": "fix",
+      "highlight": "optional",
+      "id": "relight",
+      "instruction": "Relight the people with a soft, flattering portrait light from the front and slightly to one side, so their faces are well lit and natural. Keep their faces, expressions, skin texture and identity exactly the same, and keep the background as it is."
+    },
+    {
+      "group": "fix",
+      "highlight": "optional",
+      "id": "sky",
+      "instruction": "Replace the sky with a beautiful, natural sky that suits the scene's time of day, and gently match the light on the rest of the scene to it. Keep everything that isn't sky where it is."
+    },
+    {
+      "group": "fix",
+      "highlight": "optional",
+      "id": "erase",
+      "instruction": "Remove the distracting people and objects (if an area is highlighted, everything in it) and fill in the space naturally so it matches its surroundings, as if they were never there. Keep the main subjects exactly as they are."
+    },
+    {
+      "group": "fix",
+      "highlight": "optional",
+      "id": "reflections",
+      "instruction": "Remove reflections on glass and windows, as if the photo were taken with a polarising filter, and show what's behind the glass clearly and naturally. Keep everything else the same."
+    },
+    {
+      "group": "fix",
+      "highlight": "optional",
+      "id": "glare",
+      "instruction": "Remove glare, lens flare and shine (on faces, glasses and shiny surfaces) and bring back the natural detail and colour underneath. Keep everything else the same."
+    },
+    {
+      "alone": true,
+      "ask": true,
+      "group": "fix",
+      "highlight": "required",
+      "id": "move",
+      "instruction": "Move the highlighted subject as described below, keeping it looking exactly the same, and fill in the place it left naturally. Where to move it:",
+      "pasteBack": false
+    },
+    {
+      "group": "fix",
+      "highlight": "ignored",
+      "id": "reframe",
+      "instruction": "Reframe this photo for a better composition: extend the scene naturally beyond its edges where needed, as if zooming out a little, so the main subject is well placed with comfortable space around it. Keep the existing content, people and faces exactly as they are.",
+      "pasteBack": false
+    },
+    {
+      "group": "style",
+      "highlight": "ignored",
+      "id": "watercolour",
+      "instruction": "Turn this photo into a delicate watercolour painting on textured paper, with soft washes of colour and visible brush strokes. Keep the composition, and keep the people recognisable.",
+      "pasteBack": false
+    },
+    {
+      "group": "style",
+      "highlight": "ignored",
+      "id": "sketch",
+      "instruction": "Turn this photo into a detailed pencil sketch on white paper, with fine shading and hatching. Keep the composition, and keep the people recognisable.",
+      "pasteBack": false
+    },
+    {
+      "group": "style",
+      "highlight": "ignored",
+      "id": "painting",
+      "instruction": "Turn this photo into an oil painting on canvas, with rich colours and visible, expressive brush strokes. Keep the composition, and keep the people recognisable.",
+      "pasteBack": false
+    }
+  ]
+}

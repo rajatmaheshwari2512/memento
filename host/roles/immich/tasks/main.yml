@@ -1,0 +1,118 @@
+# Immich in Docker Compose, in /opt/immich:
+#   docker-compose.yml           Immich's own file for this release, never edited
+#   docker-compose.override.yml  our changes on top (Compose merges the two)
+#   .env                         settings + DB password (root-only)
+
+- name: Check the database password is set and allowed
+  ansible.builtin.assert:
+    that:
+      - immich_db_password | length >= 16
+      - immich_db_password is match('^[A-Za-z0-9]+$')
+    fail_msg: IMMICH_DB_PASSWORD in .env must be 16+ letters/digits only.
+    quiet: true
+
+- name: Stop if the photo folder isn't mounted
+  ansible.builtin.command: mountpoint -q {{ immich_upload_location }}
+  changed_when: false
+  when: immich_require_mount | bool
+
+- name: Create Immich's folders
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop: >-
+    {{ [immich_dir, immich_thumb_location]
+       + ([] if immich_require_mount | bool else [immich_upload_location]) }}
+  # immich_db_data_location is left for Docker to create: Postgres sets its own
+  # owner and mode on it, and Ansible would fight that on every run.
+
+# With a checksum, get_url skips the download when the file already matches, and
+# fails if GitHub ever serves something different from what we reviewed.
+- name: Download Immich's docker-compose.yml for {{ immich_version }}
+  ansible.builtin.get_url:
+    url: https://github.com/immich-app/immich/releases/download/{{ immich_version }}/docker-compose.yml
+    dest: "{{ immich_dir }}/docker-compose.yml"
+    checksum: sha256:{{ immich_compose_sha256 }}
+    mode: "0644"
+
+# SelfPhotos phase 2: our build of Immich's web app (apps/web/build.sh on your Mac).
+# Each build is unpacked into its own folder, /opt/immich/web/<version>-<commit>-<time>,
+# and the override below mounts it over the image's web app. Old builds stay, for going back.
+- name: Put our web app build on the VM
+  when: immich_custom_web_dir | length > 0
+  block:
+    - name: Read which release the web build is from
+      ansible.builtin.set_fact:
+        immich_custom_web_build: "{{ lookup('ansible.builtin.file', immich_custom_web_dir ~ '.build.json') | from_json }}"
+
+    # The web app and the server must be the same Immich release. After changing
+    # immich_version, rebuild: merge the new release into immich/, run build.sh.
+    - name: Check the web build matches immich_version
+      ansible.builtin.assert:
+        that: immich_custom_web_build.immichVersion == immich_version
+        fail_msg: >-
+          The web build is from {{ immich_custom_web_build.immichVersion }} but immich_version is {{ immich_version }}.
+          Merge Immich {{ immich_version }} into immich/ and run apps/web/build.sh.
+        quiet: true
+
+    - name: Name this build
+      ansible.builtin.set_fact:
+        immich_custom_web_build_id: >-
+          {{ immich_custom_web_build.immichVersion }}-{{ immich_custom_web_build.commit }}-{{ immich_custom_web_build.builtAt | regex_replace('[^0-9]', '') }}
+
+    # One archive instead of ~1300 separate file copies. Made on your Mac, once per build.
+    # Plain tar on purpose: the build has hidden files Immich needs (.csp.json,
+    # .well-known/) that the archive module's file matching would leave out.
+    - name: Pack the web build (on your Mac) # noqa: command-instead-of-module
+      ansible.builtin.command:
+        cmd: tar -C {{ immich_custom_web_dir | quote }} -czf {{ (immich_custom_web_dir ~ '.' ~ immich_custom_web_build_id ~ '.tgz') | quote }} .
+        creates: "{{ immich_custom_web_dir }}.{{ immich_custom_web_build_id }}.tgz"
+      delegate_to: localhost
+      become: false
+      check_mode: false # only writes a file on your Mac, so it also runs in --check
+
+    - name: Create the folder for this build
+      ansible.builtin.file:
+        path: "{{ immich_web_builds_dir }}/{{ immich_custom_web_build_id }}"
+        state: directory
+        mode: "0755"
+
+    # Skipped in --check: there, the folder above is only "would be created".
+    - name: Unpack the web build on the VM
+      when: not ansible_check_mode
+      ansible.builtin.unarchive:
+        src: "{{ immich_custom_web_dir }}.{{ immich_custom_web_build_id }}.tgz"
+        dest: "{{ immich_web_builds_dir }}/{{ immich_custom_web_build_id }}"
+        creates: "{{ immich_web_builds_dir }}/{{ immich_custom_web_build_id }}/index.html"
+        owner: root
+        group: root
+
+- name: Add our changes on top (docker-compose.override.yml)
+  ansible.builtin.template:
+    src: docker-compose.override.yml.j2
+    dest: "{{ immich_dir }}/docker-compose.override.yml"
+    mode: "0644"
+
+- name: Write .env (settings + DB password)
+  ansible.builtin.template:
+    src: immich.env.j2
+    dest: "{{ immich_dir }}/.env"
+    mode: "0600"
+  diff: false
+
+# Like `docker compose up -d`, but reports "changed" only when a container was
+# created or recreated. Compose recreates a container when its settings change
+# (e.g. a new IMMICH_VERSION in .env), and `pull: missing` downloads the new images first.
+- name: Start Immich (docker compose up)
+  community.docker.docker_compose_v2:
+    project_src: "{{ immich_dir }}"
+    files:
+      - docker-compose.yml
+      - docker-compose.override.yml
+    state: present
+    pull: missing
+    remove_orphans: true
+    # Wait until the containers report healthy, so a broken upgrade fails here.
+    wait: true
+    wait_timeout: 600

@@ -1,0 +1,56 @@
+# Dev's changes to deploy/memento/compose.yml, plus the fake Gemini and the proxy at
+# http://localhost:8091 (./memento dev up). Paths start at the repo's root. The reader is the
+# "reader" profile.
+services:
+  memento-extras:
+    build: ./memento-extras
+    user: "${DEV_UID:?}:${DEV_GID:?}"
+    command: [node, --watch, --disable-warning=ExperimentalWarning, src/server.ts]
+    volumes:
+      - ./memento-extras/src:/app/src:ro
+      - ./memento-extras/creations/src/job.ts:/app/creations/src/job.ts:ro
+    restart: on-failure
+
+  memento-reader:
+    build: ./.local/dev/reader-build
+    profiles: [reader]
+    restart: on-failure
+
+  memento-creations:
+    build: ./memento-extras/creations
+    user: "${DEV_UID:?}:${DEV_GID:?}"
+    restart: on-failure
+
+  fake-gemini:
+    image: ghcr.io/immich-app/immich-server:${IMMICH_VERSION:?}
+    container_name: memento_fake_gemini
+    entrypoint: [node, /fake-gemini.mjs]
+    volumes:
+      - ./deploy/dev/fake-gemini.mjs:/fake-gemini.mjs:ro
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:9911/').then(() => process.exit(0), () => process.exit(1))"]
+      interval: 30s
+      start_period: 10s
+      start_interval: 2s
+    networks:
+      - immich
+    restart: on-failure
+
+  proxy:
+    image: caddy:2.11.7-alpine
+    container_name: memento_dev_proxy
+    ports:
+      - 127.0.0.1:8091:8091
+    volumes:
+      - ./deploy/dev/Caddyfile:/etc/caddy/Caddyfile:ro
+    env_file: ${DEV_SESSION_FILE:?}
+    environment:
+      WEB_UPSTREAM: ${DEV_WEB_UPSTREAM:?}
+    healthcheck:
+      test: wget -q -O /dev/null http://127.0.0.1:8091/api/server/ping || exit 1
+      interval: 30s
+      start_period: 30s
+      start_interval: 1s
+    networks:
+      - immich
+    restart: on-failure

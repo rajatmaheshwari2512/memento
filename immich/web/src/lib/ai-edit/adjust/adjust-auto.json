@@ -1,0 +1,44 @@
+{
+  "_comment": "SelfPhotos Adjust's Auto: how one tap sets the sliders from the photo (web: adjust-auto.ts; Android: adjust_auto.dart reads this same file through mobile/assets/selfphotos/adjust-auto.json). Tones are 0..1 as shown on screen (sRGB), shares are 0..1 of the photo, slider values -1..1 as adjust-core.glsl takes them. adjust-auto-parity.json has pictures and the values both apps must give for them.",
+  "brightness": {
+    "max": 0.15,
+    "middle": [0.4, 0.55],
+    "min": -0.2,
+    "strength": 0.5
+  },
+  "contrast": {
+    "black": 0.03,
+    "max": 0.12
+  },
+  "ends": 0.005,
+  "exposure": {
+    "max": 0.4,
+    "white": 0.94
+  },
+  "grey": 0.04,
+  "highlights": {
+    "allowed": 0.01,
+    "clipped": 0.98,
+    "max": 0.3,
+    "perClipped": 2
+  },
+  "midtones": [0.1, 0.9],
+  "samples": 65536,
+  "saturation": {
+    "max": 0.2,
+    "strength": 0.5,
+    "target": 0.35
+  },
+  "shadows": {
+    "allowed": 0.01,
+    "clipped": 0.02,
+    "max": 0.3,
+    "perClipped": 2
+  },
+  "warmth": {
+    "greyish": 0.12,
+    "max": 0.08,
+    "minShare": 0.05,
+    "strength": 0.5
+  }
+}

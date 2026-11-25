@@ -1,0 +1,97 @@
+# Caddy: HTTPS in front of the apps. It gets and renews Let's Encrypt certificates
+# by itself, as soon as it loads a site and DNS points here.
+
+# --- Firewall ---
+# Oracle's Ubuntu image ships an iptables firewall that rejects everything except SSH.
+# Its rules live in /etc/iptables/rules.v4 (loaded at boot), ending in a REJECT line.
+# We add our ACCEPT lines before that REJECT, in the file (for reboots) and in the
+# running firewall (for now). We don't run `netfilter-persistent save`, because that
+# would also save Docker's own rules into the file.
+
+- name: Check the firewall file looks like Oracle's
+  ansible.builtin.command: grep -q '^-A INPUT -j REJECT' /etc/iptables/rules.v4
+  changed_when: false
+
+- name: Open ports in the firewall file (applied at boot)
+  ansible.builtin.lineinfile:
+    path: /etc/iptables/rules.v4
+    line: "-A INPUT -p tcp -m state --state NEW -m tcp --dport {{ item }} -j ACCEPT"
+    insertbefore: "^-A INPUT -j REJECT"
+  loop: "{{ caddy_firewall_ports }}"
+
+# The same rule, written the same way, so `iptables -C` (check) finds it after a reboot.
+- name: Open ports in the running firewall (now, without a reboot)
+  ansible.builtin.shell: |
+    if iptables -C INPUT -p tcp -m state --state NEW -m tcp --dport {{ item }} -j ACCEPT 2>/dev/null; then
+      echo present
+    else
+      iptables -I INPUT 1 -p tcp -m state --state NEW -m tcp --dport {{ item }} -j ACCEPT
+      echo added
+    fi
+  register: caddy_fw
+  changed_when: "'added' in caddy_fw.stdout"
+  loop: "{{ caddy_firewall_ports }}"
+
+# --- Install (same steps as caddyserver.com/docs/install, as Ansible tasks) ---
+
+- name: Add Caddy's apt repository
+  ansible.builtin.deb822_repository:
+    name: caddy-stable
+    types: [deb]
+    uris: https://dl.cloudsmith.io/public/caddy/stable/deb/debian
+    suites: [any-version]
+    components: [main]
+    signed_by: https://dl.cloudsmith.io/public/caddy/stable/gpg.key
+    state: present
+  register: caddy_repo
+
+- name: Install Caddy
+  ansible.builtin.apt:
+    name: caddy
+    state: present
+    update_cache: "{{ caddy_repo is changed }}"
+
+# Caddy isn't from Ubuntu either: the automatic updates include its repository, within
+# Caddy 2 (a Caddy 3 would wait until this is changed).
+- name: Include Caddy's repository in the automatic updates
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/51caddy-unattended
+    content: |
+      // Managed by Ansible (host/roles/caddy). Caddy's releases, within Caddy 2
+      // (/etc/apt/preferences.d/caddy-major).
+      Unattended-Upgrade::Origins-Pattern {
+          "origin=cloudsmith/caddy/stable";
+      };
+    mode: "0644"
+
+- name: Keep Caddy within version 2
+  ansible.builtin.copy:
+    dest: /etc/apt/preferences.d/caddy-major
+    content: |
+      # Managed by Ansible (host/roles/caddy).
+      Package: caddy
+      Pin: version 2.*
+      Pin-Priority: 500
+
+      Package: caddy
+      Pin: release o=cloudsmith/caddy/stable
+      Pin-Priority: -1
+    mode: "0644"
+
+# --- Config ---
+
+# `validate` runs Caddy's own check on the new file first. If it fails, the old
+# Caddyfile stays and the task fails, so a typo never takes the site down.
+- name: Write the Caddyfile
+  ansible.builtin.template:
+    src: Caddyfile.j2
+    dest: /etc/caddy/Caddyfile
+    mode: "0644"
+    validate: caddy validate --adapter caddyfile --config %s
+  notify: Reload Caddy
+
+- name: Start Caddy now and at every boot
+  ansible.builtin.systemd_service:
+    name: caddy
+    enabled: true
+    state: started

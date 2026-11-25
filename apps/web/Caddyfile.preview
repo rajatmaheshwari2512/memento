@@ -1,0 +1,24 @@
+# Local preview of the built web app (used by preview.sh). Not used on the server.
+# The page comes from your Mac; /api (Immich) and /extras (Memento's extras service) go to the
+# real server, so you log in with your real account and see your real photos.
+{
+	admin off
+	auto_https off
+	persist_config off
+}
+
+:8080 {
+	@server path /api /api/* /extras /extras/*
+	handle @server {
+		reverse_proxy https://{$UPSTREAM} {
+			header_up Host {$UPSTREAM}
+		}
+	}
+
+	handle {
+		root * /srv
+		# A single-page app: unknown paths like /photos/edit/<id> get index.html.
+		try_files {path} /index.html
+		file_server
+	}
+}

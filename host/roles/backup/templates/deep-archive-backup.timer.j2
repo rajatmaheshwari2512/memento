@@ -1,0 +1,12 @@
+# Managed by Ansible (host/roles/backup). Changes made on the server are overwritten.
+# See when it runs next: systemctl list-timers deep-archive-backup.timer
+[Unit]
+Description=Nightly backup to Glacier Deep Archive
+
+[Timer]
+OnCalendar={{ backup_schedule }}
+# If the VM was off at the scheduled time, run as soon as it's back.
+Persistent=true
+
+[Install]
+WantedBy=timers.target
