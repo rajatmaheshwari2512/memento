@@ -38,6 +38,11 @@ memento_extras_reader_model: >-
   {{ '' if not dotenv.READER_MODEL_DIR | default('')
      else dotenv.READER_MODEL_DIR if dotenv.READER_MODEL_DIR is abs
      else playbook_dir ~ '/../' ~ dotenv.READER_MODEL_DIR }}
+# Recap music, a folder on this computer: MUSIC_DIR (relative to the repo, or absolute). Empty: .local/recap-music/tracks.
+memento_extras_creations_music_source: >-
+  {{ playbook_dir ~ '/../.local/recap-music/tracks' if not dotenv.MUSIC_DIR | default('')
+     else dotenv.MUSIC_DIR if dotenv.MUSIC_DIR is abs
+     else playbook_dir ~ '/../' ~ dotenv.MUSIC_DIR }}
 
 # --- backup ---
 backup_bucket: "{{ dotenv.BACKUP_BUCKET_NAME | default('') }}"

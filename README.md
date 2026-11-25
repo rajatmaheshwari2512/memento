@@ -134,7 +134,7 @@ name and backup storage.
 - **Music for recaps:** from Pixabay, free to use but not ours to pass on, so it isn't in this
   repo. The list of tracks, with where to download each and what to name it, is in
   [deploy/music/tracks.md](deploy/music/tracks.md). Put them in `.local/recap-music/tracks/`
-  (or, for dev, the folder `MUSIC_DIR` names in `.env`). Without music, recaps are silent.
+  (or the folder `MUSIC_DIR` names in `.env`). Without music, recaps are silent.
 
 ## Licence and credits
 
