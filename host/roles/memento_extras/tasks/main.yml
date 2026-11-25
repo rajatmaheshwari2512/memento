@@ -62,7 +62,7 @@
   register: memento_extras_copied
 
 # Copying never deletes: a file moved or removed in the repo would stay on the VM, and in
-# the image, as an old copy that scripts (caption-night.sh, the runbooks) could still run.
+# the image, as an old copy that scripts (caption-night.sh) could still run.
 - name: List the source files in the repo
   ansible.builtin.find:
     paths: "{{ playbook_dir }}/../memento-extras/src"

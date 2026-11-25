@@ -14,7 +14,7 @@
     state: present
 
 # Ubuntu cloud images usually have this already; writing it makes it certain.
-# Kernel updates still need a reboot. See docs/runbooks.md.
+# Kernel updates still need a reboot (docs/upgrades.md, "Everything else").
 # CleanInterval: every {{ base_apt_clean_days }} days the downloaded update files are deleted
 # (apt-get clean). They're only needed while installing, and otherwise pile up (390 MB by 24 Nov).
 - name: Turn on daily automatic security updates

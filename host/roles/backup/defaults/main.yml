@@ -6,7 +6,7 @@ backup_secret_access_key: ""
 backup_off: "{{ (backup_bucket ~ backup_access_key_id ~ backup_secret_access_key) | length == 0 }}"
 backup_aws_region: us-east-1
 backup_rclone_version: "1.76.0"
-# The Storage Box's two encryption passwords (obscured), for jobs with encrypt_names.
+# The two encryption passwords (obscured), for jobs with encrypt_names.
 backup_crypt_password_obscured: ""
 backup_crypt_password2_obscured: ""
 
@@ -14,14 +14,14 @@ backup_crypt_password2_obscured: ""
 # same nightly run. The full list is in group_vars/all/main.yml.
 #   name:           a short label for the log
 #   enabled:        optional, false = skip this job (e.g. Nextcloud while Crypt is parked)
-#   source:         either a folder on the VM's disk, with encrypt_names set, or the
-#                   box's ENCRYPTED folder (storagebox:<folder>), not
-#                   the decrypted view: those scrambled files are copied as they are
-#                   (rclone's recommended way), so AWS gets the same data as Hetzner.
-#   encrypt_names:  for a plain folder on the VM: base32 or base64. Files are encrypted on
-#                   the way with backup_crypt_password*, and names written in this style.
-#                   Use what the Storage Box used for that folder (Immich base32), so a
-#                   folder that moves between the VM and the box matches what's archived.
+#   source:         either a folder on the server's disk, with encrypt_names set, or an
+#                   rclone remote's already-encrypted folder (<remote>:<folder>), not its
+#                   decrypted view: those scrambled files are copied as they are (rclone's
+#                   recommended way).
+#   encrypt_names:  for a plain folder on the server: base32 or base64. Files are encrypted
+#                   on the way with backup_crypt_password*, and names written in this style.
+#                   Keep a folder's style once it has backups (Immich: base32), so its names
+#                   match what's archived.
 #   dest_path:      the folder in the bucket
 #   weekly_only:    optional, with encrypt_names: a subfolder (e.g. Immich's backups/, its
 #                   nightly database backups) left out of the nightly copy. Once a week
@@ -38,12 +38,11 @@ backup_crypt_password2_obscured: ""
 #                   for a file that can change without changing size, e.g. a database
 #                   copy). modtime costs one extra request per file whose size matches.
 #   crypt_remote:   needed with only_subfolder. The crypt remote over the source folder
-#                   (from the storagebox_mount role), used to work out the scrambled name
+#                   (in /etc/rclone/rclone.conf), used to work out the scrambled name
 #                   of only_subfolder. rclone scrambles a name the same way in every
 #                   folder, so one scrambled name matches every user's folder.
-# From the VM's disk (stage 1), group_vars leaves out Immich's encoded-video/ by name. From the
-# box (stage 3) folder names are scrambled, so Immich's folder is copied whole and its re-encoded
-# videos get archived too. Thumbnails are never in this folder (they're on the VM disk).
+# group_vars leaves out Immich's encoded-video/ by name. Thumbnails are never in this folder
+# (they're elsewhere on the server's disk).
 backup_jobs:
   - name: immich
     source: /opt/immich/library
@@ -57,8 +56,6 @@ backup_weekly_day: 7
 # 04:00 is after Immich's 02:00 database dump.
 backup_schedule: "*-*-* 04:00:00"
 
-# Copies from the Storage Box: it allows 10 connections at once, each transfer and checker
-# can hold one, and the mounts need some too. 4 + 4 leaves room, because the copies run
-# one after the other, never together.
+# rclone's parallel transfers and checks, per copy (the copies run one after the other).
 backup_transfers: 4
 backup_checkers: 4

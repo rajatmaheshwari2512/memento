@@ -11,7 +11,7 @@ docker_daemon_config:
 
 # Automatic updates (base role's nightly run) install Docker's new releases, but only within
 # these major versions: a new major version waits until it's changed here and the role runs
-# (docs/runbooks.md, "Automatic updates").
+# (docs/upgrades.md, "Everything else").
 docker_major_versions:
   docker-ce: "5:29"
   docker-ce-cli: "5:29"

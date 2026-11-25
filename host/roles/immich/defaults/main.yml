@@ -1,8 +1,4 @@
-# Pinned Immich release. To upgrade (docs/runbooks.md):
-#   1. read the release notes for breaking changes
-#   2. change immich_version
-#   3. put the new docker-compose.yml's sha256 in immich_compose_sha256:
-#        curl -sL https://github.com/immich-app/immich/releases/download/<version>/docker-compose.yml | shasum -a 256
+# Pinned Immich release, and its docker-compose.yml's sha256. To upgrade: docs/upgrades.md.
 immich_version: v3.4.2
 # v3.4.2's compose file is byte-identical to v3.4.1's, so the checksum is unchanged.
 immich_compose_sha256: 1455e3f474687cb96ecb2eab23a0a7268ac5515b094022c66f3902ceb7f0a564
