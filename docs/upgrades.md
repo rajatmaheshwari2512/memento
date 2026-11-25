@@ -99,9 +99,10 @@ What you'll see:
   under "Unmerged paths". Edit each to keep both Immich's change and Memento's, then `git add` it.
   Memento's own code is mostly in `immich/web/src/lib/ai-edit/` and `immich/mobile/lib/selfphotos/`;
   in Immich's own files, most of Memento's lines carry a `SelfPhotos` comment.
-- **"… does not exist in index".** A file Immich changed that Memento's copy leaves out (like
-  `.vscode/settings.json`). Make the patch again without it: add `-- . ':!.vscode'` to the end of
-  the `git diff` line, then run `git apply` again.
+- **"error: immich/… : does not exist in index"**, and nothing is applied. Immich changed a file
+  that Memento's copy leaves out (`.vscode/settings.json`, for example). Make the patch again
+  without it, by adding its path inside Immich's code to the end of the `git diff` line, like
+  `-- . ':!.vscode/settings.json'`, then run `git apply` again.
 
 To see everything Memento changes in Immich's code: `git diff --stat "immich-$OLD" HEAD:immich`.
 

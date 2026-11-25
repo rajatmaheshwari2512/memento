@@ -161,8 +161,10 @@ Run it yourself, in a terminal. It:
    to make the backup passwords);
 2. fills in the empty generated settings: the database password, Memento's secret, the two backup
    passwords and the Android key's password;
-3. **shows the two backup passwords once.** **MANUAL: save them in your password manager now.**
-   Without them, nobody can read the backups;
+3. **shows the two backup passwords once,** as soon as it makes them, even if it then stops on
+   something else. **MANUAL: save them in your password manager now.** Without them, nobody can
+   read the backups. If you missed them, `rclone reveal <value>` turns each
+   `BACKUP_CRYPT_…_OBSCURED` value in `.env` back into its password;
 4. if Oracle, Cloudflare or AWS is on: shows Terraform's plan, then waits. **MANUAL: read the
    plan, then type `yes`** (or `new server` when the plan makes an Oracle server; it costs
    nothing within the free allowance). Anything else stops, and nothing changes. Setup refuses
@@ -496,10 +498,15 @@ This hasn't been tried end to end. Read it through first.
    - **If Oracle's server itself is gone,** setup stops: it refuses a plan that makes again
      something Terraform's state already has (that usually means a wrong setting). Replacing a
      lost Oracle server isn't handled by setup yet.
-3. **On the server, stop the backup and Immich while you restore** (the next deploy starts them
-   again):
+3. **Right after setup, before the next 04:00, stop the new server's backup.** Otherwise its
+   nightly copy uploads the new, empty databases over the copies you're restoring (on Sundays,
+   Immich's too). The replaced copies stay in the bucket for 180 days, but only as older
+   versions, which the steps below don't read. On the server:
    ```
    sudo systemctl stop deep-archive-backup.timer
+   ```
+   Then stop Immich while you restore (the deploy in step 7 starts both again):
+   ```
    cd /opt/immich && sudo docker compose down
    ```
 4. **Copy the photos back,** decrypting on the way. Run it inside `tmux`, so a dropped connection
