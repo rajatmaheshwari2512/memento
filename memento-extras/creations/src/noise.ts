@@ -34,6 +34,7 @@
 //   - the joins, placed in speech: within ±100 ms of one, the result differs from cleaning the
 //     whole track in one go by −41 dB, as elsewhere (−43 dB; speech is −18 dB), with no click.
 
+import { existsSync } from "node:fs";
 import { mkdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { LIMITS, NOISE_UNSUITABLE, type NoiseJob, OUTPUT_FILE, type RenderNotes, Unsuitable, type VideoFormat } from "./job.ts";
@@ -47,11 +48,14 @@ const TAIL_SAMPLES = 4_800; // 100 ms of silence after each piece: the model's d
 // The longest sound cleaned: the video's limit, with a few seconds' leeway (Immich's length, which
 // the service checked, and ffprobe's can differ).
 const SOUND_SECONDS = LIMITS["reduce-noise"].videoSeconds + 5;
-// deep-filter is built for glibc (there's no ARM64 build for Alpine's musl), so it's started by
-// glibc's own loader, with the few glibc libraries it needs (copied in by the Dockerfile).
+// deep-filter's ARM64 build is for glibc (there's no ARM64 build for Alpine's musl), so there it's
+// started by glibc's own loader, with the few glibc libraries it needs (copied in by the
+// Dockerfile). The x86-64 build is for musl and runs as it is (no loader in the image).
 const DEEP_FILTER = process.env.DEEP_FILTER ?? "/app/deep-filter";
 const GLIBC = process.env.GLIBC_DIR ?? "/opt/glibc";
 const LOADER = join(GLIBC, "ld-linux-aarch64.so.1");
+const deepFilter = (args: string[]): [string, string[]] =>
+  existsSync(LOADER) ? [LOADER, ["--library-path", GLIBC, DEEP_FILTER, ...args]] : [DEEP_FILTER, args];
 
 // How each kind of file is written: ffmpeg's muxer, the family ffprobe names the original's
 // (mp4, mov and 3gp read as one family; mkv and webm as another), and the sound's codec.
@@ -201,7 +205,7 @@ export async function reduceNoise(job: NoiseJob, dir: string, tmp: string, deadl
       "-nostdin", "-loglevel", "error", "-y", "-i", noisy,
       "-af", `atrim=start_sample=${piece.from}:end_sample=${piece.to},apad=pad_len=${TAIL_SAMPLES}`, "-c:a", "pcm_s16le", input,
     ], deadline, 60_000);
-    await run(LOADER, ["--library-path", GLIBC, DEEP_FILTER, "--compensate-delay", "--output-dir", cleanDir, input], deadline, 300_000);
+    await run(...deepFilter(["--compensate-delay", "--output-dir", cleanDir, input]), deadline, 300_000);
     await rm(input);
     const output = join(cleanDir, `piece-${i}.wav`);
     // The join's timing relies on every piece covering what's kept: never let one come out short.

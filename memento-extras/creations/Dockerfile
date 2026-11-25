@@ -7,20 +7,33 @@
 # (src/noise.ts). Everything is pinned: the base images by digest (node 24.22.2 on Alpine 3.24,
 # Debian 13.7 for glibc), the packages by version (a newer Alpine build fails here, loudly, until
 # the pin is updated), the models and deep-filter by version and checksum.
-# Built for ARM64 (the server and the Mac): deep-filter and glibc's loader below are ARM64's.
+# Builds for ARM64 and x86-64: the CPU is TARGETARCH, or the build machine's when the builder
+# doesn't set it (Ansible's, on the server).
 
-# glibc, for deep-filter only: its ARM64 build is for glibc, and Alpine has musl (Alpine's
-# glibc shim can't start it). Five libraries and glibc's loader, nothing else from Debian.
+# glibc, for deep-filter on ARM64 only: its ARM64 build is for glibc, and Alpine has musl (Alpine's
+# glibc shim can't start it). Five libraries and glibc's loader, nothing else from Debian. On
+# x86-64, /glibc stays empty: that deep-filter is built for musl.
 FROM debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2 AS glibc
+ARG TARGETARCH
+RUN mkdir /glibc && case "${TARGETARCH:-$(uname -m)}" in \
+      arm64 | aarch64) cd /usr/lib/aarch64-linux-gnu && cp -L ld-linux-aarch64.so.1 libc.so.6 libm.so.6 libdl.so.2 \
+                         libpthread.so.0 libgcc_s.so.1 /glibc/ ;; \
+    esac
 
 # DeepFilterNet 3 (MIT/Apache-2.0), its project's command-line tool v0.5.6 with the model
 # inside (39 MB), fetched now because the running container has no internet, and checked
 # against its checksum, so a changed file fails the build. Fetched with Node (busybox wget
 # tries only one of GitHub's download addresses, and one of them refuses some networks).
 FROM node:24.22.2-alpine@sha256:a34ab6d7f6f4813f4d0c5469d74685604b962fbdbf5793a7bc7b4998ecb867c8 AS deepfilter
-RUN node -e 'fetch(process.argv[1]).then(async (r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); require("fs").writeFileSync("/deep-filter", Buffer.from(await r.arrayBuffer()), { mode: 0o755 }); })' \
-      https://github.com/Rikorose/DeepFilterNet/releases/download/v0.5.6/deep-filter-0.5.6-aarch64-unknown-linux-gnu \
- && echo "14e02a1c0028f3ca0bdf83b62b3336e56ba0556894ef295a95e8573f06557166  /deep-filter" | sha256sum -c -
+ARG TARGETARCH
+RUN case "${TARGETARCH:-$(uname -m)}" in \
+      arm64 | aarch64) build=aarch64-unknown-linux-gnu sum=14e02a1c0028f3ca0bdf83b62b3336e56ba0556894ef295a95e8573f06557166 ;; \
+      amd64 | x86_64) build=x86_64-unknown-linux-musl sum=70775e251eee44c0f2451a1e833326cf8bcbbe304d3e7cd12851e6fce72ef7da ;; \
+      *) echo "No deep-filter build for this CPU ($(uname -m)): ARM64 and x86-64 only." >&2; exit 1 ;; \
+    esac \
+ && node -e 'fetch(process.argv[1]).then(async (r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); require("fs").writeFileSync("/deep-filter", Buffer.from(await r.arrayBuffer()), { mode: 0o755 }); })' \
+      "https://github.com/Rikorose/DeepFilterNet/releases/download/v0.5.6/deep-filter-0.5.6-$build" \
+ && echo "$sum  /deep-filter" | sha256sum -c -
 
 FROM node:24.22.2-alpine@sha256:a34ab6d7f6f4813f4d0c5469d74685604b962fbdbf5793a7bc7b4998ecb867c8
 
@@ -36,10 +49,8 @@ RUN mkdir /app && wget -q -O /app/depth.onnx \
  && echo "fcf51f1b230362b28690bb9d1809bf0431f29cad20534e3f589bd7285547f20d  /app/depth.onnx" | sha256sum -c - \
  && mkdir /app/model && mv /app/depth.onnx /app/model/depth.onnx
 
-# Reduce noise (src/noise.ts): deep-filter, started by glibc's loader with these libraries.
-COPY --from=glibc /usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1 /usr/lib/aarch64-linux-gnu/libc.so.6 \
-     /usr/lib/aarch64-linux-gnu/libm.so.6 /usr/lib/aarch64-linux-gnu/libdl.so.2 /usr/lib/aarch64-linux-gnu/libpthread.so.0 \
-     /usr/lib/aarch64-linux-gnu/libgcc_s.so.1 /opt/glibc/
+# Reduce noise (src/noise.ts): deep-filter; on ARM64, started by glibc's loader with these libraries.
+COPY --from=glibc /glibc/ /opt/glibc/
 COPY --from=deepfilter /deep-filter /app/deep-filter
 
 ENV NODE_ENV=production \
