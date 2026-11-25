@@ -534,6 +534,8 @@ oci_value() {
 }
 
 load_prod() {
+  pipx_bin=${PIPX_BIN_DIR:-$HOME/.local/bin}
+  case ":$PATH:" in *":$pipx_bin:"*) ;; *) if [ -d "$pipx_bin" ]; then PATH="$PATH:$pipx_bin"; fi ;; esac
   immich_version=$(sed -n 's/^immich_version: *//p' "$root/host/roles/immich/defaults/main.yml" 2>/dev/null || true)
   [ -n "$immich_version" ] || fail "Can't find immich_version in host/roles/immich/defaults/main.yml."
   web_dist="$root/apps/web/dist/$immich_version"
@@ -806,7 +808,9 @@ install_tools() {
         ansible-playbook)
           sudo apt-get install -y pipx
           pipx install --include-deps ansible
-          export PATH="$HOME/.local/bin:$PATH"
+          pipx ensurepath >/dev/null || true
+          case ":$PATH:" in *":$pipx_bin:"*) ;; *) PATH="$PATH:$pipx_bin" ;; esac
+          say "Ansible is in $pipx_bin: ./memento finds it there; for ansible-playbook itself, open a new terminal."
           ;;
         *) sudo apt-get install -y "$tool" ;;
       esac
