@@ -8,7 +8,8 @@ dotenv: "{{ (lookup('ansible.builtin.file', lookup('ansible.builtin.env', 'MEMEN
 photos_hostname: "{{ dotenv.MEMENTO_DOMAIN | default('') }}"
 
 # --- base ---
-base_timezone: Asia/Kolkata
+# TZ in .env, like Asia/Kolkata. Empty: Etc/UTC.
+base_timezone: "{{ dotenv.TZ | default('Etc/UTC', true) }}"
 
 # --- caddy ---
 # One entry per website.
