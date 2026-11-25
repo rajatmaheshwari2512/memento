@@ -76,11 +76,12 @@ The apps say "Memento" in place of "Immich", with their own logo.
 | `immich/web` | The website (Immich's, with Memento's changes). Ours is mostly in `web/src/lib/ai-edit/`. |
 | `immich/mobile` | The Android app (Immich's, with Memento's changes). Ours is in `mobile/lib/selfphotos/`. |
 | `memento-extras/` | Memento's service (`src/`); `reader/` is Ask's reader; `creations/` the creations container. |
-| `deploy/` | The Docker Compose files, and the music list. |
+| `deploy/` | The Docker Compose files, the music list, and a release's server image (`deploy/server/`). |
 | `host/` | Ansible: sets up the server. |
 | `infra/` | Terraform: creates the server, DNS and backup bucket (optional). |
 | `apps/` | Builds the website and the Android app; the logo. |
-| `scripts/` | `privacy-check.sh`, run before pushing. |
+| `scripts/` | `privacy-check.sh`, run before pushing; `check-release.py`, used by `./memento prod update`. |
+| `.github/workflows/` | `release.yml`: builds a release when a tag is pushed. |
 | `docs/` | The guides: `setup-dev.md` (dev), `setup-prod.md` (a server), `upgrades.md`. |
 
 ## Try it on your computer
@@ -123,6 +124,14 @@ the server, DNS record and bucket (without it, setup would make a new server).
 (about $0.05, or $0.11 for a 4K result), with daily and monthly limits you set. Everything
 else runs on your own server for free. Running a server has its own costs, such as a domain
 name and backup storage.
+
+## Releases
+
+Each tag like `v1.2.0` makes a release on GitHub, built by GitHub Actions: on the Releases page,
+**download the Android app** (`memento-<version>.apk`) and the website, and the four server images
+are on GitHub's container registry. A server can run a release instead of building from the code:
+`./memento prod update v1.2.0`. It stays on that version until you update it again. A fork builds
+its own releases. Details: [setup-prod.md](docs/setup-prod.md#releases).
 
 ## Models and music
 

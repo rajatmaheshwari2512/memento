@@ -64,6 +64,21 @@ git log --oneline ORIG_HEAD..HEAD     # what came in
 If you have your own changes, merge as you would in any git repository; conflicts are yours to
 fix.
 
+### If your server runs a release
+
+With `MEMENTO_VERSION` in `.env` ([releases](setup-prod.md#releases)), update to a newer Memento
+release instead. Read its notes on the repo's Releases page first.
+
+```
+git fetch --tags && git checkout v1.3.0    # your copy must match the release: host/ and immich_version come from it
+./memento prod check                       # new settings in .env.example?
+./memento prod update v1.3.0               # checks its images, shows what changes, asks for yes, deploys
+```
+
+Then install the release's `memento-<version>.apk` on each phone. Going back to an older release
+is the same command with its version, but the databases may not allow it: see
+[Going back](#going-back).
+
 ## Upgrade Immich
 
 Immich's code is in `immich/` as a plain folder: one Immich release, with Memento's changes to
@@ -72,7 +87,8 @@ changed between your release and the new one, and apply it to that folder. Memen
 stay where they are.
 
 The server image is Immich's own, at the version in `immich_version`; Memento's website is
-mounted into it. The app is built from `immich/mobile`.
+mounted into it (a release's `memento-server` image has it built in). The app is built from
+`immich/mobile`. A Memento release tagged after the upgrade's commit has the new Immich version.
 
 ### 1. Read the release notes
 
@@ -184,7 +200,8 @@ It hasn't been tried. If you must:
 
 - **Immich:** an older version can't use a database a newer one has updated, so it goes back
   with the copy in `/opt/before-upgrade/`.
-  1. On your computer, put the old code back (`git revert`, or check out the commit before).
+  1. On your computer, put the old code back (`git revert`, or check out the commit before; with
+     a release, check out the older release and set its version in `MEMENTO_VERSION`).
   2. On the server, check the copy is there (`sudo ls -l /opt/before-upgrade`), then remove
      Immich's database and put the copy where Immich looks for backups:
      ```

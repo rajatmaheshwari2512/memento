@@ -60,7 +60,7 @@ Cloudflare DNS and backups are optional parts you turn on in `.env`.
 - A Mac, or Linux with `apt`. Setup installs Terraform, Ansible and rclone for you (on a Mac,
   with Homebrew: **MANUAL:** install it from https://brew.sh first).
 - **Docker**, running: the website is built on your computer, in Docker. See
-  [setup-dev.md](setup-dev.md#what-you-need).
+  [setup-dev.md](setup-dev.md#what-you-need). Not needed to run a [release](#releases).
 - git, Python 3 and openssl (a Mac and most Linux computers have them).
 - **An SSH key.** If you don't have one: `ssh-keygen -t ed25519`. Setup and Ansible use your
   normal SSH setup to log in to the server.
@@ -134,6 +134,7 @@ what it is, its default, where to get it, and what happens if it's empty. Fill i
 | Part in `.env.example` | When | What |
 |---|---|---|
 | `PROD: REQUIRED` | Always | `MEMENTO_DOMAIN`, `GEMINI_API_KEY`, and `TZ` (your time zone, like `Europe/London`; the night jobs and AI Edit's daily limits follow it) |
+| `PROD: RELEASE` | Optional | Leave empty to build from your copy of the code; see [Releases](#releases) |
 | `PROD: YOUR OWN SERVER` | Path b | `SERVER_HOST`, and `SERVER_USER` if it isn't `ubuntu` |
 | `PROD: ORACLE SERVER` | Path a | `OCI_TENANCY_OCID`: your tenancy's OCID, Oracle's ID for your account, which looks like `ocid1.tenancy.oc1..<letters>` (the `tenancy=` line in `~/.oci/config`). `OCI_BUDGET_AMOUNT`: the monthly spending alert, a whole number **in your Oracle account's billing currency** (Billing → Cost Analysis shows which; it may not be your country's). `OCI_BUDGET_EMAIL`: where the alert goes. The others have defaults. |
 | `PROD: CLOUDFLARE DNS` | Optional | `CLOUDFLARE_API_TOKEN` |
@@ -186,7 +187,8 @@ Run it yourself, in a terminal. It:
    plan, then type `yes`** (or `new server` when the plan makes an Oracle server; it costs
    nothing within the free allowance). Anything else stops, and nothing changes. Setup refuses
    on its own any plan that would delete something;
-5. deploys: builds the website on your computer, then sets up the server with Ansible.
+5. deploys: builds the website on your computer, then sets up the server with Ansible (with
+   `MEMENTO_VERSION`, it builds nothing and the server pulls that [release](#releases)).
 
 The deploy trusts a new server's SSH key on its first connection, so it doesn't stop to ask. A
 server whose key has changed (one rebuilt at the same address) still stops it, on purpose:
@@ -297,7 +299,8 @@ In Administration → Settings. Immich keeps them in its own database, so they s
 
 ## The Android app
 
-There's no iPhone app. The app is built on your computer and installed by hand.
+There's no iPhone app. The app is built on your computer (below), or downloaded from a
+[release](#releases) (`memento-<version>.apk`, then step 4), and installed by hand.
 
 1. **MANUAL, once: the build tools.** The build is set up for a Mac with Homebrew. From the top
    of the repo:
@@ -324,6 +327,51 @@ There's no iPhone app. The app is built on your computer and installed by hand.
 
 To update the app, build it again and install it over the old one. It must be signed with the
 same key, or the phone refuses the update.
+
+## Releases
+
+Pushing a tag like `v1.2.0` to GitHub makes a release: GitHub Actions
+(`.github/workflows/release.yml`) builds everything, for ARM64 and x86-64 servers, and puts it on
+the repo's Releases page; the app takes longest. Each fork builds its own, into its own packages.
+
+- **The Android app**, `memento-<version>.apk`, signed with your key (the secrets below).
+- **The website**, `memento-website-<version>.tar.gz`.
+- **Four server images** at `ghcr.io/<owner>/`: `memento-server` (Immich's server with Memento's
+  website in it), `memento-extras`, `memento-reader` (with Ask's model) and `memento-creations`.
+
+**Making one:** `git tag v1.2.0 && git push origin v1.2.0`. To build a tag again: GitHub → Actions
+→ Release → Run workflow, with the tag.
+
+**MANUAL, once, after the first release: make the four packages public.** A server pulls them
+without logging in, and GitHub may make new packages private: github.com/<owner>?tab=packages → each
+package → Package settings → Change visibility → Public. The run's summary warns while they aren't.
+
+**MANUAL, once: the app's signing key, as repo secrets.** Without them, a release has no app (its
+summary says so). Anyone who can change this repo's workflows could read them, so add them only if
+nobody else can push to it. With GitHub's `gh`, from the top of the repo:
+
+```
+base64 < ~/.config/selfphotos/android/selfphotos-immich.jks | gh secret set ANDROID_KEYSTORE_BASE64
+gh secret set ANDROID_KEYSTORE_PASSWORD     # it asks: paste ANDROID_KEYSTORE_PASSWORD from .env
+gh secret set ANDROID_KEYSTORE_ALIAS        # it asks: selfphotos, or your ANDROID_KEYSTORE_ALIAS
+```
+
+(The first line's file is `ANDROID_KEYSTORE_PATH`, if you set one.) The app from a release must be
+signed with the same key as the app on the phones, or they refuse the update.
+
+**Running a release on your server**, instead of building from your copy of the code:
+
+```
+git fetch --tags && git checkout v1.2.0    # the server setup (host/) comes from your copy: match the release
+./memento prod update v1.2.0
+```
+
+`update` checks the release's images are there for anyone to pull, shows what the deploy would
+change, and asks you to type `yes`. Then it sets `MEMENTO_VERSION=v1.2.0` in `.env` and deploys:
+the server pulls the images, and nothing is built, on your computer or on the server. The server
+stays on that version until you run `update` again; it never follows a newer release by itself.
+Images come from `MEMENTO_IMAGES`, or else `ghcr.io/<the GitHub owner of your git remote>`. To build
+from your copy again: empty `MEMENTO_VERSION` in `.env`, then `./memento prod deploy`.
 
 ## Day to day
 
@@ -592,9 +640,10 @@ downloaded.
 
 - **No iPhone app.** The website works on an iPhone's browser.
 - **One server.** Everything runs on it: no spare, no load sharing.
-- **The website and the app are built on your computer,** which needs Docker for the website.
-- **The Android app can only be built on a Mac today:** `apps/android/build.sh` finds Android's
-  tools through Homebrew.
+- **From your copy of the code, the website and the app are built on your computer,** which needs
+  Docker for the website. A [release](#releases) has both ready.
+- **On your computer, the Android app builds on a Mac only:** `apps/android/build.sh` finds
+  Android's tools through Homebrew. A release builds it on Linux, on GitHub.
 - **Immich's database goes off the server weekly,** the photos nightly (see "What's backed up").
 - **Restores are slow and cost money:** about two days to thaw, and AWS's download fee.
 - **Upgrades are yours to do:** [upgrades.md](upgrades.md).
@@ -632,6 +681,7 @@ downloaded.
   without showing values.
 - **A person runs `./memento prod setup`.** It needs a terminal to type `yes` (or `new server`),
   and shows the two backup passwords once. Don't run it, and never capture its output.
+  `./memento prod update <version>` asks for `yes` too: a person runs it.
 - **A person** makes the accounts, fills in `.env`, adds the DNS record by hand, makes the admin
   account, and sets Immich's settings in the browser.
 - **SSH keys:** the deploy trusts a new server's key by itself. If it stops because a key
@@ -673,3 +723,6 @@ edit, switch change or error, never the prompts), `journalctl -u deep-archive-ba
   underneath it were tested on an Oracle Ampere server.
 - **Running setup from a Linux computer.**
 - **A full restore** ("Restore everything" above).
+- **Releases**, until the first tag runs on GitHub: the workflow, the Android app built on Linux,
+  and a server running a release (`./memento prod update`) were checked on a computer, not end to
+  end.
