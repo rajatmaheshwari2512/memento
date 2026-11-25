@@ -1,0 +1,418 @@
+# Builds a Memento release when a tag like v1.2.0 is pushed, or by hand (Actions → Release → Run
+# workflow, with a tag that's already pushed). Each fork builds its own, into its own packages.
+#
+#   Images, for linux/amd64 and linux/arm64, at ghcr.io/<owner>/<name>:<tag> (and :latest):
+#     memento-server     Immich's server image with Memento's website in it
+#     memento-extras     Memento's service
+#     memento-reader     Ask's reader, with its model
+#     memento-creations  the creations container
+#   A GitHub Release for the tag: the website (.tar.gz), the Android app (.apk) and SHA256SUMS.
+#
+# Servers never follow it by themselves: ./memento prod update <tag> (docs/upgrades.md).
+# The app is signed with three repo secrets (docs/setup-prod.md, "Releases"):
+# ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD and ANDROID_KEYSTORE_ALIAS. Without them the
+# release has no app, and says so.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The tag to release, like v1.2.0 (already pushed)
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
+
+jobs:
+  prepare:
+    name: Read the release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+      images: ${{ steps.read.outputs.images }}
+      immich: ${{ steps.read.outputs.immich }}
+      commit: ${{ steps.read.outputs.commit }}
+      prerelease: ${{ steps.read.outputs.prerelease }}
+    steps:
+      - name: Check the tag
+        run: |
+          if ! [[ $TAG =~ ^v[0-9][0-9A-Za-z._-]*$ ]]; then
+            echo "::error::\"$TAG\" isn't a release tag like v1.2.0."
+            exit 1
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ env.TAG }}
+          persist-credentials: false
+
+      - name: Read the versions
+        id: read
+        env:
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          immich=$(sed -n 's/^immich_version: *//p' host/roles/immich/defaults/main.yml)
+          [ -n "$immich" ] || { echo "::error::No immich_version in host/roles/immich/defaults/main.yml"; exit 1; }
+          {
+            echo "version=$TAG"
+            echo "images=ghcr.io/${OWNER,,}"
+            echo "immich=$immich"
+            echo "commit=$(git rev-parse HEAD)"
+            if [[ $TAG == *-* ]]; then echo "prerelease=true"; else echo "prerelease=false"; fi
+          } >> "$GITHUB_OUTPUT"
+
+  website:
+    name: Website
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ env.TAG }}
+          persist-credentials: false
+
+      # The same build as on a computer; packed like the deploy packs it (hidden files included).
+      - name: Build the website (apps/web/build.sh)
+        env:
+          WEB_BUILD_DIR: ${{ runner.temp }}/web
+          IMMICH: ${{ needs.prepare.outputs.immich }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          apps/web/build.sh
+          mkdir -p "$RUNNER_TEMP/out"
+          tar -C "$WEB_BUILD_DIR/$IMMICH" -czf "$RUNNER_TEMP/out/memento-website-$VERSION.tar.gz" .
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: website
+          path: ${{ runner.temp }}/out/
+          if-no-files-found: error
+          retention-days: 7
+
+  images:
+    name: Image ${{ matrix.name }}
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write # pushes the images to ghcr.io
+    strategy:
+      matrix:
+        include:
+          - name: memento-extras
+            context: memento-extras
+            description: Memento's service, next to Immich
+          - name: memento-reader
+            context: memento-extras/reader
+            description: Memento's Ask reader, with its model
+          - name: memento-creations
+            context: memento-extras/creations
+            description: Memento's creations container (collages, recaps, cinematic photos, Reduce noise)
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ env.TAG }}
+          persist-credentials: false
+
+      # The pin is in host/roles/memento_extras/defaults/main.yml, read as ./memento reads it.
+      - name: Download Ask's reader model
+        if: matrix.name == 'memento-reader'
+        run: |
+          defaults=host/roles/memento_extras/defaults/main.yml
+          url=$(sed -n 's/^memento_extras_reader_url: *//p' "$defaults")
+          revision=$(sed -n 's/^memento_extras_reader_revision: *//p' "$defaults")
+          files=$(sed -n '/^memento_extras_reader_sha256:/,/^[^ ]/s/^  \([A-Za-z0-9._-]*\): *\([0-9a-f]\{64\}\) *$/\1:\2/p' "$defaults")
+          mkdir -p memento-extras/reader/model
+          for entry in $files; do
+            python3 -I deploy/dev/fetch.py "$url/$revision/${entry%%:*}" "${entry#*:}" "memento-extras/reader/model/${entry%%:*}"
+          done
+          for file in config.json tokenizer.json model.onnx; do
+            [ -f "memento-extras/reader/model/$file" ] || { echo "::error::No $file: check the reader's pin in $defaults"; exit 1; }
+          done
+
+      - name: Name the image
+        id: tags
+        env:
+          IMAGES: ${{ needs.prepare.outputs.images }}
+          NAME: ${{ matrix.name }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
+        run: |
+          tags="$IMAGES/$NAME:$VERSION"
+          if [ "$PRERELEASE" = false ]; then tags="$tags,$IMAGES/$NAME:latest"; fi
+          echo "tags=$tags" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ${{ matrix.context }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.version=${{ needs.prepare.outputs.version }}
+            org.opencontainers.image.revision=${{ needs.prepare.outputs.commit }}
+            org.opencontainers.image.description=${{ matrix.description }}
+          annotations: |
+            index:org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            index:org.opencontainers.image.description=${{ matrix.description }}
+
+  server-image:
+    name: Image memento-server
+    needs: [prepare, website]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write # pushes the images to ghcr.io
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ env.TAG }}
+          persist-credentials: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: website
+          path: ${{ runner.temp }}/website
+
+      - name: Unpack the website, and name the image
+        id: tags
+        env:
+          IMAGES: ${{ needs.prepare.outputs.images }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/server/www"
+          tar -xzf "$RUNNER_TEMP/website/memento-website-$VERSION.tar.gz" -C "$RUNNER_TEMP/server/www"
+          [ -f "$RUNNER_TEMP/server/www/index.html" ] || { echo "::error::The website has no index.html"; exit 1; }
+          tags="$IMAGES/memento-server:$VERSION"
+          if [ "$PRERELEASE" = false ]; then tags="$tags,$IMAGES/memento-server:latest"; fi
+          echo "tags=$tags" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ${{ runner.temp }}/server
+          file: deploy/server/Dockerfile
+          build-args: IMMICH_VERSION=${{ needs.prepare.outputs.immich }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.version=${{ needs.prepare.outputs.version }}
+            org.opencontainers.image.revision=${{ needs.prepare.outputs.commit }}
+            org.opencontainers.image.description=Immich's server with Memento's website
+          annotations: |
+            index:org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            index:org.opencontainers.image.description=Immich's server with Memento's website
+
+  android:
+    name: Android app
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    outputs:
+      built: ${{ steps.signing.outputs.ready }}
+    steps:
+      - name: Check the signing secrets
+        id: signing
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ALIAS: ${{ secrets.ANDROID_KEYSTORE_ALIAS }}
+        run: |
+          if [ -n "$KEYSTORE" ] && [ -n "$PASSWORD" ] && [ -n "$ALIAS" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "ready=false" >> "$GITHUB_OUTPUT"
+          echo "::notice title=No Android app in this release::The repo secrets ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD and ANDROID_KEYSTORE_ALIAS aren't all set."
+          {
+            echo "### No Android app in this release"
+            echo
+            echo "The app is signed with the repo secrets ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD and"
+            echo "ANDROID_KEYSTORE_ALIAS, and they aren't all set. The rest of the release is published without it."
+            echo "To add them: docs/setup-prod.md, \"Releases\"."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.signing.outputs.ready == 'true'
+        with:
+          ref: refs/tags/${{ env.TAG }}
+          persist-credentials: false
+
+      # Flutter, Gradle, the NDK and two Rust toolchains need more room than the runner has free.
+      - name: Make room on the disk
+        if: steps.signing.outputs.ready == 'true'
+        run: sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/local/share/boost /opt/hostedtoolcache/CodeQL
+
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+        if: steps.signing.outputs.ready == 'true'
+        with:
+          packages: ''
+
+      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+        if: steps.signing.outputs.ready == 'true'
+        with:
+          version: 2026.10.5
+          install: false
+          cache: false
+
+      # apps/android/build.sh's one-time setup: only the tools the build uses, at Immich's pins.
+      - name: Install the build tools
+        if: steps.signing.outputs.ready == 'true'
+        working-directory: immich
+        env:
+          MISE_EXPERIMENTAL: 1
+          MISE_GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          mise trust mise.toml mobile/mise.toml native/mise.toml
+          (cd mobile && mise install aqua:flutter/flutter java rust)
+          mise install node pnpm npm:@openapitools/openapi-generator-cli
+          (cd native && mise install rust)
+
+      - name: Build the app (apps/android/build.sh)
+        if: steps.signing.outputs.ready == 'true'
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ALIAS: ${{ secrets.ANDROID_KEYSTORE_ALIAS }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          umask 077
+          printf '%s' "$KEYSTORE" | base64 -d > "$RUNNER_TEMP/memento.jks"
+          printf 'ANDROID_KEYSTORE_PATH=%s\nANDROID_KEYSTORE_ALIAS=%s\nANDROID_KEYSTORE_PASSWORD=%s\n' \
+            "$RUNNER_TEMP/memento.jks" "$ALIAS" "$PASSWORD" > "$RUNNER_TEMP/android.env"
+          MEMENTO_ENV_FILE="$RUNNER_TEMP/android.env" apps/android/build.sh
+          set -- apps/android/dist/memento-*.apk
+          [ $# = 1 ] && [ -f "$1" ] || { echo "::error::Expected one APK in apps/android/dist"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/out"
+          cp "$1" "$RUNNER_TEMP/out/memento-$VERSION.apk"
+
+      - name: Remove the signing key
+        if: always() && steps.signing.outputs.ready == 'true'
+        run: rm -f "$RUNNER_TEMP/memento.jks" "$RUNNER_TEMP/android.env"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: steps.signing.outputs.ready == 'true'
+        with:
+          name: android
+          path: ${{ runner.temp }}/out/
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: GitHub Release
+    needs: [prepare, website, images, server-image, android]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write # makes the GitHub Release and uploads its files
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ env.TAG }}
+          persist-credentials: false
+          sparse-checkout: scripts/check-release.py
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: ${{ runner.temp }}/release
+          merge-multiple: true
+
+      # A server pulls the images without logging in; GitHub may make a new package private.
+      - name: Check anyone can pull the images
+        env:
+          IMAGES: ${{ needs.prepare.outputs.images }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          if python3 -I scripts/check-release.py "$IMAGES" "$VERSION"; then exit 0; fi
+          echo "::warning title=The images aren't public::A server can't pull them yet. Make each package public: github.com/$OWNER?tab=packages → the package → Package settings → Change visibility → Public."
+          {
+            echo "### The images aren't public yet"
+            echo
+            echo "A server pulls them without logging in. Make each of the four packages public, once:"
+            echo "github.com/$OWNER?tab=packages → the package → Package settings → Change visibility → Public."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          IMAGES: ${{ needs.prepare.outputs.images }}
+          IMMICH: ${{ needs.prepare.outputs.immich }}
+          PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
+          APP: ${{ needs.android.outputs.built }}
+        run: |
+          cd "$RUNNER_TEMP/release"
+          sha256sum -- * > "$RUNNER_TEMP/SHA256SUMS"
+          mv "$RUNNER_TEMP/SHA256SUMS" .
+          {
+            echo "Memento $VERSION, on Immich $IMMICH."
+            echo
+            if [ "$APP" = true ]; then
+              echo "**The Android app:** \`memento-$VERSION.apk\` below, for 64-bit ARM phones. It installs over an"
+              echo "older Memento app signed with the same key."
+            else
+              echo "**No Android app in this release:** the repo's signing secrets aren't set."
+            fi
+            echo
+            echo "**Server images**, for linux/amd64 and linux/arm64:"
+            for name in memento-server memento-extras memento-reader memento-creations; do
+              echo "- \`$IMAGES/$name:$VERSION\`"
+            done
+            echo
+            echo "To run this release on your server: \`./memento prod update $VERSION\` (docs/upgrades.md)."
+            echo "\`memento-website-$VERSION.tar.gz\` is the website on its own, the same files as in memento-server."
+          } > "$RUNNER_TEMP/notes.md"
+          if gh release view "$VERSION" > /dev/null 2>&1; then
+            gh release upload "$VERSION" ./* --clobber
+          else
+            flags=(--verify-tag --title "Memento $VERSION" --notes "$(cat "$RUNNER_TEMP/notes.md")" --generate-notes)
+            if [ "$PRERELEASE" = true ]; then flags+=(--prerelease); fi
+            gh release create "$VERSION" "${flags[@]}" ./*
+          fi
+          {
+            echo "### Memento $VERSION"
+            echo
+            cat "$RUNNER_TEMP/notes.md"
+          } >> "$GITHUB_STEP_SUMMARY"
