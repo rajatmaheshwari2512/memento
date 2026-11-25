@@ -4,7 +4,8 @@ Dev is a throwaway copy of Memento on your computer. It has a test admin, a few 
 and a fake Gemini. You can try everything without a server and without spending money. Nothing
 in dev reaches a real server.
 
-This guide is for a person and for an AI agent. Steps marked **MANUAL** need a person.
+This guide is for a person and for an AI agent. Steps marked **MANUAL** need a person. To run
+Memento for real, on a server, see [setup-prod.md](setup-prod.md); it also compares dev and prod.
 
 ## The short version
 
@@ -144,8 +145,8 @@ lists them, with where to download each and what to name it.
 - The test photos are generated. You can add your own, but they stay on your computer.
 - Smart search and faces run on your computer's processor: they're fine, but slower.
 - Immich's own settings are Immich's defaults (for example the smaller ViT-B-32 search model). Prod's
-  changes are listed in [setup.md](setup.md), step 7; set them in Administration → Settings to try
-  them in dev.
+  changes are listed in [setup-prod.md](setup-prod.md#mementos-immich-settings); set them in
+  Administration → Settings to try them in dev.
 - No iPhone app (prod doesn't have one either).
 - Only this computer can reach it: every port listens on `127.0.0.1`, and the proxy only answers
   `localhost` and `127.0.0.1`. A phone can't reach it yet.

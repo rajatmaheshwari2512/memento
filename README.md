@@ -37,6 +37,13 @@ It comes as a website and an Android app. There is no iPhone app.
 
 The apps say "Memento" in place of "Immich", with their own logo.
 
+## Guides
+
+- [Try it on your computer (dev)](docs/setup-dev.md): free, with test photos and a fake Gemini.
+- [Run it on a server (prod)](docs/setup-prod.md): setup, the Android app, backups and restores,
+  and how dev and prod differ.
+- [Upgrades](docs/upgrades.md): new Memento changes, and new Immich releases.
+
 ## How it's built
 
 - **Immich v3.4.2** does the heavy lifting: storing photos, faces, smart search, the timeline.
@@ -74,7 +81,7 @@ The apps say "Memento" in place of "Immich", with their own logo.
 | `infra/` | Terraform: creates the server, DNS and backup bucket (optional). |
 | `apps/` | Builds the website and the Android app; the logo. |
 | `scripts/` | `privacy-check.sh`, run before pushing. |
-| `docs/` | `setup-dev.md`, the dev guide. The guide for your own server comes later. |
+| `docs/` | The guides: `setup-dev.md` (dev), `setup-prod.md` (a server), `upgrades.md`. |
 
 ## Try it on your computer
 
@@ -89,7 +96,7 @@ Then open the link it prints. The full guide is [docs/setup-dev.md](docs/setup-d
 
 ## Run it for real
 
-A full guide for your own server comes later. In short:
+The full guide is [docs/setup-prod.md](docs/setup-prod.md). In short:
 
 ```
 cp .env.example .env          # then fill in the PROD part: .env.example says what each line is
@@ -99,7 +106,9 @@ cp .env.example .env          # then fill in the PROD part: .env.example says wh
 ```
 
 The server is Ubuntu 24.04, ARM64 or x86-64: yours (`SERVER_HOST`), or Oracle Cloud's free ARM
-server, which setup makes with Terraform. Cloudflare DNS and backups are optional too. Back up
+server, which setup makes with Terraform. (On a server that isn't Oracle's, setup doesn't finish
+yet: [the known gap](docs/setup-prod.md#two-ways-to-get-a-server).) Cloudflare DNS and backups
+are optional too. Back up
 `.env`, and `infra/terraform.tfstate` once setup has made anything: it's Terraform's only record of
 the server, DNS record and bucket (without it, setup would make a new server).
 
