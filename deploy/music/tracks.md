@@ -11,9 +11,9 @@ nothing else changes.
 1. Open each track's Pixabay page and use its **Download** button. Pixabay blocks scripts, so
    this is done by hand.
 2. Save each file under the name in the first column, in `.local/recap-music/tracks/` at the top
-   of the repo. Dev and prod both use that folder. For dev, `MUSIC_DIR` in `.env` can point at
-   another folder.
-3. Prod copies every `.mp3` in that folder to the server on the next deploy.
+   of the repo. Dev and prod both use that folder; `MUSIC_DIR` in `.env` can point at
+   another folder instead.
+3. Prod copies every `.mp3` in that folder (or `MUSIC_DIR`) to the server on the next deploy.
 
 The start of the file name is its mood. A recap picks among the tracks whose name starts with
 a mood that fits it: trips get `adventure` or `upbeat`, big days `festive` or `indian-festive`, a
