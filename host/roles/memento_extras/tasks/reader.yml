@@ -1,0 +1,98 @@
+# The trained question reader: its code, the word splitter it was trained with, and the model,
+# built into a small image of its own (memento-extras/reader/). Whenever it's slow or down,
+# Ask searches the question as typed. The model is downloaded on the server from Hugging Face
+# (memento_extras_reader_*), or copied from memento_extras_reader_model (READER_MODEL_DIR in .env).
+- name: Check the question reader's model is on this computer (READER_MODEL_DIR)
+  tags: reader
+  ansible.builtin.stat:
+    path: "{{ memento_extras_reader_model }}/model.onnx"
+  delegate_to: localhost
+  become: false
+  register: memento_extras_reader_model_stat
+  when: memento_extras_reader_model | length > 0
+
+- name: Stop if it isn't
+  tags: reader
+  ansible.builtin.assert:
+    that: memento_extras_reader_model_stat.stat.exists
+    fail_msg: "No reader model in {{ memento_extras_reader_model }} (config.json, tokenizer.json, model.onnx from huggingface.co/mahesraj/memento-ask-reader)."
+    quiet: true
+  when: memento_extras_reader_model | length > 0
+
+- name: Create the question reader's build folders
+  tags: reader
+  ansible.builtin.file:
+    path: "{{ memento_extras_dir }}/reader-build/{{ item }}"
+    state: directory
+    mode: "0755"
+  loop: ["", model]
+  register: memento_extras_reader_dirs
+
+- name: Copy the question reader's code to the VM
+  tags: reader
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../memento-extras/{{ item.src }}"
+    dest: "{{ memento_extras_dir }}/reader-build/{{ item.dest }}"
+    mode: "0644"
+    directory_mode: "0755"
+  loop:
+    - { src: reader/Dockerfile, dest: Dockerfile }
+    - { src: reader/.dockerignore, dest: .dockerignore }
+    - { src: reader/requirements.txt, dest: requirements.txt }
+    - { src: reader/reader/, dest: reader/ }
+    - { src: reader/common.py, dest: common.py }
+  register: memento_extras_reader_code
+
+# ~210 MB, downloaded once. The checksums pin the exact files; a changed file fails here.
+- name: Download the question reader's model
+  tags: reader
+  ansible.builtin.get_url:
+    url: "{{ memento_extras_reader_url }}/{{ memento_extras_reader_revision }}/{{ item.key }}"
+    dest: "{{ memento_extras_dir }}/reader-build/model/{{ item.key }}"
+    checksum: "sha256:{{ item.value }}"
+    mode: "0644"
+    timeout: 600
+  loop: "{{ memento_extras_reader_sha256 | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  register: memento_extras_reader_download
+  # A dry run (--check) creates no folders, so on the first deploy there's nothing to download into.
+  when:
+    - memento_extras_reader_model | length == 0
+    - not (ansible_check_mode and memento_extras_reader_dirs is changed)
+
+- name: Copy the question reader's model to the VM (READER_MODEL_DIR)
+  tags: reader
+  ansible.builtin.copy:
+    src: "{{ memento_extras_reader_model }}/{{ item }}"
+    dest: "{{ memento_extras_dir }}/reader-build/model/{{ item }}"
+    mode: "0644"
+  loop: [config.json, tokenizer.json, model.onnx]
+  register: memento_extras_reader_model_files
+  when: memento_extras_reader_model | length > 0
+
+- name: Build the question reader's image
+  community.docker.docker_image:
+    name: memento-reader
+    tag: local
+    source: build
+    build:
+      path: "{{ memento_extras_dir }}/reader-build"
+    force_source: >-
+      {{ memento_extras_reader_code is changed or memento_extras_reader_download is changed
+         or memento_extras_reader_model_files is changed }}
+  register: memento_extras_reader_image
+  # A dry run (--check) creates no folders, so on the first deploy there's nothing to build from.
+  when: not (ansible_check_mode and memento_extras_reader_dirs is changed)
+  tags: reader
+
+# A new model alone: `ansible-playbook site.yml --tags reader` runs only the reader's tasks above
+# and this one, which restarts just the reader, so the rest of the service isn't redeployed with
+# it. A full deploy restarts the reader with everything else (below) and skips this.
+- name: Restart only the question reader (--tags reader)
+  ansible.builtin.command:
+    cmd: docker compose up -d --no-deps --force-recreate memento-reader
+    chdir: "{{ memento_extras_dir }}"
+  when: memento_extras_reader_image is changed
+  changed_when: true
+  tags: [reader, never]

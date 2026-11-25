@@ -74,9 +74,17 @@ memento_extras_immich_db_container: immich_postgres
 memento_extras_immich_thumbs: "{{ immich_thumb_location | default('/opt/immich/thumbs') }}"
 
 # --- The trained question reader (memento-extras/reader/) ---
-# The model to ship, on your computer: config.json, tokenizer.json and model.onnx, from
-# huggingface.co/mahesraj/memento-ask-reader. Not in git.
-memento_extras_reader_model: "{{ playbook_dir }}/../.local/train-intent/reader-model"
+# The model, downloaded on the server: each file at this revision, checked by its sha256.
+# ./memento dev reads the same three settings.
+memento_extras_reader_url: https://huggingface.co/mahesraj/memento-ask-reader/resolve
+memento_extras_reader_revision: 244f299bef1aaf02a6371fd02fa5373957fe7a02
+memento_extras_reader_sha256:
+  config.json: 56558173fb9eddd0f9f91755f57cd6af6c23cb058b3b39104cac9937e30374e9
+  tokenizer.json: 1fa801c30153c1ad7f0c1455096152aa100c7faa7b2b36cb3fef7fb027b4bdec
+  model.onnx: 3de07a9fc485797d14afc805e161774ee3bd709ec32249b826e12d30165d55ac
+# A folder on this computer with config.json, tokenizer.json and model.onnx, copied instead of
+# the download (READER_MODEL_DIR in .env). "": the download.
+memento_extras_reader_model: ""
 memento_extras_reader_memory: 768m
 
 # --- Themed memories and creations (memento-extras/src/services/memories.service.ts, creations.service.ts) ---

@@ -16,11 +16,11 @@ root="$(cd "$(dirname "$0")" && pwd)"
 dev="$root/.local/dev"
 link="http://localhost:8091/__local_login"
 python_image="python:3.12-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b"
-reader_url="https://huggingface.co/mahesraj/memento-ask-reader/resolve"
-reader_revision="244f299bef1aaf02a6371fd02fa5373957fe7a02"
-reader_files="model.onnx:3de07a9fc485797d14afc805e161774ee3bd709ec32249b826e12d30165d55ac
-tokenizer.json:1fa801c30153c1ad7f0c1455096152aa100c7faa7b2b36cb3fef7fb027b4bdec
-config.json:56558173fb9eddd0f9f91755f57cd6af6c23cb058b3b39104cac9937e30374e9"
+extras_defaults="$root/host/roles/memento_extras/defaults/main.yml"
+reader_url=$(sed -n 's/^memento_extras_reader_url: *//p' "$extras_defaults" 2>/dev/null || true)
+reader_revision=$(sed -n 's/^memento_extras_reader_revision: *//p' "$extras_defaults" 2>/dev/null || true)
+reader_files=$(sed -n '/^memento_extras_reader_sha256:/,/^[^ ]/s/^  \([A-Za-z0-9._-]*\): *\([0-9a-f]\{64\}\) *$/\1:\2/p' \
+  "$extras_defaults" 2>/dev/null || true)
 reader_download="$root/.local/reader-model/$reader_revision"
 owner_reader_copy="$root/.local/train-intent/reader-model"
 compose_names="COMPOSE_PROJECT_NAME COMPOSE_FILE COMPOSE_PROFILES COMPOSE_ENV_FILES COMPOSE_PATH_SEPARATOR
@@ -294,6 +294,8 @@ copy_if_changed() {
 
 download_reader() {
   local entry file
+  [ -n "$reader_url" ] && [ -n "$reader_revision" ] && [ -n "$reader_files" ] ||
+    fail "Can't find the reader model's pin (memento_extras_reader_*) in $extras_defaults."
   mkdir -p "$reader_download"
   for entry in $reader_files; do
     file=${entry%%:*}

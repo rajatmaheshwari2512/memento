@@ -32,6 +32,11 @@ immich_custom_web_dir: "{{ playbook_dir }}/../apps/web/dist/{{ immich_version }}
 memento_extras_gemini_api_key: "{{ dotenv.GEMINI_API_KEY | default('') }}"
 memento_extras_secret: "{{ dotenv.MEMENTO_SECRET | default('') }}"
 memento_extras_timezone: "{{ base_timezone }}"
+# Ask's reader model from a folder on this computer (relative to the repo, or absolute). "": downloaded on the server.
+memento_extras_reader_model: >-
+  {{ '' if not dotenv.READER_MODEL_DIR | default('')
+     else dotenv.READER_MODEL_DIR if dotenv.READER_MODEL_DIR is abs
+     else playbook_dir ~ '/../' ~ dotenv.READER_MODEL_DIR }}
 
 # --- backup ---
 backup_bucket: "{{ dotenv.BACKUP_BUCKET_NAME | default('') }}"
