@@ -127,12 +127,33 @@ void main() {
       expect(result.totalBytes, 0);
     });
 
-    test('on iOS keeps the size from the server', () async {
+    test('on iOS keeps the size from the server when no Storage saver copies are involved', () async {
       debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      when(
+        () => localAssetRepository.getRemovalCandidates(
+          any(),
+          any(),
+          keepMediaType: any(named: 'keepMediaType'),
+          keepFavorites: any(named: 'keepFavorites'),
+          keepAlbumIds: any(named: 'keepAlbumIds'),
+        ),
+      ).thenAnswer((_) async => RemovalCandidatesResult(assets: assets, totalBytes: 10));
 
       final result = await sut.getRemovalCandidates('user', DateTime.now());
 
       expect(result.totalBytes, 10);
+      expect(result.hasStorageSaverCopies, isFalse);
+      verifyNever(() => storageSaverNative.sizes(any()));
+    });
+
+    test('on iOS shows no size when Storage saver copies are involved', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+
+      final result = await sut.getRemovalCandidates('user', DateTime.now());
+
+      expect(result.totalBytes, 0);
+      expect(result.assets, assets);
+      expect(result.hasStorageSaverCopies, isTrue);
       verifyNever(() => storageSaverNative.sizes(any()));
     });
   });

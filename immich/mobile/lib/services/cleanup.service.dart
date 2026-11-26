@@ -39,12 +39,11 @@ class CleanupService {
       keepFavorites: keepFavorites,
       keepAlbumIds: keepAlbumIds,
     );
-    if (!CurrentPlatform.isAndroid) {
-      return result;
-    }
     return RemovalCandidatesResult(
       assets: result.assets,
-      totalBytes: await _phoneBytes(result.assets),
+      totalBytes: CurrentPlatform.isAndroid
+          ? await _phoneBytes(result.assets)
+          : (result.hasStorageSaverCopies ? 0 : result.totalBytes),
       hasStorageSaverCopies: result.hasStorageSaverCopies,
     );
   }
