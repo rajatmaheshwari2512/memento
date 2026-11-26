@@ -359,6 +359,15 @@ private class VideoExport(
 
   private fun start() {
     if (done.count == 0L) return
+    try {
+      startExport()
+    } catch (e: Exception) {
+      Log.w(TAG, "Couldn't start shrinking a video", e)
+      finish("failed: ${e.javaClass.simpleName}")
+    }
+  }
+
+  private fun startExport() {
     val encoderFactory = DefaultEncoderFactory.Builder(context)
       .setRequestedVideoEncoderSettings(VideoEncoderSettings.Builder().setBitrate(bitrate).build())
       .setEnableFallback(true)
