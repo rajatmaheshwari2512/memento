@@ -8,8 +8,8 @@ class AdjustImagePlugin: ImmichPlugin, FlutterPlugin {
   static let name = "AdjustImagePlugin"
 
   private let queue = DispatchQueue(label: "AdjustImage", qos: .userInitiated)
-  private var source: AdjustSource?
-  private var output: AdjustOutput?
+  private var source: AdjustBitmap?
+  private var output: AdjustBitmap?
 
   static func register(with registrar: any FlutterPluginRegistrar) {
     let instance = AdjustImagePlugin()
@@ -77,7 +77,7 @@ class AdjustImagePlugin: ImmichPlugin, FlutterPlugin {
 
   private func open(path: String) throws -> [String: Int] {
     release()
-    let opened = try AdjustSource(path: path)
+    let opened = try AdjustBitmap.decode(path: path)
     source = opened
     return ["width": opened.width, "height": opened.height]
   }
@@ -89,11 +89,7 @@ class AdjustImagePlugin: ImmichPlugin, FlutterPlugin {
 
   private func createOutput(width: Int, height: Int) throws {
     output = nil
-    let available = os_proc_available_memory()
-    if available > 0 && width * height * 4 > available {
-      throw AdjustImageError.tooLarge
-    }
-    output = try AdjustOutput(width: width, height: height)
+    output = try AdjustBitmap(width: width, height: height)
   }
 
   private func write(_ rect: CGRect, pixels: FlutterStandardTypedData) throws {
@@ -110,6 +106,13 @@ class AdjustImagePlugin: ImmichPlugin, FlutterPlugin {
     source = nil
     output = nil
   }
+
+  static func ensureMemory(bytes: Int) throws {
+    let available = os_proc_available_memory()
+    if available > 0 && bytes > available {
+      throw AdjustImageError.tooLarge
+    }
+  }
 }
 
 enum AdjustImageError: Error {
@@ -124,15 +127,29 @@ private enum AdjustPixels {
   static let rgbx = CGImageAlphaInfo.noneSkipLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue
 }
 
-// The photo at a path, read upright in parts: RGBA bytes, premultiplied, sRGB.
-final class AdjustSource {
+// An upright picture in memory (RGBA bytes, premultiplied, sRGB): the decoded source or the copy.
+final class AdjustBitmap {
   let width: Int
   let height: Int
-  private let image: CGImage
-  private let toUpright: CGAffineTransform
-  private let toRaw: CGAffineTransform
+  private let bytesPerRow: Int
+  private let data: UnsafeMutableRawPointer
 
-  init(path: String) throws {
+  init(width: Int, height: Int) throws {
+    guard width > 0, height > 0 else { throw AdjustImageError.failed("Width and height must be > 0") }
+    try AdjustImagePlugin.ensureMemory(bytes: width * height * 4)
+    guard let data = calloc(width * height, 4) else { throw AdjustImageError.tooLarge }
+    self.width = width
+    self.height = height
+    self.bytesPerRow = width * 4
+    self.data = data
+  }
+
+  deinit {
+    free(data)
+  }
+
+  // The photo at `path`, decoded whole with its EXIF orientation applied.
+  static func decode(path: String) throws -> AdjustBitmap {
     let options: [NSString: Any] = [kCGImageSourceShouldCache: false]
     guard let source = CGImageSourceCreateWithURL(URL(fileURLWithPath: path) as CFURL, nil),
           let image = CGImageSourceCreateImageAtIndex(source, 0, options as CFDictionary)
@@ -141,63 +158,30 @@ final class AdjustSource {
     }
     let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [NSString: Any]
     let exif = (properties?[kCGImagePropertyOrientation] as? NSNumber)?.uint32Value ?? 1
-    let orientation = Self.orientationMatrix(CGImagePropertyOrientation(rawValue: exif) ?? .up)
+    let orientation = orientationMatrix(CGImagePropertyOrientation(rawValue: exif) ?? .up)
     let bounds = CGRect(x: 0, y: 0, width: image.width, height: image.height).applying(orientation)
-    self.image = image
-    toUpright = orientation.concatenating(CGAffineTransform(translationX: -bounds.minX, y: -bounds.minY))
-    toRaw = toUpright.inverted()
-    width = Int(bounds.width.rounded())
-    height = Int(bounds.height.rounded())
-  }
+    let toUpright = orientation.concatenating(CGAffineTransform(translationX: -bounds.minX, y: -bounds.minY))
 
-  // The upright part `rect`.
-  func read(_ rect: CGRect) throws -> Data {
-    let mapped = rect.applying(toRaw)
-    let raw = CGRect(
-      x: mapped.minX.rounded(),
-      y: mapped.minY.rounded(),
-      width: mapped.width.rounded(),
-      height: mapped.height.rounded()
-    )
-    guard rect.width > 0, rect.height > 0,
-          CGRect(x: 0, y: 0, width: image.width, height: image.height).contains(raw)
-    else {
-      throw AdjustImageError.failed("The part is outside the photo")
+    let bitmap = try AdjustBitmap(width: Int(bounds.width.rounded()), height: Int(bounds.height.rounded()))
+    guard let context = CGContext(
+      data: bitmap.data,
+      width: bitmap.width,
+      height: bitmap.height,
+      bitsPerComponent: 8,
+      bytesPerRow: bitmap.bytesPerRow,
+      space: AdjustPixels.sRGB,
+      bitmapInfo: AdjustPixels.rgba
+    ) else {
+      throw AdjustImageError.failed("Couldn't read the photo")
     }
-    guard let part = image.cropping(to: raw), part.width == Int(raw.width), part.height == Int(raw.height) else {
-      throw AdjustImageError.unreadable("Couldn't read part of the photo")
-    }
-
-    let width = Int(rect.width)
-    let height = Int(rect.height)
-    // Top-left pixel coordinates of the raw part, to top-left pixel coordinates of the upright tile.
-    let toTile = CGAffineTransform(translationX: raw.minX, y: raw.minY)
-      .concatenating(toUpright)
-      .concatenating(CGAffineTransform(translationX: -rect.minX, y: -rect.minY))
-    let fromImage = CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: 0, ty: CGFloat(part.height))
-    let toContext = CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: 0, ty: CGFloat(height))
-
-    var pixels = Data(count: width * height * 4)
-    let drawn = pixels.withUnsafeMutableBytes { buffer in
-      guard let context = CGContext(
-        data: buffer.baseAddress,
-        width: width,
-        height: height,
-        bitsPerComponent: 8,
-        bytesPerRow: width * 4,
-        space: AdjustPixels.sRGB,
-        bitmapInfo: AdjustPixels.rgba
-      ) else {
-        return false
-      }
-      context.interpolationQuality = .none
-      context.setBlendMode(.copy)
-      context.concatenate(fromImage.concatenating(toTile).concatenating(toContext))
-      context.draw(part, in: CGRect(x: 0, y: 0, width: part.width, height: part.height))
-      return true
-    }
-    guard drawn else { throw AdjustImageError.tooLarge }
-    return pixels
+    // Image space and context space as top-left pixel coordinates, y down.
+    let fromImage = CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: 0, ty: CGFloat(image.height))
+    let toContext = CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: 0, ty: CGFloat(bitmap.height))
+    context.interpolationQuality = .none
+    context.setBlendMode(.copy)
+    context.concatenate(fromImage.concatenating(toUpright).concatenating(toContext))
+    context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+    return bitmap
   }
 
   // EXIF orientation, as a transform from stored pixels to upright (top-left origin, y down).
@@ -213,26 +197,23 @@ final class AdjustSource {
     default: .identity
     }
   }
-}
 
-// The full-size copy, filled tile by tile (RGBA bytes, premultiplied, sRGB) and encoded once.
-final class AdjustOutput {
-  let width: Int
-  let height: Int
-  private let bytesPerRow: Int
-  private let data: UnsafeMutableRawPointer
-
-  init(width: Int, height: Int) throws {
-    guard width > 0, height > 0 else { throw AdjustImageError.failed("Width and height must be > 0") }
-    guard let data = calloc(width * height, 4) else { throw AdjustImageError.tooLarge }
-    self.width = width
-    self.height = height
-    self.bytesPerRow = width * 4
-    self.data = data
-  }
-
-  deinit {
-    free(data)
+  // A copy of the pixels under `rect`, which must lie inside the picture.
+  func read(_ rect: CGRect) throws -> Data {
+    let x = Int(rect.minX)
+    let y = Int(rect.minY)
+    let partWidth = Int(rect.width)
+    let partHeight = Int(rect.height)
+    guard partWidth > 0, partHeight > 0, x >= 0, y >= 0, x + partWidth <= width, y + partHeight <= height else {
+      throw AdjustImageError.failed("The part is outside the photo")
+    }
+    var pixels = Data(count: partWidth * partHeight * 4)
+    pixels.withUnsafeMutableBytes { part in
+      for row in 0..<partHeight {
+        memcpy(part.baseAddress! + row * partWidth * 4, data + (y + row) * bytesPerRow + x * 4, partWidth * 4)
+      }
+    }
+    return pixels
   }
 
   // Replaces the pixels under `rect` with `pixels` (rect.width × rect.height × 4 bytes).
