@@ -80,7 +80,7 @@
   when: not (ansible_check_mode and memento_extras_reader_dirs is changed)
   tags: reader
 
-# A new model alone: `ansible-playbook site.yml --tags reader` restarts just the reader.
+# A new model alone: `./memento prod deploy --tags reader` restarts just the reader.
 - name: Restart only the question reader (--tags reader)
   ansible.builtin.command:
     cmd: docker compose up -d --no-deps --force-recreate memento-reader
