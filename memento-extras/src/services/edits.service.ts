@@ -14,7 +14,6 @@ import {
 import { gemini, GeminiRefused } from "../clients/gemini.client.ts";
 import { inSaveLine, placeWithOriginal, requireFreeSpace, requireOwnPhoto, uploadCopy, withSaveSlot } from "./copies.service.ts";
 import { getFlags } from "./flags.service.ts";
-import { tryFreeTool } from "./free-first.service.ts";
 import { finish, reserve, usage } from "./limits.service.ts";
 import {
   editIds, editImagePath, getEdit, openEditImage, putEdit, removeEdit, updateEdit,
@@ -115,8 +114,6 @@ export async function makeEdit(
   const asset = await getAsset(cred, assetId);
   requireOwnPhoto(asset, user);
 
-  const free = await tryFreeTool(user, asset, request);
-  if (free !== null) return free;
   requireEditableSize(asset);
 
   // "Edit more" works on the previous result instead of the original, at its size.
