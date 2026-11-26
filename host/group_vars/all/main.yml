@@ -7,12 +7,9 @@ dotenv: "{{ (lookup('ansible.builtin.file', lookup('ansible.builtin.env', 'MEMEN
 
 photos_hostname: "{{ dotenv.MEMENTO_DOMAIN | default('') }}"
 
-# --- A Memento release (docs/upgrades.md) ---
-# MEMENTO_VERSION in .env, like v1.2.0: the server runs that release's images, pulled from
-# MEMENTO_IMAGES (like ghcr.io/<owner>; ./memento works it out from the git remote when it's
-# empty), instead of building them from this checkout. Empty: built from this checkout.
+# --- A Memento release: MEMENTO_VERSION and MEMENTO_IMAGES (.env.example) ---
 memento_version: "{{ dotenv.MEMENTO_VERSION | default('') }}"
-memento_images: "{{ dotenv.MEMENTO_IMAGES | default('') }}"
+memento_images: "{{ dotenv.MEMENTO_IMAGES | default('') | lower | regex_replace('/+$', '') }}"
 
 # --- base ---
 # TZ in .env, like Europe/London. Empty: Etc/UTC.

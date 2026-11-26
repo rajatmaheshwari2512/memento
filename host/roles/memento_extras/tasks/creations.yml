@@ -37,8 +37,6 @@
   loop_control:
     label: "{{ item | basename }}"
 
-# From source (no MEMENTO_VERSION): the image, built on the VM from this checkout. A release's
-# is pulled with the others (main.yml).
 - name: Build the creations image from this checkout
   when: memento_extras_release | length == 0
   block:

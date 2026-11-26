@@ -32,7 +32,6 @@
     owner: root
     group: root
     mode: "0755"
-  # From source: build/ holds the source the images are built from (none for a release).
   loop: >-
     {{ [memento_extras_dir] + ([] if memento_extras_release else
        [memento_extras_dir ~ '/build', memento_extras_dir ~ '/build/creations/src']) }}
@@ -48,7 +47,6 @@
     mode: u=rwX,g=,o=
     recurse: true
 
-# From source (no MEMENTO_VERSION): the service's image, built on the VM from this checkout.
 - name: Build the service's image from this checkout
   when: memento_extras_release | length == 0
   block:
@@ -122,8 +120,6 @@
         force_source: "{{ memento_extras_copied is changed or memento_extras_removed is changed }}"
       register: memento_extras_image
 
-# A release (MEMENTO_VERSION): its three images, pulled instead of built. An image already on
-# the server isn't pulled again.
 - name: Pull Memento's images for the release
   community.docker.docker_image:
     name: "{{ item }}"
@@ -135,7 +131,6 @@
   register: memento_extras_pulled
   when: memento_extras_release | length > 0
 
-# Builds the reader from source; a release's reader image has its model inside.
 - name: The question reader (Ask)
   ansible.builtin.import_tasks: reader.yml
   when: memento_extras_release | length == 0
@@ -175,3 +170,43 @@
 
 - name: Night captions for new photos
   ansible.builtin.import_tasks: caption-night.yml
+
+# A release keeps its images and the previous release's (for going back), listed in releases;
+# other tags of the four images are removed.
+- name: Remove older releases' images
+  when: memento_extras_release | length > 0
+  block:
+    - name: Read the releases kept so far
+      ansible.builtin.slurp:
+        src: "{{ memento_extras_dir }}/releases"
+      register: memento_extras_releases_file
+      failed_when: false
+
+    - name: Keep this release and the one before
+      ansible.builtin.set_fact:
+        memento_extras_keep: >-
+          {{ (([memento_extras_release] + (memento_extras_releases_file.content | default('') | b64decode).split())
+              | unique | list)[:2] }}
+
+    - name: Write down the releases kept
+      ansible.builtin.copy:
+        content: "{{ memento_extras_keep | join('\n') }}\n"
+        dest: "{{ memento_extras_dir }}/releases"
+        mode: "0644"
+
+    - name: List the release images on the server
+      community.docker.docker_host_info:
+        images: true
+        images_filters:
+          reference: "{{ memento_extras_images }}/memento-*"
+      register: memento_extras_release_images
+
+    - name: Remove the other releases' images
+      community.docker.docker_image:
+        name: "{{ item }}"
+        state: absent
+      loop: >-
+        {{ memento_extras_release_images.images | map(attribute='RepoTags') | flatten
+           | select('match', (memento_extras_images | regex_escape) ~ '/memento-(server|extras|reader|creations):')
+           | reject('match', '.*:(' ~ (memento_extras_keep | map('regex_escape') | join('|')) ~ ')$')
+           | list }}

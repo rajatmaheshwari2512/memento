@@ -36,8 +36,6 @@
     checksum: sha256:{{ immich_compose_sha256 }}
     mode: "0644"
 
-# A Memento release: its server image, pulled before Immich starts, so that one built on another
-# Immich release (its org.opencontainers.image.base.name label) stops the deploy here.
 - name: Get Memento's server image
   when: immich_server_image | length > 0
   block:
@@ -51,7 +49,6 @@
         name: "{{ immich_server_image }}"
       register: immich_server_image_info
 
-    # Skipped in --check when the image is new: it isn't pulled there.
     - name: Check it's built on immich_version
       vars:
         immich_server_built_on: >-

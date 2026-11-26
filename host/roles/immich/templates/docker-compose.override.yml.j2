@@ -5,7 +5,6 @@
 services:
   immich-server:
 {% if immich_server_image | length > 0 %}
-    # A Memento release: Immich's server with Memento's website already in it.
     image: {{ immich_server_image }}
 {% endif %}
     # Only reachable from the VM itself (Caddy), never straight from the internet.
