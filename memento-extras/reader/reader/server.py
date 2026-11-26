@@ -1,8 +1,4 @@
-"""HTTP: POST /read {"question": "..."} -> {"tokens": [...], "tags": [...], "ms": n}; GET /health.
-
-Only the extras service calls it, over an internal network with no internet. The question
-is never logged, and nothing about anyone is kept.
-"""
+"""HTTP: POST /read {"question": "..."} -> {"tokens": [...], "tags": [...], "ms": n}; GET /health."""
 
 import json
 import logging
@@ -32,7 +28,7 @@ def make_handler(labeller: Labeller, settings: Settings) -> type[BaseHTTPRequest
     class Handler(BaseHTTPRequestHandler):
         """Answers /health and /read; refuses everything else."""
 
-        timeout = settings.request_timeout_s  # a stalled client can't hold a thread forever
+        timeout = settings.request_timeout_s
 
         def do_GET(self) -> None:
             """Health check for Docker."""
@@ -74,7 +70,7 @@ def make_handler(labeller: Labeller, settings: Settings) -> type[BaseHTTPRequest
             if not isinstance(question, str):
                 raise BadRequestError(400, "question must be text.")
             try:
-                question.encode("utf-8")  # no lone surrogates ("\ud800")
+                question.encode("utf-8")
             except UnicodeEncodeError:
                 raise BadRequestError(400, "question must be text.") from None
             return question
@@ -88,7 +84,7 @@ def make_handler(labeller: Labeller, settings: Settings) -> type[BaseHTTPRequest
             self.wfile.write(data)
 
         def log_message(self, format: str, *args: Any) -> None:  # noqa: A002 (stdlib name)
-            """No request lines in the log: never the question."""
+            """Logs no request lines."""
 
     return Handler
 
@@ -109,7 +105,6 @@ def main() -> None:
     )
     labeller.label("warm up")
     with Server(("0.0.0.0", settings.port), make_handler(labeller, settings)) as server:
-        # Docker stops with SIGTERM: stop accepting, finish the requests in hand, then exit.
         signal.signal(signal.SIGTERM, lambda *_: threading.Thread(target=server.shutdown).start())
         log.info("started model=%s port=%d", labeller.model_name, settings.port)
         server.serve_forever()

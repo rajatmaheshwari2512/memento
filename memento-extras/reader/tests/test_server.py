@@ -59,10 +59,10 @@ class ServerTest(unittest.TestCase):
         self.assertEqual(self.post("/read", json.dumps({"question": 5}).encode())[0], 400)
         self.assertEqual(self.post("/read", b"x" * 5000)[0], 413)
         self.assertEqual(self.post("/other", b"{}")[0], 404)
-        self.assertEqual(self.post("/read", b"\xff\xfe")[0], 400)  # not UTF-8
+        self.assertEqual(self.post("/read", b"\xff\xfe")[0], 400)
         self.assertEqual(
             self.post("/read", b'{"question": "\\ud800"}')[0], 400
-        )  # a lone surrogate
+        )
 
     def test_health(self) -> None:
         with urllib.request.urlopen(self.base + "/health") as res:

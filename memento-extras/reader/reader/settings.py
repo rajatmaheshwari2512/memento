@@ -18,7 +18,7 @@ class Settings:
     port: int = field(default_factory=lambda: int(_env("PORT", "8000")))
     threads: int = field(
         default_factory=lambda: int(_env("THREADS", "2"))
-    )  # the server has 2 cores
-    max_chars: int = 300  # the extras service's limit on a question
+    )  # worker threads for the model
+    max_chars: int = 300  # longest question read
     max_body_bytes: int = 4096
-    request_timeout_s: float = 10.0  # a client that stops sending is dropped after this long
+    request_timeout_s: float = 10.0  # seconds before a client that stops sending is dropped

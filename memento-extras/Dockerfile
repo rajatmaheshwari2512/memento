@@ -1,14 +1,11 @@
 # Memento's extras service (AI edits, feature flags, ...). Built on the VM by Ansible
 # (host/roles/memento_extras).
-# No npm packages: Node 24 runs the TypeScript files directly (it strips the types),
-# and everything used (HTTP server, fetch, SQLite) is built into Node.
 FROM node:24.22.2-alpine
 
 ENV NODE_ENV=production
 WORKDIR /app
 COPY package.json ./
 COPY src ./src
-# The creations container's job format and limits, which the service shares (src/constants/creations.constants.ts).
 COPY creations/src/job.ts ./creations/src/job.ts
 
 # Not root, and not the image's "node" user (uid 1000): on the VM, uid 1000 is Oracle's

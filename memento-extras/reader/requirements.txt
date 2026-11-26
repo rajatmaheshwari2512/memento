@@ -1,5 +1,4 @@
-# Every package the reader installs, at exact versions with their hashes, so a rebuild gets
-# exactly these files or fails. Made from requirements.in in the base image (see the Dockerfile):
+# Every package the reader installs, at exact versions with hashes. Made from requirements.in:
 #   docker run --rm -v "$PWD":/w -w /w python:3.12-slim@<the Dockerfile's digest> sh -c \
 #     'pip install -q pip-tools==7.7.0 && pip-compile -q --generate-hashes --strip-extras --no-header --allow-unsafe -o requirements.txt requirements.in'
 

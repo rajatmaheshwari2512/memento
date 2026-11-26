@@ -1,8 +1,4 @@
-"""The model: a question in, one label per word out.
-
-Words are split by `common.tokenize`, the same function the training data was made with,
-so the model sees words exactly as it did in training.
-"""
+"""The model: a question in, one label per word out."""
 
 import json
 from dataclasses import dataclass
@@ -16,11 +12,7 @@ from tokenizers import Tokenizer
 
 @dataclass(frozen=True)
 class Reading:
-    """The question's words, and one label each.
-
-    Labels are B-/I- PER, DATE, NEW, OLD, VIDEO, FAV, WORD or PLACE (where the photo was
-    taken), or O for any other word; the model's config.json lists them.
-    """
+    """The question's words, and one label each (B-/I- plus a label from common.LABELS, or O)."""
 
     tokens: list[str]
     tags: list[str]

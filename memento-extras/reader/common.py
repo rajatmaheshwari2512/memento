@@ -1,21 +1,15 @@
 """Shared pieces of the question-reader data: the word splitter, the labels, the answer the
-chat model learns to write, and the inline format (`[PER Mom] ki [WORD beach] wali pics`).
-
-`tokenize` is reused at run time, so it stays small and deterministic. Python 3 standard
-library only.
-"""
+chat model learns to write, and the inline format (`[PER Mom] ki [WORD beach] wali pics`)."""
 from __future__ import annotations
 
 import unicodedata
 from collections.abc import Sequence
 
-# PLACE: where the photo was taken ("last time in [PLACE goa]"), not any place name ("[WORD
-# india gate]", "delhi wale cousins"). Added last, so the older labels keep their numbers.
+# PLACE: where the photo was taken, not any place name ("[WORD india gate]").
 LABELS = ("PER", "DATE", "NEW", "OLD", "VIDEO", "FAV", "WORD", "PLACE")
 TAGS = ("O",) + tuple(f"{p}-{label}" for label in LABELS for p in ("B", "I"))
 
-# A PER span whose text is one of these (lowercased) means the asker: "me". "I" and "maine" are
-# the asker only when the question is about photos with them in it (README, round 4).
+# A PER span whose text is one of these (lowercased) means the asker: "me".
 FIRST_PERSON = frozenset({
     "me", "myself", "i", "i'm", "im", "i'am", "i've", "ive", "i'd", "self",
     "main", "mai", "mein", "mujhe", "muje", "mujhko", "maine", "mene", "khud", "meri", "mera", "mere", "apun",
@@ -34,10 +28,10 @@ def _is_modifier(cp: int) -> bool:
 
 
 def _is_emoji(cp: int) -> bool:
-    return (0x1F000 <= cp <= 0x1FAFF      # pictographs, faces, flags, food, people ...
-            or 0x2600 <= cp <= 0x27BF     # misc symbols and dingbats (heart, sparkles, sun)
-            or 0x2300 <= cp <= 0x23FF     # watch, hourglass, alarm clock
-            or 0x2B00 <= cp <= 0x2BFF     # star, arrows
+    return (0x1F000 <= cp <= 0x1FAFF
+            or 0x2600 <= cp <= 0x27BF
+            or 0x2300 <= cp <= 0x23FF
+            or 0x2B00 <= cp <= 0x2BFF
             or cp in (0x3030, 0x303D, 0x3297, 0x3299))
 
 
@@ -51,16 +45,14 @@ def _is_punct(ch: str) -> bool:
 
 
 def _split_emoji(chunk: str) -> list[tuple[str, bool]]:
-    """Cut a whitespace-free chunk into (piece, is_emoji). One emoji (with its skin tone,
-    variation selector and zero-width-joined parts, or a two-letter flag) is one piece.
-    Stray decoration characters outside an emoji are dropped."""
+    """Cut a whitespace-free chunk into (piece, is_emoji)."""
     out: list[tuple[str, bool]] = []
     buf: list[str] = []
     i, n = 0, len(chunk)
     while i < n:
         cp = ord(chunk[i])
         if _is_modifier(cp) or cp == _ZWJ:
-            i += 1  # stray decoration: drop it
+            i += 1
             continue
         if not _is_emoji(cp):
             buf.append(chunk[i])
@@ -88,9 +80,7 @@ def _split_emoji(chunk: str) -> list[tuple[str, bool]]:
 
 
 def _split_edges(piece: str) -> list[str]:
-    """Split punctuation off both ends of a word. A run of the same mark ("!!!", "...") is one
-    token. Apostrophes inside a word stay ("Mom's", "don't"), and so does a trailing one
-    after an s ("Vikas'", "parents'")."""
+    """Split punctuation off both ends of a word."""
     i, j = 0, len(piece)
     lead: list[str] = []
     while i < j and _is_punct(piece[i]):
@@ -114,8 +104,7 @@ def _split_edges(piece: str) -> list[str]:
 
 
 def tokenize(text: str) -> list[str]:
-    """Split on whitespace, then split punctuation off the ends of each word and make every
-    emoji its own token."""
+    """Split on whitespace, punctuation off the ends of each word, and every emoji on its own."""
     tokens: list[str] = []
     for chunk in text.split():
         for piece, is_emoji in _split_emoji(chunk):
@@ -169,9 +158,7 @@ def spans(tags: list[str]) -> list[tuple[str, int, int]]:
 
 
 def word_labels(word_ids: Sequence[int | None], piece_labels: Sequence[str], count: int) -> list[str]:
-    """The model's labels for our words: the model labels word pieces, and only each word's
-    first piece was trained, so a word gets its first piece's label (then `repair`). Words the
-    length limit cut off stay O. Used in training, evaluation and on the server alike."""
+    """The model's labels for our words: a word gets its first piece's label (then `repair`)."""
     tags = ["O"] * count
     seen: set[int] = set()
     for word, label in zip(word_ids, piece_labels):
@@ -192,8 +179,7 @@ def repair(tags: list[str]) -> list[str]:
 
 
 def strip_possessive(text: str) -> str:
-    """'Mom's' -> 'Mom', 'Rahul’s' -> 'Rahul', 'Vikas'' -> 'Vikas' (only the apostrophe goes
-    after an s)."""
+    """'Mom's' -> 'Mom', 'Rahul’s' -> 'Rahul', 'Vikas'' -> 'Vikas'."""
     low = text.lower()
     if len(text) > 2 and (low.endswith("'s") or low.endswith("’s")):
         return text[:-2]
@@ -217,7 +203,7 @@ def answer(tokens: list[str], tags: list[str]) -> dict[str, object]:
             if name.lower().replace("’", "'") in FIRST_PERSON:
                 name = "me"
             key = name.lower()
-            if key not in seen:  # the same person twice is one person
+            if key not in seen:
                 seen.add(key)
                 people.append(name)
         elif label == "DATE":
@@ -230,7 +216,6 @@ def answer(tokens: list[str], tags: list[str]) -> dict[str, object]:
             kind = "video"
         elif label == "FAV":
             favorite = True
-    # Places are search words too (the test sets' gold answers list them there).
     words: list[str] = []
     for tok, tag in zip(tokens, tags):
         if tag.endswith(("-WORD", "-PLACE")):
@@ -249,9 +234,8 @@ class InlineError(ValueError):
 
 def tag_segments(segments: list[tuple[str, str]]) -> tuple[str, list[str], list[str]]:
     """Label a text given as consecutive (label, piece) segments; label "O" or one of LABELS.
-    Each labelled segment is one span (punctuation and emojis inside it are O and split it).
     Returns (text, tokens, tags). Raises InlineError if a segment edge falls inside a token
-    (e.g. "[PER Rahul]'s") or a labelled segment has no words."""
+    or a labelled segment has no words."""
     text = "".join(piece for _, piece in segments)
     tokens: list[str] = []
     tags: list[str] = []
@@ -344,7 +328,7 @@ def to_inline(tokens: list[str], tags: list[str]) -> str:
     return " ".join(out)
 
 
-if __name__ == "__main__":  # quick self-test
+if __name__ == "__main__":
     assert tokenize("Mom's pics, pls!!! 😍😍") == ["Mom's", "pics", ",", "pls", "!!!", "😍", "😍"]
     assert tokenize("beach😍 \"Goa\" (2019)…") == ["beach", "😍", '"', "Goa", '"', "(", "2019", ")", "…"]
     assert tokenize("Vikas' don't I'm 👍🏽 👨‍👩‍👧 🇮🇳 ❤️") == ["Vikas'", "don't", "I'm", "👍🏽", "👨‍👩‍👧", "🇮🇳", "❤️"]
