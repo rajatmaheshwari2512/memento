@@ -1,5 +1,5 @@
-// SelfPhotos Storage saver: the Android side of shrinking a video or photo before upload
-// (android/.../selfphotos/StorageSaverPlugin.kt).
+// SelfPhotos Storage saver: the native side of shrinking a video or photo before upload
+// (android/.../selfphotos/StorageSaverPlugin.kt, ios/Runner/Selfphotos/StorageSaverPlugin.swift).
 import 'package:flutter/services.dart';
 
 /// Why a shrink failed on the device.
@@ -59,6 +59,7 @@ class StorageSaverNative {
   }
 
   /// The size on the phone, in bytes, of each of [localIds]; an id the phone no longer has is left out.
+  /// Android only.
   Future<Map<String, int>> sizes(List<String> localIds) async {
     try {
       final result = await _channel.invokeMethod<Map<Object?, Object?>>('sizes', {'localIds': localIds});

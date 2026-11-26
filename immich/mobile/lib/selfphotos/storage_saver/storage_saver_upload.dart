@@ -27,16 +27,13 @@ class StorageSaverRun {
 
   static int _lastId = 0;
 
-  /// Reads the quality for a run on Android ([original] when it can't be read). Completing [cancelToken]
-  /// stops the run's shrinks.
+  /// Reads the quality for a run ([original] when it can't be read). Completing [cancelToken] stops the run's
+  /// shrinks.
   static Future<StorageSaverRun> start(
     StorageSaverService service,
     StorageSaverNative native,
     Completer<void>? cancelToken,
   ) async {
-    if (!CurrentPlatform.isAndroid) {
-      return original;
-    }
     unawaited(deleteStaleFolders());
     try {
       final quality = await service.backupQuality();
@@ -118,7 +115,7 @@ class StorageSaverUpload {
     try {
       final originalChecksum = asset.checksum ?? await _checksum(file);
       final folder = _folder = await Directory.systemTemp.createTemp(_folderPrefix);
-      final output = File(p.join(folder.path, asset.type == AssetType.video ? 'copy.mp4' : 'copy.jpg'));
+      final output = File(p.join(folder.path, _copyName(asset, file)));
       final result = await _native.shrink(
         file.path,
         output.path,
@@ -147,6 +144,14 @@ class StorageSaverUpload {
       return null;
     }
   }
+
+  /// The copy's file name: on iOS a photo keeps [file]'s format and a video becomes QuickTime.
+  String _copyName(LocalAsset asset, File file) => switch ((asset.type == AssetType.video, CurrentPlatform.isIOS)) {
+    (true, true) => 'copy.mov',
+    (true, false) => 'copy.mp4',
+    (false, true) => 'copy${p.extension(file.path).toLowerCase()}',
+    (false, false) => 'copy.jpg',
+  };
 
   /// The base64 SHA-1 of [file], as the app stores checksums.
   Future<String> _checksum(File file) async => base64.encode((await sha1.bind(file.openRead()).first).bytes);

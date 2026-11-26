@@ -366,17 +366,52 @@ void main() {
       verifyZeroInteractions(mockStorageSaverNative);
     });
 
-    test('does not shrink on iOS', () async {
+    test('shrinks on iOS too', () async {
       debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
       stubAsset(photo, '/path/to/photo.jpg', 'photo.jpg');
       when(() => mockStorageSaverService.backupQuality()).thenAnswer((_) async => BackupQuality.saver);
+      stubShrink(() => shrunk);
       final uploads = captureUploads();
 
       await sut.uploadManual([photo]);
 
-      expect(uploads.single.path, '/path/to/photo.jpg');
-      verifyNever(() => mockStorageSaverService.backupQuality());
-      verifyZeroInteractions(mockStorageSaverNative);
+      verify(() => mockStorageSaverService.backupQuality()).called(1);
+      expect(uploads.single.path, endsWith('/copy.jpg'));
+      expect(uploads.single.fields['metadata'], contains('memento-storage-saver'));
+    });
+
+    test('on iOS keeps a HEIC photo as HEIC', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      stubAsset(photo, '/path/to/IMG_0001.HEIC', 'IMG_0001.HEIC');
+      stubShrink(() => shrunk);
+      final uploads = captureUploads();
+
+      await sut.uploadSingleAsset(
+        photo,
+        null,
+        callbacks: const UploadCallbacks(),
+        storageSaver: const StorageSaverRun(BackupQuality.saver, 1),
+      );
+
+      expect(uploads.single.path, endsWith('/copy.heic'));
+      expect(uploads.single.name, 'IMG_0001.heic');
+    });
+
+    test('on iOS names a shrunk video as QuickTime', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      stubAsset(video, '/path/to/clip.mov', 'clip.mov');
+      stubShrink(() => shrunk);
+      final uploads = captureUploads();
+
+      await sut.uploadSingleAsset(
+        video,
+        null,
+        callbacks: const UploadCallbacks(),
+        storageSaver: const StorageSaverRun(BackupQuality.saver, 1),
+      );
+
+      expect(uploads.single.path, endsWith('/copy.mov'));
+      expect(uploads.single.name, 'clip.mov');
     });
 
     int capturedRunId() =>
