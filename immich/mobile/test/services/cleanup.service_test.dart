@@ -1,21 +1,31 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:immich_mobile/constants/enums.dart';
 import 'package:immich_mobile/extensions/platform_extensions.dart';
+import 'package:immich_mobile/infrastructure/repositories/local_asset.repository.dart';
+import 'package:immich_mobile/selfphotos/storage_saver/storage_saver_native.dart';
 import 'package:immich_mobile/services/cleanup.service.dart';
 import 'package:mocktail/mocktail.dart';
 
+import '../fixtures/asset.stub.dart';
 import '../infrastructure/repository.mock.dart';
 import '../repository.mocks.dart';
+import '../service.mocks.dart';
 
 void main() {
   late CleanupService sut;
 
   late MockLocalAssetRepository localAssetRepository;
   late MockAssetMediaRepository assetMediaRepository;
+  late MockStorageSaverNative storageSaverNative;
+
+  setUpAll(() => registerFallbackValue(AssetKeepType.none));
 
   setUp(() {
     localAssetRepository = MockLocalAssetRepository();
     assetMediaRepository = MockAssetMediaRepository();
-    sut = CleanupService(localAssetRepository, assetMediaRepository);
+    storageSaverNative = MockStorageSaverNative();
+    sut = CleanupService(localAssetRepository, assetMediaRepository, storageSaverNative);
   });
 
   group('CleanupService.deleteLocalAssets', () {
@@ -68,6 +78,62 @@ void main() {
       expect(capturedBatches[2].first, 'asset-${batchSize * 2}');
       expect(capturedBatches[2].last, 'asset-${batchSize * 2 + 500}');
       verify(() => localAssetRepository.deleteAssets(any())).called(3);
+    });
+  });
+
+  group('CleanupService.getRemovalCandidates', () {
+    final assets = [LocalAssetStub.image1.copyWith(id: '1'), LocalAssetStub.image1.copyWith(id: '2')];
+
+    setUp(() {
+      when(
+        () => localAssetRepository.getRemovalCandidates(
+          any(),
+          any(),
+          keepMediaType: any(named: 'keepMediaType'),
+          keepFavorites: any(named: 'keepFavorites'),
+          keepAlbumIds: any(named: 'keepAlbumIds'),
+        ),
+      ).thenAnswer((_) async => RemovalCandidatesResult(assets: assets, totalBytes: 10, hasStorageSaverCopies: true));
+    });
+
+    tearDown(() => debugDefaultTargetPlatformOverride = null);
+
+    test('on Android sums the sizes of the files on the phone', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      when(() => storageSaverNative.sizes(['1', '2'])).thenAnswer((_) async => {'1': 1000, '2': 2000});
+
+      final result = await sut.getRemovalCandidates('user', DateTime.now());
+
+      expect(result.totalBytes, 3000);
+      expect(result.assets, assets);
+      expect(result.hasStorageSaverCopies, isTrue);
+    });
+
+    test('on Android shows no size when a file has no size', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      when(() => storageSaverNative.sizes(any())).thenAnswer((_) async => {'1': 1000});
+
+      final result = await sut.getRemovalCandidates('user', DateTime.now());
+
+      expect(result.totalBytes, 0);
+    });
+
+    test('on Android shows no size when the sizes can not be read', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      when(() => storageSaverNative.sizes(any())).thenThrow(const StorageSaverNativeException('failed', 'denied'));
+
+      final result = await sut.getRemovalCandidates('user', DateTime.now());
+
+      expect(result.totalBytes, 0);
+    });
+
+    test('on iOS keeps the size from the server', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+
+      final result = await sut.getRemovalCandidates('user', DateTime.now());
+
+      expect(result.totalBytes, 10);
+      verifyNever(() => storageSaverNative.sizes(any()));
     });
   });
 }

@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
+import android.provider.MediaStore
 import android.util.Log
 import androidx.exifinterface.media.ExifInterface
 import androidx.media3.common.MediaItem
@@ -83,6 +84,18 @@ class StorageSaverPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
           }
         }
       }
+      "sizes" -> {
+        val ids = call.argument<List<String>>("localIds")!!
+        queries.execute {
+          try {
+            val value = sizes(ids)
+            main.post { result.success(value) }
+          } catch (e: Throwable) {
+            Log.w(TAG, "Couldn't read the sizes", e)
+            main.post { result.error("failed", e.message ?: e.toString(), null) }
+          }
+        }
+      }
       "cancel" -> {
         cancel(call.argument<Number>("runId")!!.toLong())
         result.success(null)
@@ -97,6 +110,23 @@ class StorageSaverPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
   private fun cancel(run: Long) {
     cancelledRuns.add(run)
     running?.let { (runningRun, export) -> if (runningRun == run) export.cancel() }
+  }
+
+  // Maps each local id (a MediaStore id) to the size of its file on the phone, in bytes.
+  private fun sizes(localIds: List<String>): Map<String, Long> {
+    val resolver = context!!.contentResolver
+    val uri = MediaStore.Files.getContentUri("external")
+    val sizes = HashMap<String, Long>()
+    for (chunk in localIds.chunked(SIZES_CHUNK)) {
+      val selection = "${MediaStore.Files.FileColumns._ID} IN (${chunk.joinToString(",") { "?" }})"
+      val projection = arrayOf(MediaStore.Files.FileColumns._ID, MediaStore.MediaColumns.SIZE)
+      resolver.query(uri, projection, selection, chunk.toTypedArray(), null)?.use { cursor ->
+        while (cursor.moveToNext()) {
+          sizes[cursor.getLong(0).toString()] = cursor.getLong(1)
+        }
+      }
+    }
+    return sizes
   }
 
   private fun shrink(run: Long, input: File, output: File, kind: String, videoBitrate: Int?): Map<String, Any> {
@@ -190,9 +220,11 @@ class StorageSaverPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     const val MAX_SHORT_SIDE = 1080
     const val MAX_PIXELS = 16_000_000L
     const val JPEG_QUALITY = 85
+    const val SIZES_CHUNK = 500
     const val TIME_LIMIT_EXTRA_MS = 60_000L
 
     val worker = Executors.newSingleThreadExecutor()
+    val queries = Executors.newSingleThreadExecutor()
 
     val EXIF_TAGS = listOf(
       ExifInterface.TAG_DATETIME,

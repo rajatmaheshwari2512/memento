@@ -1,12 +1,18 @@
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/constants/enums.dart';
+import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
 import 'package:immich_mobile/extensions/platform_extensions.dart';
 import 'package:immich_mobile/infrastructure/repositories/local_asset.repository.dart';
 import 'package:immich_mobile/providers/infrastructure/db.provider.dart';
 import 'package:immich_mobile/repositories/asset_media.repository.dart';
+import 'package:immich_mobile/selfphotos/storage_saver/storage_saver_native.dart';
 
 final cleanupServiceProvider = Provider<CleanupService>((ref) {
-  return CleanupService(ref.watch(driftProvider).localAssetRepository, ref.watch(assetMediaRepositoryProvider));
+  return CleanupService(
+    ref.watch(driftProvider).localAssetRepository,
+    ref.watch(assetMediaRepositoryProvider),
+    const StorageSaverNative(),
+  );
 });
 
 class CleanupService {
@@ -15,7 +21,9 @@ class CleanupService {
   final LocalAssetRepository _localAssetRepository;
   final AssetMediaRepository _assetMediaRepository;
 
-  const CleanupService(this._localAssetRepository, this._assetMediaRepository);
+  final StorageSaverNative _storageSaverNative;
+
+  const CleanupService(this._localAssetRepository, this._assetMediaRepository, this._storageSaverNative);
 
   Future<RemovalCandidatesResult> getRemovalCandidates(
     String userId,
@@ -23,14 +31,40 @@ class CleanupService {
     AssetKeepType keepMediaType = AssetKeepType.none,
     bool keepFavorites = true,
     Set<String> keepAlbumIds = const {},
-  }) {
-    return _localAssetRepository.getRemovalCandidates(
+  }) async {
+    final result = await _localAssetRepository.getRemovalCandidates(
       userId,
       cutoffDate,
       keepMediaType: keepMediaType,
       keepFavorites: keepFavorites,
       keepAlbumIds: keepAlbumIds,
     );
+    if (!CurrentPlatform.isAndroid) {
+      return result;
+    }
+    return RemovalCandidatesResult(
+      assets: result.assets,
+      totalBytes: await _phoneBytes(result.assets),
+      hasStorageSaverCopies: result.hasStorageSaverCopies,
+    );
+  }
+
+  /// The space [assets] take on the phone; 0 (shown as no size) when any of them can't be read.
+  Future<int> _phoneBytes(List<LocalAsset> assets) async {
+    try {
+      final sizes = await _storageSaverNative.sizes(assets.map((asset) => asset.id).toList());
+      var total = 0;
+      for (final asset in assets) {
+        final size = sizes[asset.id];
+        if (size == null) {
+          return 0;
+        }
+        total += size;
+      }
+      return total;
+    } catch (_) {
+      return 0;
+    }
   }
 
   Future<int> deleteLocalAssets(List<String> localIds) async {

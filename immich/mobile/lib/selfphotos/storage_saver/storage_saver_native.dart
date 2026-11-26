@@ -58,6 +58,16 @@ class StorageSaverNative {
     }
   }
 
+  /// The size on the phone, in bytes, of each of [localIds]; an id the phone no longer has is left out.
+  Future<Map<String, int>> sizes(List<String> localIds) async {
+    try {
+      final result = await _channel.invokeMethod<Map<Object?, Object?>>('sizes', {'localIds': localIds});
+      return {for (final MapEntry(:key, :value) in result!.entries) key! as String: (value! as num).toInt()};
+    } on PlatformException catch (e) {
+      throw StorageSaverNativeException(e.code, e.message);
+    }
+  }
+
   /// Stops [runId]'s running shrink, and the ones it already asked for.
   Future<void> cancel(int runId) => _channel.invokeMethod<void>('cancel', {'runId': runId});
 }
