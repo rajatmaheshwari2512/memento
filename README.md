@@ -28,6 +28,10 @@ It comes as a website and an Android app. There is no iPhone app.
   animation and a cinematic photo (a still photo that moves in 3D). They're saved into the
   library like any other photo.
 - **Live albums.** Albums that fill themselves with new photos of the people you choose.
+- **Storage saver.** Like Google Photos: each person can back up from the Android app at
+  Original quality, or as smaller copies made on the phone (videos at 1080p, about 4 or 8 Mbps;
+  ordinary photos over 16 MP at 16 MP). HDR, motion and portrait items stay full size. The app
+  still counts the phone's original as backed up, so "Free up space" works.
 - **Feature switches.** Admins turn each feature on or off, and set AI Edit's limits, from
   Immich's own settings page.
 - **Admin on the phone.** Immich's own Android app has no admin controls; Memento's does. From
@@ -161,6 +165,8 @@ Built on the work of:
 - [SigLIP 2](https://huggingface.co/immich-app/ViT-B-16-SigLIP2__webli) by Google, for smart search
   (chosen in Immich's settings);
 - [DeepFilterNet](https://github.com/Rikorose/DeepFilterNet), for Reduce noise;
+- [Media3 Transformer](https://developer.android.com/media/media3/transformer) by Google, for
+  Storage saver's video copies on the phone;
 - [Depth Anything V2](https://github.com/DepthAnything/Depth-Anything-V2), libvips and ffmpeg,
   for the creations;
 - [Gemini](https://ai.google.dev) by Google, for AI Edit.
