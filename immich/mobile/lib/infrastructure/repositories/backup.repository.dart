@@ -39,7 +39,7 @@ class BackupRepository extends DatabaseAccessor<Drift> with $BackupRepositoryMix
         SELECT
         COUNT(*) AS total_count,
         COUNT(*) FILTER (WHERE lae.checksum IS NULL) AS processing_count,
-        COUNT(*) FILTER (WHERE rae.id IS NULL) AS remainder_count
+        COUNT(*) FILTER (WHERE rae.id IS NULL AND lae.device_checksum IS NULL) AS remainder_count
         FROM local_asset_entity lae
         LEFT JOIN main.remote_asset_entity rae
             ON lae.checksum = rae.checksum AND rae.owner_id = ?1
@@ -102,6 +102,7 @@ class BackupRepository extends DatabaseAccessor<Drift> with $BackupRepositoryMix
                   _db.remoteAssetEntity.checksum.equalsExp(lae.checksum) & _db.remoteAssetEntity.ownerId.equals(userId),
                 ),
             ) &
+            lae.deviceChecksum.isNull() &
             lae.id.isNotInQuery(_getExcludedSubquery()),
       )
       ..orderBy([(localAsset) => OrderingTerm.desc(localAsset.createdAt)]);

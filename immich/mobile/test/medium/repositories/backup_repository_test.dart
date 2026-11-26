@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:immich_mobile/domain/models/album/local_album.model.dart';
 import 'package:immich_mobile/infrastructure/repositories/backup.repository.dart';
+import 'package:immich_mobile/infrastructure/repositories/local_asset.repository.dart';
 import 'package:immich_mobile/utils/option.dart';
 
 import '../repository_context.dart';
@@ -135,6 +136,16 @@ void main() {
       expect(result.remainder, 2); // local2 + local3
       expect(result.processing, 1); // local3
     });
+
+    test('an item linked to its Storage saver copy is not remaining before the copy syncs', () async {
+      final album = await ctx.newLocalAlbum(backupSelection: BackupSelection.selected);
+      final local = await ctx.newLocalAsset(checksum: 'copy', deviceChecksum: 'original');
+      await ctx.newLocalAlbumAsset(albumId: album.id, assetId: local.id);
+
+      final result = await sut.getAllCounts(userId);
+      expect(result.total, 1);
+      expect(result.remainder, 0);
+    });
   });
 
   group('getCandidates', () {
@@ -239,6 +250,28 @@ void main() {
       final result = await sut.getCandidates(userId);
       expect(result.length, 1);
       expect(result.first.id, asset.id);
+    });
+
+    test('leaves out an item linked to its Storage saver copy before the copy syncs', () async {
+      final album = await ctx.newLocalAlbum(backupSelection: BackupSelection.selected);
+      final linked = await ctx.newLocalAsset(checksum: 'copy', deviceChecksum: 'original');
+      final plain = await ctx.newLocalAsset();
+      await ctx.newLocalAlbumAsset(albumId: album.id, assetId: linked.id);
+      await ctx.newLocalAlbumAsset(albumId: album.id, assetId: plain.id);
+
+      final result = await sut.getCandidates(userId);
+      expect(result.map((a) => a.id), [plain.id]);
+    });
+
+    test('lists an item again once it is unlinked from its copy', () async {
+      final album = await ctx.newLocalAlbum(backupSelection: BackupSelection.selected);
+      final linked = await ctx.newLocalAsset(checksum: 'copy', deviceChecksum: 'original');
+      await ctx.newLocalAlbumAsset(albumId: album.id, assetId: linked.id);
+
+      await LocalAssetRepository(ctx.db).unlinkStorageSaverCopies();
+
+      final result = await sut.getCandidates(userId);
+      expect(result.map((a) => (a.id, a.checksum)), [(linked.id, 'original')]);
     });
   });
 }
