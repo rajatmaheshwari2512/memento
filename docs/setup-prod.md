@@ -336,28 +336,52 @@ the repo's Releases page; the app takes longest. Each fork builds its own, into 
 
 - **The Android app**, `memento-<version>.apk`, signed with your key (the secrets below).
 - **The website**, `memento-website-<version>.tar.gz`.
-- **Four server images** at `ghcr.io/<owner>/`: `memento-server` (Immich's server with Memento's
-  website in it), `memento-extras`, `memento-reader` (with Ask's model) and `memento-creations`.
+- **Four server images** at `ghcr.io/<owner>/<name>:<version>`: `memento-server` (Immich's server
+  with Memento's website in it), `memento-extras`, `memento-reader` (with Ask's model) and
+  `memento-creations`. There's no `latest`: a server always runs a version you chose.
 
-**Making one:** `git tag v1.2.0 && git push origin v1.2.0`. To build a tag again: GitHub → Actions
-→ Release → Run workflow, with the tag.
+**Making one:** `git tag v1.2.0 && git push origin v1.2.0`. A tag is built once: the workflow
+refuses a tag whose release is published, because servers may already run its images. To change a
+release, cut a new tag (`v1.2.1`). If a run fails before its release is published, run it again
+from the tag: `gh workflow run release.yml --ref v1.2.0 -f tag=v1.2.0`. If only the app fails, the
+release is published without it, and says so.
 
 **MANUAL, once, after the first release: make the four packages public.** A server pulls them
 without logging in, and GitHub may make new packages private: github.com/<owner>?tab=packages → each
 package → Package settings → Change visibility → Public. The run's summary warns while they aren't.
 
-**MANUAL, once: the app's signing key, as repo secrets.** Without them, a release has no app (its
-summary says so). Anyone who can change this repo's workflows could read them, so add them only if
-nobody else can push to it. With GitHub's `gh`, from the top of the repo:
+**MANUAL, once: the app's signing key, as secrets of the `release` environment.** Without them, a
+release has no app (its summary says so). Only the app's job can read them. With GitHub's `gh`, from
+the top of the repo (the first line makes the environment):
 
 ```
-base64 < ~/.config/selfphotos/android/selfphotos-immich.jks | gh secret set ANDROID_KEYSTORE_BASE64
-gh secret set ANDROID_KEYSTORE_PASSWORD     # it asks: paste ANDROID_KEYSTORE_PASSWORD from .env
-gh secret set ANDROID_KEYSTORE_ALIAS        # it asks: selfphotos, or your ANDROID_KEYSTORE_ALIAS
+gh api -X PUT 'repos/{owner}/{repo}/environments/release' > /dev/null
+base64 < ~/.config/selfphotos/android/selfphotos-immich.jks | gh secret set ANDROID_KEYSTORE_BASE64 --env release
+gh secret set ANDROID_KEYSTORE_PASSWORD --env release   # it asks: paste ANDROID_KEYSTORE_PASSWORD from .env
+gh secret set ANDROID_KEYSTORE_ALIAS --env release      # it asks: selfphotos, or your ANDROID_KEYSTORE_ALIAS
 ```
 
-(The first line's file is `ANDROID_KEYSTORE_PATH`, if you set one.) The app from a release must be
+(The second line's file is `ANDROID_KEYSTORE_PATH`, if you set one.) The app from a release must be
 signed with the same key as the app on the phones, or they refuse the update.
+
+**Optional, once: only `v*` tags may use the key.** Then a run from a branch never gets it (a manual
+run must start from the tag, as above):
+
+```
+gh api -X PUT 'repos/{owner}/{repo}/environments/release' \
+  -F 'deployment_branch_policy[protected_branches]=false' -F 'deployment_branch_policy[custom_branch_policies]=true' > /dev/null
+gh api -X POST 'repos/{owner}/{repo}/environments/release/deployment-branch-policies' -f name='v*' -f type=tag
+```
+
+**Optional, once: release tags can't be moved or deleted**, so a version always means the same code:
+
+```
+gh api -X POST 'repos/{owner}/{repo}/rulesets' --input - <<'EOF'
+{"name": "Release tags", "target": "tag", "enforcement": "active",
+ "conditions": {"ref_name": {"include": ["refs/tags/v*"], "exclude": []}},
+ "rules": [{"type": "update"}, {"type": "deletion"}]}
+EOF
+```
 
 **Running a release on your server**, instead of building from your copy of the code:
 
@@ -366,12 +390,14 @@ git fetch --tags && git checkout v1.2.0    # the server setup (host/) comes from
 ./memento prod update v1.2.0
 ```
 
-`update` checks the release's images are there for anyone to pull, shows what the deploy would
-change, and asks you to type `yes`. Then it sets `MEMENTO_VERSION=v1.2.0` in `.env` and deploys:
-the server pulls the images, and nothing is built, on your computer or on the server. The server
-stays on that version until you run `update` again; it never follows a newer release by itself.
-Images come from `MEMENTO_IMAGES`, or else `ghcr.io/<the GitHub owner of your git remote>`. To build
-from your copy again: empty `MEMENTO_VERSION` in `.env`, then `./memento prod deploy`.
+`update` checks the release is on the same Immich version as your copy, that its images are there
+for anyone to pull (for ARM64 and x86-64), shows what the deploy would change, and asks you to type
+`yes`. Then it sets `MEMENTO_VERSION=v1.2.0` in `.env` and deploys: the server pulls the images, and
+nothing is built, on your computer or on the server. The server stays on that version until you run
+`update` again; it never follows a newer release by itself. Each deploy keeps this release's images
+and the one before (for going back), and removes older ones. Images come from `MEMENTO_IMAGES`, or
+else `ghcr.io/<the GitHub owner of your git remote>`. To build from your copy again: empty
+`MEMENTO_VERSION` in `.env`, then `./memento prod deploy`.
 
 ## Day to day
 
