@@ -6,23 +6,16 @@
 #   root:     files served straight from a folder on the VM, path kept as is.
 #             /crypt-fonts/GoogleSans.ttf is <root>/crypt-fonts/GoogleSans.ttf.
 # (Not /extrasfoo: only the exact prefix or the prefix followed by a slash matches.)
-{% for site in caddy_sites if site.enabled | default(true) | bool %}
+{% for site in caddy_sites %}
 
 {{ site.hostname }} {
 {% for route in site.routes | default([]) %}
 	@route{{ loop.index }} path {{ route.prefix }} {{ route.prefix }}/*
 	handle @route{{ loop.index }} {
-{% if route.root is defined %}
-		root * {{ route.root }}
-		encode zstd gzip
-		header Cache-Control "public, max-age=31536000"
-		file_server
-{% else %}
 		uri strip_prefix {{ route.prefix }}
 		# Compresses JSON (Ask's photo lists); images and other binary replies pass as they are.
 		encode zstd gzip
 		reverse_proxy {{ route.upstream }}
-{% endif %}
 	}
 {% endfor %}
 	handle {
