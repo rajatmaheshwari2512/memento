@@ -1,11 +1,4 @@
-# Nightly copy of the apps' files to AWS Glacier Deep Archive, as a systemd timer.
-# A timer (not cron) because:
-#   - systemd never starts a second copy while one is still running (the first
-#     upload of 2 TB will take more than a day)
-#   - output goes to the journal: journalctl -u deep-archive-backup
-#   - Persistent=true runs a missed backup after the VM was down at 04:00
-# One run copies each folder in backup_jobs in turn, with rclone, and everything lands in
-# the bucket encrypted (see backup.sh.j2).
+# Nightly copy of the apps' files to AWS Glacier Deep Archive, as a systemd timer. One run copies each folder in backup_jobs in turn, with rclone, encrypted (see backup.sh.j2). Output: journalctl -u deep-archive-backup.
 
 - name: Install rclone {{ backup_rclone_version }}
   ansible.builtin.apt:
@@ -35,9 +28,6 @@
       (BACKUPS), and give every backup_jobs entry with only_subfolder a crypt_remote too.
     quiet: true
 
-# This job was called immich-backup (Immich only), then storagebox-backup (every folder
-# on the Storage Box). It's now deep-archive-backup. These tasks remove the old ones;
-# they can go once every VM has run them.
 - name: Look for the old backup timers
   ansible.builtin.stat:
     path: /etc/systemd/system/{{ item }}.timer
@@ -71,9 +61,7 @@
     state: directory
     mode: "0700"
 
-# rclone can define a whole remote from environment variables named
-# RCLONE_CONFIG_<REMOTE>_<OPTION>. This file defines "glacier" (and the encrypting
-# remotes over it) that way, so this role doesn't need an rclone.conf.
+# Defines the "glacier" remote (and the encrypting remotes over it) from environment variables, so no rclone.conf is needed.
 - name: Write the Deep Archive login and encryption settings (env file)
   ansible.builtin.template:
     src: glacier.env.j2
@@ -81,8 +69,7 @@
     mode: "0600"
   diff: false
 
-# Only reads: rclone prints the scrambled form of a name. Runs in --check mode too, so
-# the preview shows the real script. Only for jobs copying part of a Storage Box folder.
+# Only reads: rclone prints the scrambled form of a name.
 - name: Work out the scrambled names of the subfolders to copy
   ansible.builtin.command:
     argv:
@@ -100,7 +87,6 @@
   changed_when: false
   check_mode: false
 
-# rclone prints "files <tab> TNpP6...": the scrambled name is the last word.
 - name: Remember the scrambled names, by job
   ansible.builtin.set_fact:
     backup_scrambled: >-
@@ -130,5 +116,4 @@
     enabled: true
     state: started
     daemon_reload: true
-  # A --check preview doesn't really install the timer, so systemd can't find it yet.
   ignore_errors: "{{ ansible_check_mode }}"

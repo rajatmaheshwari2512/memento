@@ -14,35 +14,15 @@ backup_crypt_password2_obscured: ""
 # same nightly run. The full list is in group_vars/all/main.yml.
 #   name:           a short label for the log
 #   enabled:        optional, false = skip this job (e.g. Nextcloud while Crypt is parked)
-#   source:         either a folder on the server's disk, with encrypt_names set, or an
-#                   rclone remote's already-encrypted folder (<remote>:<folder>), not its
-#                   decrypted view: those scrambled files are copied as they are (rclone's
-#                   recommended way).
-#   encrypt_names:  for a plain folder on the server: base32 or base64. Files are encrypted
-#                   on the way with backup_crypt_password*, and names written in this style.
-#                   Keep a folder's style once it has backups (Immich: base32), so its names
-#                   match what's archived.
+# source:         a folder on the server's disk (with encrypt_names set), or an rclone remote's already-encrypted folder (<remote>:<folder>).
+# encrypt_names:  for a plain folder on the server: base32 or base64. Files are encrypted on the way with backup_crypt_password*. Keep a folder's style once it has backups.
 #   dest_path:      the folder in the bucket
-#   weekly_only:    optional, with encrypt_names: a subfolder (e.g. Immich's backups/, its
-#                   nightly database backups) left out of the nightly copy. Once a week
-#                   (backup_weekly_day) only its newest file is copied, always as weekly_as,
-#                   replacing last week's; the bucket keeps replaced copies 180 days.
+# weekly_only:    optional, with encrypt_names: a subfolder (e.g. Immich's backups/) left out of the nightly copy; once a week (backup_weekly_day) only its newest file is copied, as weekly_as.
 #   weekly_as:      the file name for that weekly copy (e.g. latest.sql.gz)
-#   skip_folders:   optional, with encrypt_names: subfolders never copied, because the app
-#                   rebuilds them from the originals (e.g. Immich's encoded-video/).
-#   only_subfolder: optional. Copy only <each top folder>/<this folder>/. Nextcloud keeps
-#                   each user's own files in <user>/files; next to it are versions, trash,
-#                   previews and logs that change all the time, and every changed file
-#                   would be a new Deep Archive upload, billed for 180 days.
-#   compare:        optional: size (the default, --size-only) or modtime (size and time,
-#                   for a file that can change without changing size, e.g. a database
-#                   copy). modtime costs one extra request per file whose size matches.
-#   crypt_remote:   needed with only_subfolder. The crypt remote over the source folder
-#                   (in /etc/rclone/rclone.conf), used to work out the scrambled name
-#                   of only_subfolder. rclone scrambles a name the same way in every
-#                   folder, so one scrambled name matches every user's folder.
-# group_vars leaves out Immich's encoded-video/ by name. Thumbnails are never in this folder
-# (they're elsewhere on the server's disk).
+# skip_folders:   optional, with encrypt_names: subfolders never copied (e.g. Immich's encoded-video/).
+# only_subfolder: optional. Copy only <each top folder>/<this folder>/ (e.g. Nextcloud's <user>/files).
+# compare:        optional: size (the default, --size-only) or modtime (size and time).
+# crypt_remote:   needed with only_subfolder. The crypt remote over the source folder (in /etc/rclone/rclone.conf).
 backup_jobs:
   - name: immich
     source: /opt/immich/library
@@ -53,7 +33,6 @@ backup_jobs:
 backup_weekly_day: 7
 
 # systemd calendar format, in the server's timezone (set by the base role).
-# 04:00 is after Immich's 02:00 database dump.
 backup_schedule: "*-*-* 04:00:00"
 
 # rclone's parallel transfers and checks, per copy (the copies run one after the other).

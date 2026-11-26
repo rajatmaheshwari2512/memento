@@ -13,10 +13,7 @@
       - ca-certificates
     state: present
 
-# Ubuntu cloud images usually have this already; writing it makes it certain.
-# Kernel updates still need a reboot (docs/upgrades.md, "Everything else").
-# CleanInterval: every {{ base_apt_clean_days }} days the downloaded update files are deleted
-# (apt-get clean). They're only needed while installing, and otherwise pile up (390 MB by 24 Nov).
+# CleanInterval: every {{ base_apt_clean_days }} days the downloaded update files are deleted (apt-get clean).
 - name: Turn on daily automatic security updates
   ansible.builtin.copy:
     dest: /etc/apt/apt.conf.d/20auto-upgrades
@@ -26,8 +23,7 @@
       APT::Periodic::CleanInterval "{{ base_apt_clean_days }}";
     mode: "0644"
 
-# The system logs (journald) are capped at {{ base_journal_max }}; the oldest are dropped first.
-# Ubuntu's default lets them grow to 10% of the disk (up to 4 GB). 85 MB covered 19 days.
+# The system logs (journald) are capped at {{ base_journal_max }}.
 - name: Make the folder for the log settings
   ansible.builtin.file:
     path: /etc/systemd/journald.conf.d
@@ -50,10 +46,7 @@
     state: restarted
   when: base_journal_cap is changed
 
-# The updates run at {{ base_upgrade_time }}, outside the night captions (00:30-07:05), the
-# 04:00 backup and the 07:05 memories, instead of Ubuntu's default 06:00-07:00. Docker and
-# Caddy updates are included (their roles); Docker's live-restore keeps the containers
-# running while Docker updates, and a Caddy update is a second's restart.
+# The updates run at {{ base_upgrade_time }}, outside the night captions, the backup and the memories. Docker and Caddy updates are included.
 - name: Make the folder for the update timer's settings
   ansible.builtin.file:
     path: /etc/systemd/system/apt-daily-upgrade.timer.d
@@ -83,13 +76,10 @@
   community.general.timezone:
     name: "{{ base_timezone }}"
 
-# When memory runs out, the kernel moves memory nobody is using to this file on disk,
-# instead of killing an app. Nothing is changed once the file exists.
+# A swap file: the kernel moves unused memory to it when memory runs out. Nothing is changed once the file exists.
 - name: Add a swap file
   when: base_swap_size_mb | int > 0
   block:
-    # Built under a temporary name and renamed at the end, so a half-made file never
-    # ends up at {{ base_swap_file }} (where `creates` would then skip it forever).
     - name: Create the swap file (first run only)
       ansible.builtin.shell: |
         set -eu
@@ -110,7 +100,7 @@
       ansible.builtin.command: swapon --show=NAME --noheadings
       register: base_swap_active
       changed_when: false
-      check_mode: false # read-only, so it also runs in --check
+      check_mode: false
 
     - name: Turn the swap file on now
       ansible.builtin.command: swapon {{ base_swap_file }}

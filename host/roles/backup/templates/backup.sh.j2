@@ -2,22 +2,11 @@
 # Managed by Ansible (host/roles/backup). Changes made on the server are overwritten.
 # Copies each app's files to Glacier Deep Archive, one folder after the other. Run by
 # deep-archive-backup.service, which also defines the rclone remotes (glacier.env).
-#
-# Everything arrives in the bucket encrypted, names included:
-#   - plain files on the VM's disk go through an encrypting remote (archive_<name>)
-#   - files on the Storage Box are already encrypted and are copied as they are
-#   copy (not sync): never deletes anything in the bucket, so files deleted in the apps
-#                    stay in the backup.
-#   --size-only:     compare sizes, not checksums (checksums would mean reading every
-#                    file every night). Encryption adds a fixed amount to each file, so
-#                    the sizes still match what's already archived. Jobs with
-#                    compare: modtime use size and time instead (rclone's default), for a
-#                    file that changes without changing size, like a database.
-#   --fast-list:     list the bucket 1,000 files per request instead of one request per
-#                    folder (~1,850 folders): S3 charges for every request. Costs ~1 KB of
-#                    memory per file while it runs.
-# A failed copy doesn't stop the next one, but the script still ends with an error, so
-# `systemctl status deep-archive-backup` shows it.
+# Everything arrives in the bucket encrypted, names included: plain files on the VM's disk go through an encrypting remote (archive_<name>); files on the Storage Box are already encrypted and copied as they are.
+# copy (not sync): never deletes anything in the bucket.
+# --size-only: compare sizes, not checksums; jobs with compare: modtime use size and time.
+# --fast-list: list the bucket 1,000 files per request.
+# A failed copy doesn't stop the next one, but the script ends with an error (systemctl status deep-archive-backup).
 
 failed=""
 {% for job in backup_jobs if job.enabled | default(true) | bool %}
@@ -61,17 +50,11 @@ if ! /usr/bin/rclone copy {{ job.source }} glacier:{{ backup_bucket }}/{{ job.de
 fi
 {% if job.weekly_only is defined %}
 
-# {{ job.name }}, once a week (day {{ backup_weekly_day }} of the week, 7 = Sunday): the newest file in
-# {{ job.weekly_only }}/ (that night's database backup), always under the same name,
-# {{ job.weekly_only }}/{{ job.weekly_as }}. Each week replaces the last; the bucket keeps every replaced
-# copy 180 days and then deletes it (Terraform's lifecycle rule), so Deep Archive holds about
-# six months of weekly copies and never grows past that. Copying every night's file under its
-# own name would pile up forever, since this job can't delete anything there.
+# {{ job.name }}, once a week (day {{ backup_weekly_day }}, 7 = Sunday): the newest file in {{ job.weekly_only }}/ is copied as {{ job.weekly_only }}/{{ job.weekly_as }}, replacing last week's.
 if [ "$(date +%u)" = "{{ backup_weekly_day }}" ]; then
   newest=$(find {{ job.source }}/{{ job.weekly_only }} -maxdepth 1 -type f ! -name '.*' -printf '%T@ %p\n' | sort -n | tail -1 | cut -d' ' -f2-)
   if [ -n "$newest" ]; then
     echo "{{ job.name }}: weekly copy of $newest as {{ job.weekly_only }}/{{ job.weekly_as }}"
-    # --ignore-times: always upload, even if the size happens to match last week's
     if ! /usr/bin/rclone copyto "$newest" archive_{{ job.name }}:{{ job.weekly_only }}/{{ job.weekly_as }} \
       --ignore-times -v; then
       failed="$failed {{ job.name }}-weekly"

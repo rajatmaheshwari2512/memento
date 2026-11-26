@@ -1,11 +1,5 @@
 # Opens caddy_firewall_ports: in Oracle's iptables rules, else in ufw when it's on, else nothing
 # (a note: the provider's firewall must allow them).
-#
-# Oracle's Ubuntu image ships an iptables firewall that rejects everything except SSH.
-# Its rules live in /etc/iptables/rules.v4 (loaded at boot), ending in a REJECT line.
-# We add our ACCEPT lines before that REJECT, in the file (for reboots) and in the
-# running firewall (for now). We don't run `netfilter-persistent save`, because that
-# would also save Docker's own rules into the file.
 
 - name: Check the firewall file looks like Oracle's
   ansible.builtin.command: grep -q '^-A INPUT -j REJECT' /etc/iptables/rules.v4
@@ -22,7 +16,6 @@
   loop: "{{ caddy_firewall_ports }}"
   when: caddy_oracle_firewall.rc == 0
 
-# The same rule, written the same way, so `iptables -C` (check) finds it after a reboot.
 - name: Open ports in the running firewall (now, without a reboot)
   ansible.builtin.shell: |
     if iptables -C INPUT -p tcp -m state --state NEW -m tcp --dport {{ item }} -j ACCEPT 2>/dev/null; then

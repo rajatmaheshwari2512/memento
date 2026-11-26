@@ -25,8 +25,7 @@
     state: present
     update_cache: "{{ caddy_repo is changed }}"
 
-# Caddy isn't from Ubuntu either: the automatic updates include its repository, within
-# Caddy 2 (a Caddy 3 would wait until this is changed).
+# Caddy's repository is in the automatic updates, within Caddy 2.
 - name: Include Caddy's repository in the automatic updates
   ansible.builtin.copy:
     dest: /etc/apt/apt.conf.d/51caddy-unattended
@@ -54,8 +53,7 @@
 
 # --- Config ---
 
-# `validate` runs Caddy's own check on the new file first. If it fails, the old
-# Caddyfile stays and the task fails, so a typo never takes the site down.
+# `validate` runs Caddy's own check on the new file first; if it fails the old Caddyfile stays.
 - name: Write the Caddyfile
   ansible.builtin.template:
     src: Caddyfile.j2

@@ -4,5 +4,4 @@
     name: caption-night.timer
     state: restarted
     daemon_reload: true
-  # A --check preview doesn't really install the timer, so systemd can't find it yet.
   ignore_errors: "{{ ansible_check_mode }}"

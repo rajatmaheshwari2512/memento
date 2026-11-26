@@ -1,13 +1,8 @@
-# Memento's extras service (AI edits, feature flags, and later live albums and more), in
-# its own Docker Compose project in /opt/memento-extras:
-#   build/                   the source (memento-extras/ from this repo); the image is built here, on the VM
-#                            (a release, MEMENTO_VERSION in .env, pulls the images instead)
-#   data/                    edit results waiting to be saved, and the database (limits, flags)
-#   memento-extras.env       settings + Gemini key (root-only)
-#   docker-compose.yml       one container, joined to Immich's network
-# It's a separate project, not part of Immich's: the immich role runs compose with
-# remove_orphans, which would delete any container it doesn't know about.
-# Until 2026-11-19 it was called ai-edit (/opt/ai-edit, path /ai-edit); both are gone since 2026-11-23.
+# Memento's extras service, in its own Docker Compose project in /opt/memento-extras:
+# build/  the source (memento-extras/ from this repo)
+# data/  edit results waiting to be saved, and the database
+# memento-extras.env  settings + Gemini key (root-only)
+# docker-compose.yml  one container, joined to Immich's network
 
 - name: Check the Gemini key is filled in
   ansible.builtin.assert:
@@ -15,8 +10,6 @@
     fail_msg: Fill in GEMINI_API_KEY in .env.
     quiet: true
 
-# Checked here, not only in the service: there it's optional (AI edits run without it),
-# so a missing one would quietly leave live albums switched off.
 - name: Check the live albums secret is filled in
   ansible.builtin.assert:
     that:
@@ -36,8 +29,6 @@
     {{ [memento_extras_dir] + ([] if memento_extras_release else
        [memento_extras_dir ~ '/build', memento_extras_dir ~ '/build/creations/src']) }}
 
-# The container runs as memento_extras_uid, not root, so it owns its data folder and
-# everything in it (recurse). u=rwX: folders 0700, files 0600. Only that ID (and root) can read it.
 - name: Create the data folder, owned by the container's user
   ansible.builtin.file:
     path: "{{ memento_extras_dir }}/data"
@@ -50,7 +41,6 @@
 - name: Build the service's image from this checkout
   when: memento_extras_release | length == 0
   block:
-    # Only what the image needs. Not node_modules: those are dev-only (type checking on the Mac).
     - name: Copy the source to the VM
       ansible.builtin.copy:
         src: "{{ playbook_dir }}/../memento-extras/{{ item }}"
@@ -64,8 +54,6 @@
         - creations/src/job.ts # the creations container's jobs and limits, which the service shares
       register: memento_extras_copied
 
-    # Copying never deletes: a file moved or removed in the repo would stay on the VM, and in
-    # the image, as an old copy that scripts (caption-night.sh) could still run.
     - name: List the source files in the repo
       ansible.builtin.find:
         paths: "{{ playbook_dir }}/../memento-extras/src"
@@ -80,8 +68,6 @@
         recurse: true
       register: memento_extras_src_vm
 
-    # Compared as paths relative to each src folder: find tidies "host/../" out of the paths it
-    # returns, so stripping a prefix by text never matches (it listed every file).
     - name: Work out which source files on the VM are no longer in the repo
       ansible.builtin.set_fact:
         memento_extras_stale: >-
@@ -91,7 +77,6 @@
                           | map('relpath', playbook_dir ~ '/../memento-extras/src'))
              | list }}
 
-    # A guard: a mistake above must never empty the VM's source (the image would have no code).
     - name: Check that most of the VM's source stays
       ansible.builtin.assert:
         that:
@@ -108,8 +93,6 @@
       loop: "{{ memento_extras_stale }}"
       register: memento_extras_removed
 
-    # Built on the VM, so there's no image registry and nothing is published. The build is
-    # small (no npm install), about a minute on the 2-core VM. Rebuilt only when the source changed.
     - name: Build the memento-extras image
       community.docker.docker_image:
         name: memento-extras
@@ -153,8 +136,6 @@
     mode: "0644"
   register: memento_extras_compose
 
-# Recreate the container when the image, settings or compose file changed. Compose
-# alone doesn't notice a rebuilt image that kept the same tag.
 - name: Start the service (docker compose up)
   community.docker.docker_compose_v2:
     project_src: "{{ memento_extras_dir }}"

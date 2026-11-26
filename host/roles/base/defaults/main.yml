@@ -1,17 +1,11 @@
 # Overridden in group_vars/all/main.yml.
-# The timezone matters: the 04:00 backup timer and Immich's 02:00 database dump
-# should both mean India time.
 base_timezone: Etc/UTC
 
-# A swap file, as a safety net for memory spikes (Immich's machine learning, Collabora,
-# search). Oracle's Ubuntu image has none. 0 = no swap file.
+# A swap file for memory spikes. 0 = no swap file.
 base_swap_size_mb: 4096
 base_swap_file: /swapfile
 
-# When the nightly automatic updates run (server time, IST): well before the night captions
-# (00:30), so even a long run ends before midnight (Ubuntu's script skips a night whose run
-# ended after midnight). Deploy a change to this in the daytime: the timer catches up on a
-# missed run at once.
+# When the nightly automatic updates run (server time, IST).
 base_upgrade_time: "22:30"
 
 # Downloaded update files are deleted every this many days (apt's CleanInterval).

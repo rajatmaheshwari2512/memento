@@ -67,21 +67,12 @@ backup_jobs:
     source: "{{ immich_upload_location }}"
     dest_path: immich
     encrypt_names: base32
-    # Immich's nightly database backups: the server keeps the last 14. Deep Archive gets
-    # Sunday's only, always as backups/latest.sql.gz; the bucket keeps each replaced copy
-    # 180 days, so there are about six months of weekly ones (all of them would add GBs a
-    # month that are never deleted).
+    # Immich's nightly database backups: the server keeps the last 14. Deep Archive gets Sunday's only, as backups/latest.sql.gz.
     weekly_only: backups
     weekly_as: latest.sql.gz
-    # Memento's playback copies of videos and the clips it pulls out of motion photos.
-    # It rebuilds both from the originals after a restore, so Deep
-    # Archive holds only the originals and the database backup.
+    # Memento's playback copies of videos and the clips it pulls out of motion photos; rebuilt from the originals after a restore, so not archived.
     skip_folders: [encoded-video]
-  # Memento's extras service: a copy of its database (live-album rules, the encrypted keys
-  # they use, feature flags, the AI edit log), which the service rewrites every hour
-  # (memento-extras/src/db/database.ts). One small file, compared by size and time: a database
-  # often keeps its size when it changes. The bucket keeps replaced copies 180 days.
-  # The folder is /opt/memento-extras (memento_extras_dir) + /data/backup.
+  # Memento's extras service: a copy of its database, rewritten every hour (memento-extras/src/db/database.ts). The folder is /opt/memento-extras (memento_extras_dir) + /data/backup.
   - name: memento_extras
     source: /opt/memento-extras/data/backup
     dest_path: memento-extras

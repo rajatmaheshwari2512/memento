@@ -4,23 +4,19 @@
 # Run by hand:  sudo systemctl start caption-night     Watch it:  journalctl -u caption-night -f
 # By day (a test), with its own stop time:  sudo CAPTION_UNTIL="+20 min" {{ memento_extras_dir }}/caption-night.sh
 #
-# 1. List every photo and its preview from Immich's database (trashed, hidden and locked
-#    photos left out), as the backlog did, and every photo Immich still has in any state.
-# 2. Remove the captions of photos gone for good (not trashed or locked: gone).
-# 3. Stop here if the switch is off, every photo has a caption, or it's already past the stop time.
-# 4. Start the caption model: lowest CPU priority, {{ memento_extras_captions_memory }} memory cap, prompt cache off
-#    (with it, the model grows to ~11 GB).
+# 1. List every photo and its preview from Immich's database, and every photo Immich still has.
+# 2. Remove the captions of photos gone for good.
+# 3. Stop here if the switch is off, every photo has a caption, or it's past the stop time.
+# 4. Start the caption model: lowest CPU priority, {{ memento_extras_captions_memory }} memory cap.
 # 5. Caption until {{ memento_extras_captions_stop }} (src/scripts/caption-night.ts), then remove the model again.
 set -eu
 
 work={{ memento_extras_dir }}/night
 image={{ memento_extras_image_ref }}
-until=$(date -d "${CAPTION_UNTIL:-{{ memento_extras_captions_stop }}}" --iso-8601=seconds) # today
+until=$(date -d "${CAPTION_UNTIL:-{{ memento_extras_captions_stop }}}" --iso-8601=seconds)
 
-# The model goes, however this ends. The unit's ExecStopPost does it too, for a kill.
 cleanup() {
   if docker inspect caption-model > /dev/null 2>&1; then
-    # What happened to it (e.g. the memory cap) before its log goes with it.
     docker inspect -f 'caption model: exit {{ '{{' }}.State.ExitCode{{ '}}' }}, out of memory: {{ '{{' }}.State.OOMKilled{{ '}}' }}' caption-model
     docker logs --tail 5 caption-model 2>&1 | sed 's/^/caption model: /'
     docker rm -f caption-model > /dev/null 2>&1 || true
@@ -28,11 +24,8 @@ cleanup() {
 }
 trap cleanup EXIT
 trap 'exit 143' TERM HUP INT
-docker rm -f caption-model > /dev/null 2>&1 || true # one left from a run that was killed
+docker rm -f caption-model > /dev/null 2>&1 || true
 
-# The service's own image, settings and database, as a second process next to it (the
-# database allows that). Its data folder is at /memento here, so that the previews can sit
-# at /data/thumbs, the paths Immich's database has.
 night() {
   docker run --rm --name caption-night --network host --cpu-shares 2 --user {{ memento_extras_uid }}:{{ memento_extras_uid }} \
     --env-file {{ memento_extras_dir }}/memento-extras.env -e DATA_DIR=/memento \
@@ -52,7 +45,6 @@ for list in photos.tsv existing.txt; do
   mv "$work/$list.new" "$work/$list"
 done
 
-# Housekeeping, whether or not captioning is on; a failure here doesn't stop the night.
 night --clean-up --existing /work/existing.txt || echo "The clean-up failed; captioning anyway." >&2
 
 waiting=$(night --count)
@@ -61,7 +53,6 @@ if [ "$waiting" = 0 ]; then echo "Every photo has a caption."; exit 0; fi
 if [ "$(date +%s)" -ge "$(date -d "$until" +%s)" ]; then echo "Past the stop time ($until); $waiting photos wait."; exit 0; fi
 echo "$waiting photos without a caption; captioning until $until."
 
-# --cpu-shares 2: the lowest CPU weight (Docker's default is 1024), so everything else goes first.
 docker run -d --name caption-model --cpu-shares 2 \
   --memory {{ memento_extras_captions_memory }} --memory-swap {{ memento_extras_captions_memory }} \
   -p 127.0.0.1:{{ memento_extras_captions_port }}:8080 -v {{ memento_extras_dir }}/models:/models:ro \

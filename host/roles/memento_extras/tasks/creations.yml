@@ -1,9 +1,5 @@
-# The creations container (memento-extras/creations/): renders collages, recap videos,
-# animations and cinematic photos for themed memories, and cleans up videos' sound (Reduce
-# noise), from files the extras service puts in the shared work folder. Built on the VM like the
-# reader (or pulled, for a release); started by docker-compose.yml with the others.
+# The creations container (memento-extras/creations/): renders collages, recap videos, animations and cinematic photos, and cleans up videos' sound, from files in the shared work folder. Built on the VM (or pulled, for a release).
 
-# Only the two containers' user (10001) can read it: it briefly holds a job's photos.
 - name: Create the creations work folder
   ansible.builtin.file:
     path: "{{ memento_extras_creations_work }}"
@@ -21,9 +17,6 @@
     group: root
     mode: "0755"
 
-# Every .mp3 in memento_extras_creations_music_source on the Mac (kept out of git: the licence
-# doesn't allow passing the files on), readable by everyone, so by the container's user too. No
-# such folder on the Mac: nothing is copied. A track removed there stays here until removed by hand.
 - name: Copy the recap music
   ansible.builtin.copy:
     src: "{{ item }}"
@@ -47,8 +40,6 @@
         mode: "0755"
       register: memento_extras_creations_dir
 
-    # Its image copies src/ and runs server.ts, which imports its files by name, so a file left
-    # over from an older version is never run.
     - name: Copy the creations container's code to the VM
       ansible.builtin.copy:
         src: "{{ playbook_dir }}/../memento-extras/creations/{{ item }}"
@@ -60,11 +51,6 @@
         - src/
       register: memento_extras_creations_code
 
-    # Pinned: the base images by digest (Alpine's, and Debian's for the glibc that DeepFilterNet's
-    # tool needs); vips, ffmpeg and Python's onnxruntime and numpy by version; the depth model for
-    # cinematic photos by revision and checksum, fetched from huggingface.co, and DeepFilterNet's
-    # deep-filter for Reduce noise by version and checksum, fetched from github.com, while the image
-    # is built (see its Dockerfile).
     - name: Build the creations image
       community.docker.docker_image:
         name: memento-creations
@@ -74,5 +60,4 @@
           path: "{{ memento_extras_dir }}/creations-build"
         force_source: "{{ memento_extras_creations_code is changed }}"
       register: memento_extras_creations_image
-      # A dry run (--check) creates no folders, so on the first deploy there's nothing to build from.
       when: not (ansible_check_mode and memento_extras_creations_dir is changed)

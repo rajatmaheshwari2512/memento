@@ -1,6 +1,5 @@
 # Pinned Immich release, and its docker-compose.yml's sha256. To upgrade: docs/upgrades.md.
 immich_version: v3.4.2
-# v3.4.2's compose file is byte-identical to v3.4.1's, so the checksum is unchanged.
 immich_compose_sha256: 1455e3f474687cb96ecb2eab23a0a7268ac5515b094022c66f3902ceb7f0a564
 
 immich_dir: /opt/immich
@@ -19,14 +18,10 @@ immich_timezone: Etc/UTC
 # Set from .env (IMMICH_DB_PASSWORD). Letters and digits only (Immich's rule).
 immich_db_password: ""
 
-# SelfPhotos phase 2: serve our own build of Immich's web app (with the AI Edit button)
-# instead of the one inside the official image. A folder on your Mac made by
-# apps/web/build.sh, e.g. .../apps/web/dist/v3.4.2. Empty = the official web app.
+# Serve our own build of Immich's web app (made by apps/web/build.sh, e.g. .../apps/web/dist/v3.4.2) instead of the official one. Empty = the official web app.
 immich_custom_web_dir: ""
 # Where builds are unpacked on the VM, one folder per build.
 immich_web_builds_dir: /opt/immich/web
 
-# A Memento release (MEMENTO_VERSION in .env): Immich's server image with Memento's website already
-# in it, like ghcr.io/<owner>/memento-server:v1.2.0, run instead of Immich's own (and
-# immich_custom_web_dir is then ""). It must be built on immich_version. Empty = Immich's own image.
+# A Memento release (MEMENTO_VERSION in .env): Immich's server image with Memento's website in it, like ghcr.io/<owner>/memento-server:v1.2.0, run instead of Immich's own. Must be built on immich_version. Empty = Immich's own image.
 immich_server_image: ""

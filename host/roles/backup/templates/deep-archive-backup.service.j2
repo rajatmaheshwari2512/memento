@@ -11,7 +11,6 @@ Type=oneshot
 # Defines the "glacier" remote, and the encrypting remotes over it, for rclone (the
 # script inherits these variables).
 EnvironmentFile=/etc/deep-archive-backup/glacier.env
-# The copies themselves, one folder after the other: see the script.
 ExecStart=/etc/deep-archive-backup/backup.sh
 # Be gentle: the apps get the CPU and disk first.
 Nice=10
