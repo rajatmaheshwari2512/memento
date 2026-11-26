@@ -386,6 +386,7 @@ class Drift extends $Drift {
                 await m.createTable(v36.remoteAssetStorageSaverEntity);
                 await m.createIndex(v36.idxRemoteAssetStorageSaverOriginalChecksum);
                 await m.addColumn(v36.localAssetEntity, v36.localAssetEntity.deviceChecksum);
+                await m.addColumn(v36.trashedLocalAssetEntity, v36.trashedLocalAssetEntity.deviceChecksum);
               },
             ),
           );

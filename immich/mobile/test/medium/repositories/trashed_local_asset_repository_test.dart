@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:immich_mobile/domain/models/album/local_album.model.dart';
+import 'package:immich_mobile/infrastructure/repositories/local_asset.repository.dart';
 import 'package:immich_mobile/infrastructure/repositories/trashed_local_asset.repository.dart';
 
 import '../repository_context.dart';
@@ -95,6 +96,57 @@ void main() {
 
       final ids = result.values.expand((assets) => assets).map((a) => a.id);
       expect(ids, contains(localId));
+    });
+  });
+
+  group('Storage saver link', () {
+    late String userId;
+
+    setUp(() async {
+      final user = await ctx.newUser();
+      userId = user.id;
+      await ctx.newAuthUser(id: userId);
+    });
+
+    Future<({String? checksum, String? deviceChecksum})> localRow(String id) async {
+      final data = await ctx.db.managers.localAssetEntity.filter((row) => row.id.equals(id)).getSingle();
+      return (checksum: data.checksum, deviceChecksum: data.deviceChecksum);
+    }
+
+    Future<({String? checksum, String? deviceChecksum})> trashedRow(String id) async {
+      final data = await ctx.db.managers.trashedLocalAssetEntity.filter((row) => row.id.equals(id)).getSingle();
+      return (checksum: data.checksum, deviceChecksum: data.deviceChecksum);
+    }
+
+    test('a linked asset keeps both checksums through trash and restore, then unlinks', () async {
+      final album = await ctx.newLocalAlbum(backupSelection: BackupSelection.selected);
+      final local = await ctx.newLocalAsset(checksum: 'copy', deviceChecksum: 'original');
+      await ctx.newLocalAlbumAsset(albumId: album.id, assetId: local.id);
+      final copy = await ctx.newRemoteAsset(ownerId: userId, checksum: 'copy');
+
+      await sut.applyTrashedAssets([local.id]);
+      expect(await trashedRow(local.id), (checksum: 'copy', deviceChecksum: 'original'));
+
+      await sut.applyRestoredAssets([local.id]);
+      expect(await localRow(local.id), (checksum: 'copy', deviceChecksum: 'original'));
+
+      await (ctx.db.delete(ctx.db.remoteAssetEntity)..where((row) => row.id.equals(copy.id))).go();
+      await LocalAssetRepository(ctx.db).unlinkStorageSaverCopies();
+
+      expect(await localRow(local.id), (checksum: 'original', deviceChecksum: null));
+    });
+
+    test('trashLocalAsset keeps the device checksum', () async {
+      final album = await ctx.newLocalAlbum(backupSelection: BackupSelection.selected);
+      final local = await ctx.newLocalAsset(checksum: 'copy', deviceChecksum: 'original');
+      await ctx.newLocalAlbumAsset(albumId: album.id, assetId: local.id);
+      final asset = (await LocalAssetRepository(ctx.db).getById(local.id))!;
+
+      await sut.trashLocalAsset({
+        album.id: [asset],
+      });
+
+      expect(await trashedRow(local.id), (checksum: 'copy', deviceChecksum: 'original'));
     });
   });
 }

@@ -74,16 +74,18 @@ class TrashedLocalAssetRepository extends DatabaseAccessor<Drift> with $TrashedL
       return;
     }
     final assetIds = trashedAssets.map((e) => e.asset.id).toSet();
-    final Map<String, String> localChecksumById = await _getCachedChecksums(assetIds);
+    final localChecksumById = await _getCachedChecksums(assetIds);
 
     return _db.transaction(() async {
       await _db.batch((batch) {
         for (final item in trashedAssets) {
-          final effectiveChecksum = localChecksumById[item.asset.id] ?? item.asset.checksum;
+          final cached = localChecksumById[item.asset.id];
+          final effectiveChecksum = cached?.checksum ?? item.asset.checksum;
           final companion = TrashedLocalAssetEntityCompanion.insert(
             id: item.asset.id,
             albumId: item.albumId,
             checksum: Value(effectiveChecksum),
+            deviceChecksum: Value(cached?.deviceChecksum),
             name: item.asset.name,
             type: item.asset.type,
             createdAt: Value(item.asset.createdAt),
@@ -140,6 +142,9 @@ class TrashedLocalAssetRepository extends DatabaseAccessor<Drift> with $TrashedL
 
     final companions = <TrashedLocalAssetEntityCompanion>[];
     final idToDelete = <String>{};
+    final cachedChecksums = await _getCachedChecksums({
+      for (final assets in assetsByAlbums.values) ...assets.map((asset) => asset.id),
+    });
 
     for (final entry in assetsByAlbums.entries) {
       for (final asset in entry.value) {
@@ -150,6 +155,7 @@ class TrashedLocalAssetRepository extends DatabaseAccessor<Drift> with $TrashedL
             name: Value(asset.name),
             albumId: Value(entry.key),
             checksum: Value(asset.checksum),
+            deviceChecksum: Value(cachedChecksums[asset.id]?.deviceChecksum),
             type: Value(asset.type),
             width: Value(asset.width),
             height: Value(asset.height),
@@ -203,6 +209,7 @@ class TrashedLocalAssetRepository extends DatabaseAccessor<Drift> with $TrashedL
         height: Value(e.height),
         durationMs: Value(e.durationMs),
         checksum: Value(e.checksum),
+        deviceChecksum: Value(e.deviceChecksum),
         isFavorite: Value(e.isFavorite),
         orientation: Value(e.orientation),
         playbackStyle: Value(e.playbackStyle),
@@ -255,6 +262,7 @@ class TrashedLocalAssetRepository extends DatabaseAccessor<Drift> with $TrashedL
         height: Value(e.asset.height),
         durationMs: Value(e.asset.durationMs),
         checksum: Value(e.asset.checksum),
+        deviceChecksum: Value(e.asset.deviceChecksum),
         isFavorite: Value(e.asset.isFavorite),
         orientation: Value(e.asset.orientation),
         playbackStyle: Value(e.asset.playbackStyle),
@@ -300,18 +308,25 @@ class TrashedLocalAssetRepository extends DatabaseAccessor<Drift> with $TrashedL
   }
 
   //attempt to reuse existing checksums
-  Future<Map<String, String>> _getCachedChecksums(Set<String> assetIds) async {
-    final localChecksumById = <String, String>{};
+  Future<Map<String, ({String checksum, String? deviceChecksum})>> _getCachedChecksums(Set<String> assetIds) async {
+    final localChecksumById = <String, ({String checksum, String? deviceChecksum})>{};
 
     for (final slice in assetIds.slices(kDriftMaxChunk)) {
       final rows =
           await (_db.selectOnly(_db.localAssetEntity)
                 ..where(_db.localAssetEntity.id.isIn(slice) & _db.localAssetEntity.checksum.isNotNull())
-                ..addColumns([_db.localAssetEntity.id, _db.localAssetEntity.checksum]))
+                ..addColumns([
+                  _db.localAssetEntity.id,
+                  _db.localAssetEntity.checksum,
+                  _db.localAssetEntity.deviceChecksum,
+                ]))
               .get();
 
       for (final r in rows) {
-        localChecksumById[r.read(_db.localAssetEntity.id)!] = r.read(_db.localAssetEntity.checksum)!;
+        localChecksumById[r.read(_db.localAssetEntity.id)!] = (
+          checksum: r.read(_db.localAssetEntity.checksum)!,
+          deviceChecksum: r.read(_db.localAssetEntity.deviceChecksum),
+        );
       }
     }
 

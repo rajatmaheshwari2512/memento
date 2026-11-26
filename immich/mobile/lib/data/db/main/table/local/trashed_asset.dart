@@ -22,6 +22,9 @@ class TrashedLocalAssetEntity extends Table with DriftDefaultsMixin, AssetEntity
 
   TextColumn get checksum => text().nullable()();
 
+  /// Checksum of the device file while [checksum] holds a linked Storage saver copy's checksum
+  TextColumn get deviceChecksum => text().nullable()();
+
   BoolColumn get isFavorite => boolean().withDefault(const Constant(false))();
 
   IntColumn get orientation => integer().withDefault(const Constant(0))();
