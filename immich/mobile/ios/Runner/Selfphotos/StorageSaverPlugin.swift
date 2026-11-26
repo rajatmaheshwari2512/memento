@@ -2,14 +2,10 @@ import AVFoundation
 import Flutter
 import ImageIO
 import UniformTypeIdentifiers
-import VideoToolbox
 
 // SelfPhotos Storage saver: shrinks a video or photo before it's uploaded.
 class StorageSaverPlugin: ImmichPlugin, FlutterPlugin {
   static let name = "StorageSaverPlugin"
-
-  // Set to true to shrink HDR videos as 10-bit HEVC that stays HDR, for testing.
-  private static let shrinksHdr = false
 
   private static let maxSizeRatio = 0.8
   private static let maxFrameRate: Float = 60
@@ -133,7 +129,7 @@ class StorageSaverPlugin: ImmichPlugin, FlutterPlugin {
     let asset = AVURLAsset(url: input)
     guard let track = asset.tracks(withMediaType: .video).first else { throw StorageSaverError("No video track") }
     let facts = VideoFacts(asset: asset, track: track, fileSize: try fileSize(input))
-    if facts.hdr && !Self.shrinksHdr { return "hdr" }
+    if facts.hdr { return "hdr" }
     if facts.frameRate > Self.maxFrameRate { return "frameRate" }
     let resize = facts.shortSide > Self.maxShortSide
     if !resize && Double(facts.bitrate) <= Double(bitrate) / Self.maxSizeRatio { return "alreadySmall" }
@@ -144,8 +140,7 @@ class StorageSaverPlugin: ImmichPlugin, FlutterPlugin {
       output: output,
       bitrate: bitrate,
       size: resize ? facts.scaled(shortSide: Self.maxShortSide) : facts.size,
-      frameRate: facts.frameRate,
-      hdr: facts.hdr
+      frameRate: facts.frameRate
     )
     state.withLock { $0.running = (run, export) }
     defer { state.withLock { $0.running = nil } }
@@ -294,7 +289,6 @@ private final class VideoExport {
   private let bitrate: Int
   private let size: CGSize
   private let frameRate: Float
-  private let hdr: Bool
   private let done = DispatchSemaphore(value: 0)
 
   private struct State {
@@ -305,14 +299,13 @@ private final class VideoExport {
 
   private let state = Mutex(State())
 
-  init(asset: AVURLAsset, track: AVAssetTrack, output: URL, bitrate: Int, size: CGSize, frameRate: Float, hdr: Bool) {
+  init(asset: AVURLAsset, track: AVAssetTrack, output: URL, bitrate: Int, size: CGSize, frameRate: Float) {
     self.asset = asset
     self.track = track
     self.output = output
     self.bitrate = bitrate
     self.size = size
     self.frameRate = frameRate
-    self.hdr = hdr
   }
 
   // Returns nil once [output] is written within [timeLimit] seconds, or why it wasn't.
@@ -344,9 +337,7 @@ private final class VideoExport {
     writer.metadata = metadata()
 
     let videoOutput = AVAssetReaderTrackOutput(track: track, outputSettings: [
-      kCVPixelBufferPixelFormatTypeKey as String: hdr
-        ? kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange
-        : kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+      kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
     ])
     videoOutput.alwaysCopiesSampleData = false
     let videoSettings = videoSettings()
@@ -401,9 +392,6 @@ private final class VideoExport {
     var compression: [String: Any] = [AVVideoAverageBitRateKey: bitrate]
     if frameRate > 0 {
       compression[AVVideoExpectedSourceFrameRateKey] = frameRate
-    }
-    if hdr {
-      compression[AVVideoProfileLevelKey] = kVTProfileLevel_HEVC_Main10_AutoLevel as String
     }
     var settings: [String: Any] = [
       AVVideoCodecKey: AVVideoCodecType.hevc,
