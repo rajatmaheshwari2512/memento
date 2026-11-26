@@ -36,7 +36,7 @@ class BackupSettings extends StatelessWidget {
         const Divider(),
         SettingGroupTitle(title: context.t.backup_albums_sync, icon: Icons.sync),
         const _AlbumSyncActionButton(),
-        if (CurrentPlatform.isAndroid) const MementoBackupQualitySettings(), // SelfPhotos Storage saver
+        const MementoBackupQualitySettings(), // SelfPhotos Storage saver
       ],
     );
   }
