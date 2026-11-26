@@ -2,7 +2,7 @@
 # Managed by Ansible (host/roles/backup). Changes made on the server are overwritten.
 # Copies each app's files to Glacier Deep Archive, one folder after the other. Run by
 # deep-archive-backup.service, which also defines the rclone remotes (glacier.env).
-# Everything arrives in the bucket encrypted, names included: plain files on the VM's disk go through an encrypting remote (archive_<name>); files on the Storage Box are already encrypted and copied as they are.
+# Everything arrives in the bucket encrypted, names included: each job's files go through an encrypting remote (archive_<name>).
 # copy (not sync): never deletes anything in the bucket.
 # --size-only: compare sizes, not checksums; jobs with compare: modtime use size and time.
 # --fast-list: list the bucket 1,000 files per request.

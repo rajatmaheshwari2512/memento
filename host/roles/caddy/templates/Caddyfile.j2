@@ -1,10 +1,8 @@
 # Managed by Ansible (host/roles/caddy). Changes made on the server are overwritten.
 # Each block: Caddy gets a certificate for the name and forwards requests to the app.
-# Optional routes handle one path prefix first, in one of two ways:
-#   upstream: forwarded to another app, with the prefix removed. /extras, /extras/ and
-#             /extras/edits go to the memento-extras service as /, / and /edits.
-#   root:     files served straight from a folder on the VM, path kept as is.
-#             /crypt-fonts/GoogleSans.ttf is <root>/crypt-fonts/GoogleSans.ttf.
+# Optional routes (prefix, upstream) handle one path prefix first: forwarded to another app,
+# with the prefix removed. /extras, /extras/ and /extras/edits go to the memento-extras
+# service as /, / and /edits.
 # (Not /extrasfoo: only the exact prefix or the prefix followed by a slash matches.)
 {% for site in caddy_sites %}
 

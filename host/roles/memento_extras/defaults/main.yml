@@ -57,9 +57,9 @@ memento_extras_captions_stop: "07:00" # nothing new starts after this; the photo
 memento_extras_captions_threads: 2
 memento_extras_captions_memory: 3g
 memento_extras_captions_port: 8090 # on 127.0.0.1 only, while it runs
-# llama.cpp's server: the same build that captioned the backlog.
+# llama.cpp's server, pinned by digest.
 memento_extras_llama_image: ghcr.io/ggml-org/llama.cpp:server@sha256:5b43086e3ba7ea5794d72904654f6cd41224a9b1c6ac0398f4940ee380d30f23
-# The model, pinned to the exact files that captioned the backlog (Hugging Face revision f6d5376).
+# The model's files, pinned by sha256 (Hugging Face revision f6d5376).
 memento_extras_caption_model_files:
   - name: Qwen3.5-2B-Q4_K_M.gguf
     url: https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/f6d5376be1edb4d416d56da11e5397a961aca8ae/Qwen3.5-2B-Q4_K_M.gguf
@@ -67,7 +67,7 @@ memento_extras_caption_model_files:
   - name: mmproj-F16.gguf
     url: https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/f6d5376be1edb4d416d56da11e5397a961aca8ae/mmproj-F16.gguf
     sha256: 7035e9cb8d7c6a9681d07eef9a364783e86ea4cd73faab2eabb4f43a101830c7
-# Recorded with each caption; the same name the backlog's captions carry.
+# Recorded with each caption.
 memento_extras_caption_model_name: Qwen3.5-2B-GGUF:Q4_K_M
 # Immich's side, which the night run reads: its database container and its thumbnails folder.
 memento_extras_immich_db_container: immich_postgres
