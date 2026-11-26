@@ -375,7 +375,13 @@ private final class VideoExport {
 
     let group = DispatchGroup()
     for (index, (readerOutput, writerInput)) in pairs.enumerated() {
-      copy(from: readerOutput, to: writerInput, on: DispatchQueue(label: "selfphotos.storage-saver.track\(index)"), group: group)
+      copy(
+        from: readerOutput,
+        to: writerInput,
+        of: writer,
+        on: DispatchQueue(label: "selfphotos.storage-saver.track\(index)"),
+        group: group
+      )
     }
     group.notify(queue: DispatchQueue.global(qos: .utility)) {
       if self.state.withLock({ $0.finished }) {
@@ -448,7 +454,13 @@ private final class VideoExport {
     return items
   }
 
-  private func copy(from readerOutput: AVAssetReaderOutput, to writerInput: AVAssetWriterInput, on queue: DispatchQueue, group: DispatchGroup) {
+  private func copy(
+    from readerOutput: AVAssetReaderOutput,
+    to writerInput: AVAssetWriterInput,
+    of writer: AVAssetWriter,
+    on queue: DispatchQueue,
+    group: DispatchGroup
+  ) {
     group.enter()
     var copied = false
     writerInput.requestMediaDataWhenReady(on: queue) {
@@ -456,7 +468,11 @@ private final class VideoExport {
         if self.state.withLock({ $0.finished }) {
           copied = true
         } else if let buffer = readerOutput.copyNextSampleBuffer() {
-          copied = !writerInput.append(buffer)
+          if !writerInput.append(buffer) {
+            self.finish("failed: \(writer.error.map { "\($0)" } ?? "writer")")
+            self.state.withLock { $0.reader }?.cancelReading()
+            copied = true
+          }
         } else {
           copied = true
         }
