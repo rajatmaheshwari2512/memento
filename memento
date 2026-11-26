@@ -931,7 +931,7 @@ for change in json.load(sys.stdin).get("resource_changes", []):
     actions, address = change["change"]["actions"], change["address"]
     if "delete" in actions:
         print("refuse   deletes: " + address)
-    elif "create" in actions and (address in known or address.replace("[0]", "", 1) in known):
+    elif "create" in actions and address in known:
         print("refuse   makes again (the state has it): " + address)
     elif "create" in actions and change.get("type") == "oci_core_instance":
         print("new-server")')
