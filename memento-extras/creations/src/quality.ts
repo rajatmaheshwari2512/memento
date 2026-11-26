@@ -1,7 +1,5 @@
-// A cheap check of how good a photo looks, from Immich's small thumbnail (~250 px): how sharp
-// it is (the variance of the Laplacian of its greyscale) and how it's exposed (its mean
-// brightness, and how dark its brightest pixels or how bright its darkest are). vips only
-// shrinks and decodes it (to PPM); the maths is here.
+// A cheap check of a photo from Immich's small thumbnail: how sharp it is and how it's exposed
+// (mean brightness, how dark its brightest pixels or how bright its darkest are).
 
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";

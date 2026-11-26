@@ -8,12 +8,12 @@ export type Box = [number, number, number, number]; // a face: x1, y1, x2, y2 as
 // Cells as fractions of the canvas, before gutters.
 const TEMPLATES: Record<number, Rect[][]> = {
   2: [
-    [{ x: 0, y: 0, w: 0.5, h: 1 }, { x: 0.5, y: 0, w: 0.5, h: 1 }], // side by side
-    [{ x: 0, y: 0, w: 1, h: 0.5 }, { x: 0, y: 0.5, w: 1, h: 0.5 }], // one above the other
+    [{ x: 0, y: 0, w: 0.5, h: 1 }, { x: 0.5, y: 0, w: 0.5, h: 1 }],
+    [{ x: 0, y: 0, w: 1, h: 0.5 }, { x: 0, y: 0.5, w: 1, h: 0.5 }],
   ],
   3: [
-    [{ x: 0, y: 0, w: 0.5, h: 1 }, { x: 0.5, y: 0, w: 0.5, h: 0.5 }, { x: 0.5, y: 0.5, w: 0.5, h: 0.5 }], // one big on the left
-    [{ x: 0, y: 0, w: 1, h: 0.5 }, { x: 0, y: 0.5, w: 0.5, h: 0.5 }, { x: 0.5, y: 0.5, w: 0.5, h: 0.5 }], // one big on top
+    [{ x: 0, y: 0, w: 0.5, h: 1 }, { x: 0.5, y: 0, w: 0.5, h: 0.5 }, { x: 0.5, y: 0.5, w: 0.5, h: 0.5 }],
+    [{ x: 0, y: 0, w: 1, h: 0.5 }, { x: 0, y: 0.5, w: 0.5, h: 0.5 }, { x: 0.5, y: 0.5, w: 0.5, h: 0.5 }],
   ],
   4: [grid(2, 2)],
   6: [grid(3, 2), grid(2, 3)],
@@ -46,7 +46,7 @@ function loss(photo: Size, cell: Rect): number {
   return 1 - Math.min(a, b) / Math.max(a, b);
 }
 
-export type Layout = { canvas: Size; cells: Rect[]; order: number[] }; // order[i]: the photo in cells[i]
+export type Layout = { canvas: Size; cells: Rect[]; order: number[] };
 
 // The template, canvas and placing that crop the photos least: the widest photo in the widest
 // cell, and so on.
@@ -68,9 +68,7 @@ export function chooseLayout(photos: Size[]): Layout {
   return { canvas: best!.canvas, cells: best!.cells, order: best!.order };
 }
 
-// The largest part of the photo with the cell's shape, placed to keep faces in: around all of
-// them if they fit, else around the biggest. Faces sit a little above the middle; without
-// faces, the middle.
+// The largest part of the photo with the cell's shape, kept around the faces (else the middle).
 export function cropFor(photo: Size, faces: Box[], cell: Rect): Rect {
   const aspect = cell.w / cell.h;
   const w = Math.min(photo.w, photo.h * aspect);
@@ -84,7 +82,7 @@ export function cropFor(photo: Size, faces: Box[], cell: Rect): Rect {
       ? all
       : px.reduce((big, f) => ((f[2] - f[0]) * (f[3] - f[1]) > (big[2] - big[0]) * (big[3] - big[1]) ? f : big));
     cx = (target[0] + target[2]) / 2;
-    cy = Math.min((target[1] + target[3]) / 2 + h * 0.1, target[1] + h / 2); // headroom, without cutting the top of a head
+    cy = Math.min((target[1] + target[3]) / 2 + h * 0.1, target[1] + h / 2);
   }
   const x = Math.round(Math.min(Math.max(cx - w / 2, 0), photo.w - w));
   const y = Math.round(Math.min(Math.max(cy - h / 2, 0), photo.h - h));

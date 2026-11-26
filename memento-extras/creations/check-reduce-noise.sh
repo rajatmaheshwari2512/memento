@@ -1,18 +1,8 @@
 #!/bin/sh
-# Reduce noise, end to end on the Mac: builds the creations image, makes test videos (speech from
-# macOS `say`, or a speech-like tone without it, over pink noise and a hum) in each kind of file a
-# copy can be, runs the container as the server does (read-only, user 10001, no network, 1 GB,
-# 1.5 CPUs, the lowest CPU weight, no capabilities), has it clean each one through its own API,
-# and checks:
-#   - the picture: the same packets with the same timestamps (ffmpeg's framecrc), and rotation;
-#   - the sound: the noise-only parts quieter, the speech about as loud, starting where the
-#     original's did, with its channels and sample rate; the date and place kept;
-#   - a video with no sound: "unsuitable", not a failure;
-#   - a 2 s gap in the original's sound: what follows it stays in step with the picture;
-#   - a file whose header says 30 s but that holds 30 minutes: "unsuitable", too long;
-#   - a 10-minute video: how long it took, and the container's memory peak (docker stats).
-# Prints one line per check and exits 1 if any failed. No Immich and no extras service: this is
-# the container alone (the service's side has its own tests, test/reduce-noise.test.ts).
+# Reduce noise, end to end on the Mac: builds the creations image, makes test videos in each kind of file,
+# runs the container as the server does, has it clean each one through its API and checks the picture, the
+# sound, a video with no sound, a gap in the sound, a header that lies about the length, and a 10-minute video.
+# Prints one line per check and exits 1 if any failed.
 #
 #   cd memento-extras && sh creations/check-reduce-noise.sh      # about 3 minutes
 set -eu
@@ -34,8 +24,7 @@ mkdir -p "$WORK/media" "$WORK/work"
 echo "== building $IMAGE"
 docker build -q -t "$IMAGE" . >/dev/null
 
-# Runs the shell script on stdin, with ffmpeg, in a throwaway container of the image, on $WORK as
-# /m. From a file: ffmpeg reads stdin too, and would eat the rest of the script.
+# Runs the shell script on stdin in a throwaway container of the image, with $WORK as /m.
 tools() {
   cat > "$WORK/script.sh"
   docker run --rm --network none -v "$WORK:/m" -w /m --entrypoint sh "$IMAGE" /m/script.sh "$@"
@@ -48,10 +37,7 @@ fi
 tools <<'EOF'
 set -e
 cd media
-# About 15 s of speech (or a tone that rises and falls like a voice, 3 syllables a second).
 [ -f speech.aiff ] || ffmpeg -v error -f lavfi -i "aevalsrc='0.3*sin(2*PI*(170+50*sin(2*PI*0.7*t))*t)*(0.55+0.45*sin(2*PI*3*t))':s=48000:d=15" speech.aiff
-# 60 s: pink noise and a 100 Hz hum all the way, speech from 10 s and from 35 s. Noise alone at
-# 0–10, ~25–35 and ~50–60 s.
 ffmpeg -v error -y -i speech.aiff -i speech.aiff -f lavfi -i "anoisesrc=d=60:c=pink:r=48000:a=0.08" -f lavfi -i "sine=f=100:d=60:r=48000" \
   -filter_complex "[0:a]aresample=48000,adelay=10000,apad=whole_dur=60[s1];[1:a]aresample=48000,adelay=35000,apad=whole_dur=60[s2];[3:a]volume=0.05[h];[s1][s2][2:a][h]amix=inputs=4:normalize=0[a]" \
   -map "[a]" -t 60 -c:a pcm_s16le noisy.wav
@@ -74,13 +60,11 @@ ffmpeg -v error -y -f lavfi -i "testsrc2=s=352x288:r=15:d=20" -i noisy.wav -c:v 
 ffmpeg -v error -y -f lavfi -i "testsrc2=s=640x360:r=25:d=5" -c:v libx264 -preset veryfast -pix_fmt yuv420p f.mp4
 # long.mp4: a.mp4 ten times over, 10 minutes.
 ffmpeg -v error -y -stream_loop 9 -i a.mp4 -map 0 -c copy -t 600 long.mp4
-# g.mkv: H.264 with AAC whose sound has a 2 s gap in its timestamps at 5 s (as some cameras and
-# edited files have): the speech from 10 s belongs at 12 s.
+# g.mkv: a 2 s gap in the sound's timestamps at 5 s.
 ffmpeg -v error -y -f lavfi -i "testsrc2=s=320x240:r=25:d=20" -i noisy.wav -filter_complex "[1:a]atrim=0:18,asetpts='if(gte(T,5),PTS+2/TB,PTS)'[a]" \
   -map 0:v -map "[a]" -c:v libx264 -preset veryfast -pix_fmt yuv420p -c:a aac -t 20 g.mkv
 echo "  g.mkv: the sound's packets jump $(ffprobe -v error -select_streams a:0 -show_entries packet=pts_time -of csv=p=0 g.mkv | awk 'NR > 1 && $1 - p > 0.5 { printf "%s -> %s s ", p, $1 } { p = $1 }')"
-# h.mkv: 30 minutes of sound in a file whose header says it's 30 s long (Segment Info's
-# Duration, an 8-byte float in milliseconds, rewritten).
+# h.mkv: 30 minutes of sound in a file whose header says it's 30 s long.
 ffmpeg -v error -y -f lavfi -i "color=s=64x64:r=1:d=1800" -f lavfi -i "anoisesrc=d=1800:r=48000:a=0.1" -c:v libx264 -preset ultrafast \
   -c:a libopus -b:a 6k -ac 1 h.mkv
 node -e '
@@ -128,8 +112,7 @@ fail() { echo "  FAIL  $1"; FAILED=1; }
 within() { awk -v a="$1" -v b="$2" -v t="$3" 'BEGIN { d = a - b; if (d < 0) d = -d; exit !(d <= t) }'; }
 below() { awk -v a="$1" -v b="$2" 'BEGIN { exit !(a < b) }'; }
 
-# The checks every copy gets: the same picture packets and timestamps, the kind of file, the
-# sound's start, channels and rate. Prints key=value lines for the caller's own checks.
+# The checks every copy gets; prints key=value lines for the caller's own checks.
 facts() {
   tools "$1" "$2" <<'EOF'
 set -e
@@ -150,8 +133,6 @@ echo "rotation=$(ffprobe -v error -select_streams v:0 -show_entries stream_side_
 tag() { ffprobe -v error -show_entries "format_tags=$2" -of default=nw=1:nk=1 "$1"; }
 echo "place=$(tag "$orig" com.apple.quicktime.location.ISO6709)|$(tag "$copy" com.apple.quicktime.location.ISO6709)"
 echo "date=$(tag "$orig" creation_time)|$(tag "$copy" creation_time)"
-# In step with the picture: both sounds decoded from the file's start (silence before the first
-# sample), and the shift (ms) at which the copy's speech best matches the original's, 11–15 s in.
 dec() { ffmpeg -nostdin -v error -y -i "$1" -map 0:a:0 -af "aresample=16000:async=1:first_pts=0" -ac 1 -f s16le "$2"; }
 dec "$orig" /tmp/o.raw; dec "$copy" /tmp/c.raw
 echo "shift=$(node -e '
@@ -165,7 +146,6 @@ for (let lag = -most; lag <= most; lag++) {
   if (sum > best) { best = sum; shift = lag; }
 }
 console.log((shift / rate * 1000).toFixed(1));' /tmp/o.raw /tmp/c.raw)"
-# Loudness (dB) of the sound in each span: noise alone, then speech.
 rms() { ffmpeg -nostats -i "$1" -map 0:a:0 -af "atrim=$2:$3,astats=measure_overall=RMS_level:measure_perchannel=0" -f null - 2>&1 | awk '/RMS level dB/ { print $NF }'; }
 for span in "1 9" "26 34" "51 59" "12 24" "37 49"; do
   set -- $span
@@ -185,8 +165,6 @@ common_checks() { # $1: what it is, $2: expected family, $3: expected codec
   [ "$(get codec)" = "$3" ] || fail "$1: the sound is $(get codec), not $3"
   set -- "$1" $(get channels) $(get rate) $(get start) $(get length)
   [ "$2" = "$3" ] && [ "$4" = "$5" ] && pass "$1: $3 channel(s) at $5 Hz, as the original" || fail "$1: channels or rate changed ($2→$3, $4→$5)"
-  # The copy's first packet is up to one AAC frame (~23 ms) earlier than the original's: its own
-  # encoder's priming, which a player skips. What's heard must line up: the speech's shift.
   within "$6" "$7" 0.03 && pass "$1: the sound starts at $7 s ($6 s in the original)" || fail "$1: the sound moved ($6 → $7 s)"
   within "$(get shift)" 0 1 && pass "$1: in step with the picture (the speech $(get shift) ms off the original's)" || fail "$1: out of step by $(get shift) ms"
   within "$8" "$9" 0.1 && pass "$1: as long as the original ($8 s)" || fail "$1: length changed ($8 → $9 s)"
@@ -251,7 +229,6 @@ case $STATE in *'"state":"done"'*) pass "long.mp4: cleaned" ;; *) fail "long.mp4
 FACTS=$(facts media/long.mp4 "work/$JOB/reduce-noise.video")
 [ "$(get picture)" = same ] && pass "long.mp4: the picture's $(get packets) packets unchanged" || fail "long.mp4: the picture changed"
 set -- $(get length); within "$1" "$2" 0.1 && pass "long.mp4: as long as the original ($1 s)" || fail "long.mp4: length changed ($1 → $2 s)"
-# docker stats writes "312.4MiB", "1.02GiB" or "980KiB": the largest, in MiB.
 awk '{ v = $1 + 0; if ($1 ~ /GiB/) v *= 1024; else if ($1 ~ /KiB/) v /= 1024; else if ($1 ~ /[0-9]B$/) v /= 1048576; if (v > max) max = v }
   END { printf "  the container'"'"'s memory peak while cleaning 10 minutes: %.0f MiB (its cap is 1 GiB)\n", max }' "$SAMPLES"
 echo "  the container's own log (seconds, pieces, the model's time in ms):"

@@ -1,16 +1,6 @@
-# Memento's creations container (memento-extras/creations/): renders collages, recap videos,
-# animations and cinematic photos, and cleans up videos' sound (Reduce noise), from files the
-# extras service hands it. Built on the VM by Ansible (host/roles/memento_extras).
-# No npm packages: Node runs the TypeScript directly, and the work is done by the vips and
-# ffmpeg command-line tools, for cinematic photos a small depth model run by Python's
-# onnxruntime (src/depth.py), and for Reduce noise DeepFilterNet's own `deep-filter` tool
-# (src/noise.ts). Everything is pinned: the base images by digest (node 24.22.2 on Alpine 3.24,
-# Debian 13.7 for glibc), the packages by version (a newer Alpine build fails here, loudly, until
-# the pin is updated), the models and deep-filter by version and checksum.
-# Builds for ARM64 and x86-64 (TARGETARCH, else the build machine's CPU).
+# Memento's creations container: renders collages, recap videos, animations and cinematic photos, and
+# cleans up videos' sound, from files the extras service hands it. Built by Ansible (host/roles/memento_extras).
 
-# glibc, for deep-filter on ARM64 only: its ARM64 build is for glibc, and Alpine has musl (Alpine's
-# glibc shim can't start it). Five libraries and glibc's loader, nothing else from Debian.
 FROM debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2 AS glibc
 ARG TARGETARCH
 RUN mkdir /glibc && case "${TARGETARCH:-$(uname -m)}" in \
@@ -18,10 +8,6 @@ RUN mkdir /glibc && case "${TARGETARCH:-$(uname -m)}" in \
                          libpthread.so.0 libgcc_s.so.1 /glibc/ ;; \
     esac
 
-# DeepFilterNet 3 (MIT/Apache-2.0), its project's command-line tool v0.5.6 with the model
-# inside (39 MB), fetched now because the running container has no internet, and checked
-# against its checksum, so a changed file fails the build. Fetched with Node (busybox wget
-# tries only one of GitHub's download addresses, and one of them refuses some networks).
 FROM node:24.22.2-alpine@sha256:a34ab6d7f6f4813f4d0c5469d74685604b962fbdbf5793a7bc7b4998ecb867c8 AS deepfilter
 ARG TARGETARCH
 RUN case "${TARGETARCH:-$(uname -m)}" in \
@@ -35,28 +21,21 @@ RUN case "${TARGETARCH:-$(uname -m)}" in \
 
 FROM node:24.22.2-alpine@sha256:a34ab6d7f6f4813f4d0c5469d74685604b962fbdbf5793a7bc7b4998ecb867c8
 
-# "!pyc": without Python's precompiled files (71 MB): the depth step compiles what it imports
-# each time instead, about 0.15 s.
 RUN apk add --no-cache vips-tools=8.18.2-r0 ffmpeg=8.1.3-r0 py3-onnxruntime=1.24.4-r1 py3-numpy=2.4.6-r0 '!pyc'
 
-# Depth Anything V2 Small (Apache-2.0), its 8-bit ONNX build (27 MB): fetched now, when the image
-# is built, because the running container has no internet; checked against its checksum, so a
-# changed file fails the build.
 RUN mkdir /app && wget -q -O /app/depth.onnx \
       https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/4472b7362082ad9968fee890ca0f1e5aca36b93d/onnx/model_quantized.onnx \
  && echo "fcf51f1b230362b28690bb9d1809bf0431f29cad20534e3f589bd7285547f20d  /app/depth.onnx" | sha256sum -c - \
  && mkdir /app/model && mv /app/depth.onnx /app/model/depth.onnx
 
-# Reduce noise (src/noise.ts): deep-filter; on ARM64, started by glibc's loader with these libraries.
 COPY --from=glibc /glibc/ /opt/glibc/
 COPY --from=deepfilter /deep-filter /app/deep-filter
 
 ENV NODE_ENV=production \
-    # Only vips' own, safe file readers (no ImageMagick or other "untrusted" loaders).
+    # vips: only its own file readers.
     VIPS_BLOCK_UNTRUSTED=1 \
     VIPS_CONCURRENCY=2 \
-    # The depth step: no bytecode written (the container is read-only), and numpy's maths
-    # library on one thread (it would start one per host core when loaded).
+    # The depth step: no bytecode written, numpy on one thread.
     PYTHONDONTWRITEBYTECODE=1 \
     OPENBLAS_NUM_THREADS=1 \
     WORK_DIR=/work \
@@ -64,7 +43,6 @@ ENV NODE_ENV=production \
 WORKDIR /app
 COPY src ./src
 
-# Not root: the same ID as the extras service (10001), which shares the work folder with it.
 USER 10001:10001
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \

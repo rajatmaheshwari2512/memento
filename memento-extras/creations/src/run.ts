@@ -19,9 +19,8 @@ export function run(command: string, args: string[], deadline: Deadline, perComm
   return pipeline([[command, args]], deadline, perCommandMs);
 }
 
-// Runs the commands with each one's output going straight into the next (`a | b`), and returns
-// what the last one printed. All are stopped at the time limit, and all of them if one fails
-// (the others couldn't finish without it).
+// Runs the commands piped into each other (`a | b`) and returns what the last printed. All are
+// stopped at the time limit, and all if one fails.
 export function pipeline(commands: Array<[string, string[]]>, deadline: Deadline, perCommandMs = 120_000): Promise<string> {
   const limit = Math.min(perCommandMs, deadline.left());
   const children: ChildProcess[] = [];
@@ -30,15 +29,12 @@ export function pipeline(commands: Array<[string, string[]]>, deadline: Deadline
     for (const [command, args] of commands) {
       const before = children.at(-1);
       children.push(spawn("nice", ["-n", "19", command, ...args], { stdio: [before ? before.stdout! : "ignore", "pipe", "pipe"] }));
-      // The next command has the pipe now; ours would keep it open (the one before would never
-      // see the next one go, and its output would never end).
       before?.stdout!.destroy();
     }
   } catch (error) {
-    stopAll(); // one couldn't be started: none is left running
+    stopAll();
     return Promise.reject(error);
   }
-  // Our own timer, so a kill for time can be told apart from the kernel's for memory.
   let timedOut = false;
   const timer = setTimeout(() => {
     timedOut = true;

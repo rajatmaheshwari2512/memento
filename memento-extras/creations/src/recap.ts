@@ -1,13 +1,5 @@
-// A recap video: each photo held for a few seconds with a slow zoom towards its faces, a few
-// seconds from each video, crossfades between them, optional music, as a 1080p MP4 (video.ts)
-// with its date and place inside.
-//
-// Each frame is encoded once, and memory stays bounded: the final video is made in parts, each
-// generated straight from its sources (a photo framed by vips, zoomed by ffmpeg; or a clip,
-// seeked to the right second): every photo's middle, and between photos the crossfade from the
-// end of one into the start of the next, so never more than two sources are open at once.
-// The parts are then joined without re-encoding. Every tool runs at nice 19 with two threads;
-// the job's deadline stops it.
+// A recap video: each photo held a few seconds with a slow zoom towards its faces, a few seconds from each
+// video, crossfades between them, optional music, as a 1080p MP4 (video.ts).
 
 import { mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -20,17 +12,15 @@ import { sizeOf } from "./vips.ts";
 
 const W = 1920;
 const H = 1080;
-const FPS = 25; // fewer frames to make than 30, and smooth enough for slow zooms
+const FPS = 25;
 const PHOTO_SECONDS = 3.5;
 const CLIP_SECONDS = 4;
 const FADE = 0.6;
-const ZOOM = 0.12; // the slow zoom: to 112% over a photo's time
-const STILL = { w: Math.round(W * 1.5), h: Math.round(H * 1.5) }; // photos framed larger than the video, so the zoom stays smooth
+const ZOOM = 0.12;
+const STILL = { w: Math.round(W * 1.5), h: Math.round(H * 1.5) };
 const MUSIC = /\.(mp3|m4a|aac|ogg|opus|flac|wav)$/i;
-// Every part shares exactly these settings, so the parts join without re-encoding.
 const FINAL = h264(FPS);
 
-// The middle of the faces as fractions of the frame, or a little above the middle.
 function focusOf(faces: Box[], map: (x: number, y: number) => [number, number]): [number, number] {
   if (faces.length === 0) return [0.5, 0.45];
   const xs = faces.flatMap(([x1, , x2]) => [x1, x2]);
@@ -39,9 +29,7 @@ function focusOf(faces: Box[], map: (x: number, y: number) => [number, number]):
   return [Math.min(1, Math.max(0, fx)), Math.min(1, Math.max(0, fy))];
 }
 
-// The photo as a 16:9 frame at STILL size: a wide photo is cropped around its faces; a tall or
-// square one sits in the middle over a blurred, darkened copy of itself. Returns the frame and
-// where the zoom should head. Its scratch images go as soon as the frame is made.
+// The photo as a 16:9 frame; returns the frame and where the zoom should head.
 async function frame(photo: string, faces: Box[], tmp: string, i: number, deadline: Deadline): Promise<{ still: string; focus: [number, number] }> {
   const out = join(tmp, `${i}-still.jpg`);
   const scratch = join(tmp, `photo-${i}`);
@@ -64,7 +52,6 @@ async function frameIn(photo: string, faces: Box[], tmp: string, out: string, de
     await run("vips", ["thumbnail", cropped, out + "[Q=92]", String(STILL.w), "--height", String(STILL.h), "--size", "force"], deadline);
     return { still: out, focus: focusOf(faces, (x, y) => [(x * size.w - crop.x) / crop.w, (y * size.h - crop.y) / crop.h]) };
   }
-  // The blur is done small (cheap), then scaled up.
   const small = join(tmp, "bg-small.tif");
   const blurred = join(tmp, "bg-blur.tif");
   const background = join(tmp, "bg.tif");
@@ -84,7 +71,6 @@ async function frameIn(photo: string, faces: Box[], tmp: string, out: string, de
   return { still: out, focus: focusOf(faces, (x, y) => [(left + x * fgWidth) / STILL.w, y]) };
 }
 
-// What a part is made from: a framed photo with where its zoom heads, or a stretch of a clip.
 type Source =
   | { kind: "photo"; still: string; focus: [number, number]; frames: number }
   | { kind: "video"; file: string; start: number; frames: number };
@@ -94,15 +80,12 @@ type Source =
 function framesOf(source: Source, from: number, count: number, label: string): { input: string[]; filter: string } {
   if (source.kind === "photo") {
     const [fx, fy] = source.focus;
-    // zoompan: one output frame per input frame, the window shrinking towards the focus point;
-    // `on` counts this part's frames, so `from` places it in the photo's whole zoom.
     return {
       input: ["-loop", "1", "-framerate", String(FPS), "-i", source.still],
       filter: `zoompan=z='1+${ZOOM}*(on+${from})/${source.frames}':x='(iw-iw/zoom)*${fx.toFixed(3)}':y='(ih-ih/zoom)*${fy.toFixed(3)}'` +
         `:d=1:s=${W}x${H}:fps=${FPS},${TO_TV}`,
     };
   }
-  // Fitted to the frame over a blurred copy of itself (phone videos are often upright).
   return {
     input: ["-threads", "2", "-ss", (source.start + from / FPS).toFixed(3), "-t", ((count + 2) / FPS).toFixed(3), "-i", source.file],
     filter: `split[${label}a][${label}b];` +
@@ -146,9 +129,7 @@ async function parts(sources: Source[], tmp: string, deadline: Deadline): Promis
   return out;
 }
 
-// The job's track among the music folder's file names: one of its moods' (job.ts, MOODS), else
-// any; none if there's no audio. The same job always gets the same track; different jobs spread
-// over the matches.
+// The job's track among the music folder's files: one of its moods', else any; none if no audio.
 export function pickTrack(names: string[], moods: readonly Mood[], id: string): string | null {
   const tracks = names.filter((f) => MUSIC.test(f)).sort();
   const matching = tracks.filter((f) => moods.some((m) => f.startsWith(`${m}-`)));

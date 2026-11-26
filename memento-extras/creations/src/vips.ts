@@ -10,9 +10,7 @@ export async function sizeOf(file: string, deadline: Deadline): Promise<Size> {
   return { w: width, h: height };
 }
 
-// The header of a binary PNM, the plain pixel files vips writes for our own maths (comments
-// allowed, as vips writes one): its kind (P5 grey, P6 colour), size, largest value, and where
-// the pixels start.
+// The header of a binary PNM: its kind (P5 grey, P6 colour), size, largest value, and where the pixels start.
 export function pnmHeader(bytes: Uint8Array): { magic: string; w: number; h: number; max: number; offset: number } {
   const space = (b: number | undefined) => b === 0x20 || b === 0x0a || b === 0x0d || b === 0x09;
   let pos = 0;
@@ -20,7 +18,7 @@ export function pnmHeader(bytes: Uint8Array): { magic: string; w: number; h: num
     for (;;) {
       while (pos < bytes.length && space(bytes[pos])) pos++;
       if (bytes[pos] !== 0x23) break;
-      while (pos < bytes.length && bytes[pos] !== 0x0a) pos++; // a comment
+      while (pos < bytes.length && bytes[pos] !== 0x0a) pos++;
     }
     const start = pos;
     while (pos < bytes.length && !space(bytes[pos])) pos++;
@@ -30,5 +28,5 @@ export function pnmHeader(bytes: Uint8Array): { magic: string; w: number; h: num
   const w = Number(token());
   const h = Number(token());
   const max = Number(token());
-  return { magic, w, h, max, offset: pos + 1 }; // after the single whitespace before the pixels
+  return { magic, w, h, max, offset: pos + 1 };
 }

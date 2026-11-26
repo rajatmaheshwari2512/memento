@@ -37,8 +37,7 @@ export async function framePhoto(photo: string, size: Size, out: string, deadlin
   await rm(fitted, { force: true });
 }
 
-// 1080p-or-smaller H.264 High, 8-bit 4:2:0, TV-range BT.709 (photos arrive as full-range JPEG),
-// at a modest bitrate, two threads. Parts made with the same settings join without re-encoding.
+// 1080p-or-smaller H.264 High, 8-bit 4:2:0, TV-range BT.709, at a modest bitrate, two threads.
 export function h264(fps: number, maxrate = "6M"): string[] {
   return [
     "-an", "-c:v", "libx264", "-preset", "faster", "-crf", "23", "-maxrate", maxrate, "-bufsize", "12M", "-profile:v", "high", "-level", "4.1",
@@ -47,8 +46,6 @@ export function h264(fps: number, maxrate = "6M"): string[] {
   ];
 }
 
-// The filter that turns full-range photo frames into the TV-range video above, labelled BT.709
-// throughout (without the label, the encoder writes the primaries and transfer as unknown).
 export const TO_TV = "scale=out_range=tv:out_color_matrix=bt709,format=yuv420p,setparams=range=tv:colorspace=bt709:color_primaries=bt709:color_trc=bt709";
 
 // "+15.4989+073.8278/" (ISO 6709), as phones write it in videos.

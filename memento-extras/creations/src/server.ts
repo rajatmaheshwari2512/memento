@@ -1,21 +1,14 @@
-// Memento's creations container: renders the collages, recap videos, animations and cinematic
-// photos it's told to make, and cleans up videos' sound (Reduce noise), from files the extras
-// service put in the job's folder. It has no keys, no internet and
-// no access to Immich: it only reads and writes WORK_DIR/<job id>/. One job at a time; another
-// is answered 429 (busy). Every tool runs at the lowest CPU priority with a time limit, and the
-// job's scratch files are removed whatever happens.
+// Memento's creations container: renders collages, recap videos, animations and cinematic photos, and cleans up
+// videos' sound, from files the extras service put in the job's folder, WORK_DIR/<job id>/. One job at a time;
+// another is answered 429 (busy).
 //
 //   GET  /health        { ok, busy }
-//   POST /render        a job (job.ts): starts it and answers 202 at once (a recap takes minutes,
-//                       longer than an HTTP request should stay open)
+//   POST /render        a job (job.ts): starts it and answers 202 at once
 //   GET  /renders/:id   { state: running | done | failed | unsuitable, file?, bytes?, ms?, error? };
-//                       unsuitable: it can't be made from what it was given (an animation whose
-//                       photos aren't one burst, a cinematic photo with no clear subject, a video
-//                       with no sound), so trying again won't help. 404 for a job this container
-//                       doesn't know (it restarted since)
+//                       unsuitable: can't be made from what it was given, so don't retry.
+//                       404 for a job this container doesn't know
 //   POST /quality       { id, files } (thumbnails in the job's folder) → { results, ms }: each
-//                       photo's sharpness and exposure (quality.ts), or null if unreadable. Quick,
-//                       so answered when done.
+//                       photo's sharpness and exposure (quality.ts), or null if unreadable
 //   400 a bad job, 429 busy (one job at a time, whatever its kind), 500 it failed ({ error })
 
 import { mkdir, rm, stat } from "node:fs/promises";
@@ -33,13 +26,13 @@ import { measureFiles, type Quality } from "./quality.ts";
 import { Deadline } from "./run.ts";
 
 const WORK_DIR = process.env.WORK_DIR ?? "/work";
-// Music for recap videos, if the owner put any there (read-only). None: videos are silent.
+// Music for recap videos, if any (read-only); none: videos are silent.
 const MUSIC_DIR = process.env.MUSIC_DIR || undefined;
 const PORT = Number(process.env.PORT ?? 8000);
 
 let busy = false;
 type RenderState = { state: "running" } | ({ state: "done" } & RenderResult) | { state: "failed" | "unsuitable"; error: string };
-const renders = new Map<string, RenderState>(); // the latest, by job id
+const renders = new Map<string, RenderState>();
 const KEEP_RENDERS = 50;
 
 function remember(id: string, state: RenderState): void {
@@ -72,11 +65,11 @@ async function readBody(req: IncomingMessage): Promise<unknown> {
   }
 }
 
-// Runs `work` in the job's folder with a scratch folder that's removed afterwards, whatever happens.
+// Runs `work` in the job's folder with a scratch folder that's removed afterwards.
 async function inJobFolder<T>(id: string, work: (dir: string, tmp: string) => Promise<T>): Promise<T> {
   const dir = join(WORK_DIR, id);
   const tmp = join(dir, "tmp");
-  await stat(dir); // the extras service made it, with the inputs
+  await stat(dir);
   await mkdir(tmp, { recursive: true });
   try {
     return await work(dir, tmp);
@@ -85,7 +78,6 @@ async function inJobFolder<T>(id: string, work: (dir: string, tmp: string) => Pr
   }
 }
 
-// How many inputs a job has (for the log).
 function inputsOf(job: RenderJob): number {
   switch (job.kind) {
     case "collage": return job.photos.length;
@@ -125,8 +117,6 @@ async function quality(job: QualityJob): Promise<{ results: Array<Quality | null
   return { results, ms: Date.now() - started };
 }
 
-// One job at a time, whatever its kind. Logs only the job id and what went wrong: never what's in
-// the photos.
 async function exclusive<T extends { ms: number }>(what: Record<string, unknown>, work: () => Promise<T>): Promise<T> {
   busy = true;
   try {
@@ -148,7 +138,7 @@ function startRender(job: RenderJob): void {
   exclusive({ job: job.id, kind: job.kind, items: inputsOf(job) }, () => render(job)).then(
     (result) => remember(job.id, { state: "done", ...result }),
     async (error: unknown) => {
-      await rm(join(WORK_DIR, job.id, OUTPUT_FILE[job.kind]), { force: true }).catch(() => {}); // no half-made output
+      await rm(join(WORK_DIR, job.id, OUTPUT_FILE[job.kind]), { force: true }).catch(() => {});
       remember(job.id, { state: error instanceof Unsuitable ? "unsuitable" : "failed", error: error instanceof Error ? error.message : String(error) });
     },
   );

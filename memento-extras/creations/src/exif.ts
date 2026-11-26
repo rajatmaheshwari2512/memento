@@ -1,11 +1,4 @@
-// The date, time zone and place a collage carries in its own file (EXIF), so Immich files it
-// at its event when it's uploaded, with no need to change it afterwards (which would need the
-// broad asset.update permission). Immich reads DateTimeOriginal with OffsetTimeOriginal first
-// (its EXIF_DATE_TAGS), and GPSLatitude/GPSLongitude for the map.
-//
-// A minimal EXIF block (little-endian TIFF): IFD0 (Software, pointers), the Exif IFD (dates
-// and offset) and, with a place, the GPS IFD. Inserted right after the JPEG's start marker;
-// the JPEG must have no EXIF of its own (vips saves with --keep none).
+// The EXIF block (date, time zone, place) a collage carries in its own file.
 
 export type Stamp = {
   local: string; // wall-clock time where it happened, "2026-10-20T08:59:59"
@@ -55,8 +48,6 @@ function ifdSize(entries: Entry[]): number {
   return size;
 }
 
-// Writes one IFD at `start` (an offset in the TIFF block): its entries, then the values too
-// big to sit in an entry.
 function writeIfd(entries: Entry[], start: number, pointers: Record<"exif" | "gps", number>): Buffer {
   const out = Buffer.alloc(ifdSize(entries));
   const sorted = [...entries].sort((a, b) => a.tag - b.tag);
@@ -77,15 +68,15 @@ function writeIfd(entries: Entry[], start: number, pointers: Record<"exif" | "gp
       extra += e.data.length + (e.data.length % 2);
     }
   });
-  return out; // next-IFD offset stays 0
+  return out;
 }
 
 export function exifBlock({ local, offset, gps }: Stamp, size: { w: number; h: number }): Buffer {
-  const when = local.replace("T", " ").replace(/-/g, ":").slice(0, 19); // "2026:10:20 08:59:59"
+  const when = local.replace("T", " ").replace(/-/g, ":").slice(0, 19);
   const exif: Entry[] = [
-    { tag: 0x9000, type: 7, count: 4, data: Buffer.from("0232", "latin1") }, // ExifVersion
+    { tag: 0x9000, type: 7, count: 4, data: Buffer.from("0232", "latin1") },
     ascii(0x9003, when), ascii(0x9004, when), ascii(0x9010, offset), ascii(0x9011, offset),
-    short(0xa001, 1), // ColorSpace: sRGB
+    short(0xa001, 1),
     long(0xa002, size.w), long(0xa003, size.h),
   ];
   const gpsEntries: Entry[] = gps
@@ -101,7 +92,7 @@ export function exifBlock({ local, offset, gps }: Stamp, size: { w: number; h: n
   if (gps) ifd0.push({ tag: 0x8825, type: 4, count: 1, pointer: "gps" });
 
   const pointers = { exif: 8 + ifdSize(ifd0), gps: 8 + ifdSize(ifd0) + ifdSize(exif) };
-  const header = Buffer.from([0x49, 0x49, 0x2a, 0x00, 0x08, 0x00, 0x00, 0x00]); // "II", 42, IFD0 at 8
+  const header = Buffer.from([0x49, 0x49, 0x2a, 0x00, 0x08, 0x00, 0x00, 0x00]);
   const tiff = Buffer.concat([
     header,
     writeIfd(ifd0, 8, pointers),

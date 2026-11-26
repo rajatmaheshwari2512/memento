@@ -1,8 +1,5 @@
-// A collage, with the vips command-line tools: each photo turned upright, cropped to its cell
-// around its faces (layout.ts), made sRGB, scaled to fit, then placed on an off-white canvas
-// and saved as a JPEG with its date and place (exif.ts). Every step writes an uncompressed TIFF
-// into the job's tmp folder (server.ts removes it after the job): vips' own format is one of
-// the "untrusted" loaders the container blocks.
+// A collage with the vips tools: each photo cropped to its cell around its faces, placed on a canvas,
+// saved as a JPEG with its date and place.
 
 import { readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
