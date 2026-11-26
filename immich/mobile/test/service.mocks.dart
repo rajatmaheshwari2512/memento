@@ -8,6 +8,8 @@ import 'package:immich_mobile/domain/services/store.service.dart';
 import 'package:immich_mobile/domain/services/user.service.dart';
 import 'package:immich_mobile/domain/utils/background_sync.dart';
 import 'package:immich_mobile/platform/native_sync_api.g.dart';
+import 'package:immich_mobile/selfphotos/storage_saver/storage_saver.service.dart';
+import 'package:immich_mobile/selfphotos/storage_saver/storage_saver_native.dart';
 import 'package:immich_mobile/services/api.service.dart';
 import 'package:immich_mobile/services/app_settings.service.dart';
 import 'package:immich_mobile/services/auth.service.dart';
@@ -65,3 +67,7 @@ class MockBackgroundUploadService extends Mock implements BackgroundUploadServic
 class MockBackgroundWorkerLockService extends Mock implements BackgroundWorkerLockService {}
 
 class MockBackgroundWorkerFgService extends Mock implements BackgroundWorkerFgService {}
+
+class MockStorageSaverService extends Mock implements StorageSaverService {}
+
+class MockStorageSaverNative extends Mock implements StorageSaverNative {}

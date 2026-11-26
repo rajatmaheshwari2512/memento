@@ -756,6 +756,23 @@ void main() {
 
       expect(await row(local.id), (checksum: 'second', deviceChecksum: 'original'));
     });
+
+    test('links the original to the copy just uploaded for it', () async {
+      final local = await ctx.newLocalAsset(checksum: 'original');
+
+      await sut.linkStorageSaverCopy(local.id, originalChecksum: 'original', copyChecksum: 'copy');
+
+      expect(await row(local.id), (checksum: 'copy', deviceChecksum: 'original'));
+    });
+
+    test('keeps an existing link when a copy is uploaded again', () async {
+      final local = await ctx.newLocalAsset(checksum: 'original');
+      await sut.linkStorageSaverCopy(local.id, originalChecksum: 'original', copyChecksum: 'copy');
+
+      await sut.linkStorageSaverCopy(local.id, originalChecksum: 'copy', copyChecksum: 'second');
+
+      expect(await row(local.id), (checksum: 'copy', deviceChecksum: 'original'));
+    });
   });
 
   group('getPreviousRemoteId', () {

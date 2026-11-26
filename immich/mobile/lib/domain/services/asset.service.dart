@@ -202,6 +202,14 @@ class AssetService {
     return _apiRepository.getAssetTags(assetId);
   }
 
+  Future<void> linkStorageSaverCopy(String localId, String originalChecksum, String copyChecksum) {
+    return _localRepository.linkStorageSaverCopy(
+      localId,
+      originalChecksum: originalChecksum,
+      copyChecksum: copyChecksum,
+    );
+  }
+
   Future<void> stackEditedUpload(String localId, String remoteId, String? checksum) async {
     // a manual upload of an asset that was never hashed has no checksum yet, so we need to fetch it from the server
     final uploadedChecksum = checksum ?? await _apiRepository.getChecksum(remoteId);

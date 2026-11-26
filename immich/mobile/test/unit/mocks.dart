@@ -86,7 +86,6 @@ class RepositoryMocks {
 
   void _stubLocalAssetRepository() {
     when(localAsset.reconcileHashesFromCloudId).thenAnswer((_) async => {});
-    when(localAsset.linkStorageSaverCopies).thenAnswer((_) async => {});
     when(localAsset.updateHashes).thenAnswer((_) async => {});
     when(localAsset.deleteAssets).thenAnswer((_) async => {});
   }
@@ -261,9 +260,6 @@ extension type const LocalAlbumRepositoryStub(MockLocalAlbumRepository repo) imp
 extension type const LocalAssetRepositoryStub(MockLocalAssetRepository repo) implements Stub<MockLocalAssetRepository> {
   Future<void> Function() get reconcileHashesFromCloudId =>
       () => repo.reconcileHashesFromCloudId();
-
-  Future<void> Function() get linkStorageSaverCopies =>
-      () => repo.linkStorageSaverCopies();
 
   Future<void> Function() get updateHashes =>
       () => repo.updateHashes(any());

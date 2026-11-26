@@ -22,6 +22,8 @@ import 'package:immich_mobile/providers/infrastructure/platform.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/storage.provider.dart';
 import 'package:immich_mobile/repositories/asset_media.repository.dart';
 import 'package:immich_mobile/repositories/upload.repository.dart';
+import 'package:immich_mobile/selfphotos/storage_saver/storage_saver.service.dart';
+import 'package:immich_mobile/selfphotos/storage_saver/storage_saver_native.dart';
 import 'package:logging/logging.dart';
 import 'package:openapi/api.dart';
 import 'package:path/path.dart' as p;
@@ -46,6 +48,8 @@ final foregroundUploadServiceProvider = Provider((ref) {
     ref.watch(connectivityApiProvider),
     ref.watch(assetMediaRepositoryProvider),
     ref.watch(assetServiceProvider),
+    const StorageSaverService(),
+    const StorageSaverNative(),
   );
 });
 
@@ -62,6 +66,8 @@ class ForegroundUploadService {
     this._connectivityApi,
     this._assetMediaRepository,
     this._assetService,
+    this._storageSaverService,
+    this._storageSaverNative,
   );
 
   final UploadRepository _uploadRepository;
@@ -70,7 +76,11 @@ class ForegroundUploadService {
   final ConnectivityApi _connectivityApi;
   final AssetMediaRepository _assetMediaRepository;
   final AssetService _assetService;
+  final StorageSaverService _storageSaverService;
+  final StorageSaverNative _storageSaverNative;
   final Logger _logger = Logger('ForegroundUploadService');
+
+  static const _storageSaverFolderPrefix = 'selfphotos-saver-';
 
   bool shouldAbortUpload = false;
 
@@ -97,9 +107,16 @@ class ForegroundUploadService {
     final networkCapabilities = await _connectivityApi.getCapabilities();
     final hasWifi = networkCapabilities.isUnmetered;
     _logger.info('Network capabilities: $networkCapabilities, hasWifi/isUnmetered: $hasWifi');
+    final storageSaver = await _storageSaverQuality(cancelToken);
 
     if (useSequentialUpload) {
-      await _uploadSequentially(items: candidates, cancelToken: cancelToken, hasWifi: hasWifi, callbacks: callbacks);
+      await _uploadSequentially(
+        items: candidates,
+        cancelToken: cancelToken,
+        hasWifi: hasWifi,
+        callbacks: callbacks,
+        storageSaver: storageSaver,
+      );
     } else {
       await _executeWithWorkerPool<LocalAsset>(
         items: candidates,
@@ -108,7 +125,7 @@ class ForegroundUploadService {
           final requireWifi = _shouldRequireWiFi(asset);
           return requireWifi && !hasWifi;
         },
-        processItem: (asset) => uploadSingleAsset(asset, cancelToken, callbacks: callbacks),
+        processItem: (asset) => uploadSingleAsset(asset, cancelToken, callbacks: callbacks, storageSaver: storageSaver),
       );
     }
   }
@@ -119,6 +136,7 @@ class ForegroundUploadService {
     required Completer<void> cancelToken,
     required bool hasWifi,
     required UploadCallbacks callbacks,
+    required BackupQuality storageSaver,
   }) async {
     await _storageRepository.clearCache();
     shouldAbortUpload = false;
@@ -134,7 +152,7 @@ class ForegroundUploadService {
         continue;
       }
 
-      await uploadSingleAsset(asset, cancelToken, callbacks: callbacks);
+      await uploadSingleAsset(asset, cancelToken, callbacks: callbacks, storageSaver: storageSaver);
     }
   }
 
@@ -147,11 +165,12 @@ class ForegroundUploadService {
     if (localAssets.isEmpty) {
       return;
     }
+    final storageSaver = await _storageSaverQuality(cancelToken);
 
     await _executeWithWorkerPool<LocalAsset>(
       items: localAssets,
       cancelToken: cancelToken,
-      processItem: (asset) => uploadSingleAsset(asset, cancelToken, callbacks: callbacks),
+      processItem: (asset) => uploadSingleAsset(asset, cancelToken, callbacks: callbacks, storageSaver: storageSaver),
     );
   }
 
@@ -191,6 +210,60 @@ class ForegroundUploadService {
 
   void cancel() {
     shouldAbortUpload = true;
+  }
+
+  /// The quality a run backs up at on Android; [BackupQuality.original] when it can't be read.
+  Future<BackupQuality> _storageSaverQuality(Completer<void>? cancelToken) async {
+    if (!CurrentPlatform.isAndroid) {
+      return BackupQuality.original;
+    }
+    try {
+      final quality = await _storageSaverService.backupQuality();
+      if (quality != BackupQuality.original) {
+        await _clearStorageSaverFolders();
+        if (cancelToken != null) {
+          unawaited(cancelToken.future.then((_) => _storageSaverNative.cancel()).catchError((Object _) {}));
+        }
+      }
+      _logger.info("Storage saver quality for this run: ${quality.name}");
+      return quality;
+    } catch (error) {
+      _logger.warning("Couldn't read the Storage saver quality, uploading originals: $error");
+      return BackupQuality.original;
+    }
+  }
+
+  Future<void> _clearStorageSaverFolders() async {
+    try {
+      await for (final entity in Directory.systemTemp.list()) {
+        if (p.basename(entity.path).startsWith(_storageSaverFolderPrefix)) {
+          await entity.delete(recursive: true);
+        }
+      }
+    } catch (error) {
+      _logger.warning("Couldn't clear Storage saver's temporary files: $error");
+    }
+  }
+
+  /// Shrinks [file] into [output] for Storage saver.
+  Future<StorageSaverResult> _shrinkForStorageSaver(
+    LocalAsset asset,
+    File file,
+    File output,
+    BackupQuality quality,
+  ) async {
+    final result = await _storageSaverNative.shrink(
+      file.path,
+      output.path,
+      kind: asset.type == AssetType.video ? StorageSaverKind.video : StorageSaverKind.photo,
+      videoBitrate: quality.videoBitrate,
+    );
+    if (result.shrunk) {
+      _logger.info("Storage saver shrank ${asset.id} - ${asset.name} to ${result.size} bytes");
+    } else {
+      _logger.info("Storage saver kept ${asset.id} - ${asset.name} full size: ${result.reason}");
+    }
+    return result;
   }
 
   /// Generic worker pool for concurrent uploads
@@ -247,6 +320,7 @@ class ForegroundUploadService {
     LocalAsset asset,
     Completer<void>? cancelToken, {
     required UploadCallbacks callbacks,
+    BackupQuality storageSaver = BackupQuality.original,
   }) async {
     final t = StaticTranslations.instance;
     final assetNotFoundOnDevice = CurrentPlatform.isAndroid
@@ -254,6 +328,7 @@ class ForegroundUploadService {
         : t.asset_not_found_on_device_ios;
     File? file;
     File? livePhotoFile;
+    Directory? storageSaverFolder;
 
     try {
       final remoteId = (await _assetService.getLocalAsset(asset.id))?.remoteId;
@@ -377,20 +452,57 @@ class ForegroundUploadService {
         ]);
       }
 
+      ({File file, String checksum})? storageSaverCopy;
+      final originalChecksum = asset.checksum;
+      if (storageSaver != BackupQuality.original && originalChecksum != null) {
+        try {
+          storageSaverFolder = await Directory.systemTemp.createTemp(_storageSaverFolderPrefix);
+          final output = File(p.join(storageSaverFolder.path, asset.type == AssetType.video ? 'copy.mp4' : 'copy.jpg'));
+          final shrink = await _shrinkForStorageSaver(asset, file, output, storageSaver);
+          if (shrink.isCancelled) {
+            return;
+          }
+          if (shrink.shrunk) {
+            storageSaverCopy = (file: output, checksum: shrink.checksum!);
+          }
+        } catch (error) {
+          _logger.warning("Storage saver couldn't shrink ${asset.id} - ${asset.name}, uploading the original: $error");
+        }
+      }
+
+      final uploadFileName = storageSaverCopy == null
+          ? originalFileName
+          : p.setExtension(originalFileName, p.extension(storageSaverCopy.file.path));
+      if (storageSaverCopy != null) {
+        fields['metadata'] = jsonEncode([
+          RemoteAssetMetadataItem(
+            key: RemoteAssetMetadataKey.storageSaver,
+            value: RemoteAssetStorageSaverMetadata(originalChecksum: originalChecksum!, quality: storageSaver.name),
+          ),
+        ]);
+      }
+
       final onProgress = callbacks.onProgress;
       final result = await _uploadRepository.uploadFile(
-        file: file,
-        originalFileName: originalFileName,
+        file: storageSaverCopy?.file ?? file,
+        originalFileName: uploadFileName,
         fields: fields,
         cancelToken: cancelToken,
         onProgress: onProgress != null
-            ? (bytes, totalBytes) => onProgress(asset.localId!, originalFileName, bytes, totalBytes)
+            ? (bytes, totalBytes) => onProgress(asset.localId!, uploadFileName, bytes, totalBytes)
             : null,
         logContext: 'asset[${asset.localId}]',
       );
 
       if (result.isSuccess && result.remoteAssetId != null) {
-        await _handleUploadSuccess(asset, result.remoteAssetId!, callbacks);
+        if (storageSaverCopy != null) {
+          try {
+            await _assetService.linkStorageSaverCopy(asset.id, originalChecksum!, storageSaverCopy.checksum);
+          } catch (error) {
+            _logger.warning("Failed to link the Storage saver copy of ${asset.localId}: $error");
+          }
+        }
+        await _handleUploadSuccess(asset, result.remoteAssetId!, callbacks, checksum: storageSaverCopy?.checksum);
       } else if (result.isCancelled) {
         shouldAbortUpload = true;
       } else if (result.errorMessage != null) {
@@ -418,13 +530,23 @@ class ForegroundUploadService {
           _logger.severe(() => "ERROR deleting file: $error", stackTrace);
         }
       }
+      try {
+        await storageSaverFolder?.delete(recursive: true);
+      } catch (error) {
+        _logger.warning("Couldn't delete Storage saver's temporary files: $error");
+      }
     }
   }
 
-  Future<void> _handleUploadSuccess(LocalAsset asset, String remoteId, UploadCallbacks callbacks) async {
+  Future<void> _handleUploadSuccess(
+    LocalAsset asset,
+    String remoteId,
+    UploadCallbacks callbacks, {
+    String? checksum,
+  }) async {
     callbacks.onSuccess?.call(asset.localId!, remoteId);
     try {
-      await _assetService.stackEditedUpload(asset.localId!, remoteId, asset.checksum);
+      await _assetService.stackEditedUpload(asset.localId!, remoteId, checksum ?? asset.checksum);
     } catch (error) {
       _logger.warning("Failed to stack the upload of ${asset.localId}: $error");
     }
