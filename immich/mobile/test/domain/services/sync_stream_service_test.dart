@@ -636,13 +636,47 @@ void main() {
   });
 
   group('SyncStreamService - Storage saver', () {
-    test('unlinks then links Storage saver copies after the stream completes', () async {
+    test('links Storage saver copies after the stream completes, without unlinking', () async {
       await sut.sync();
 
       verifyInOrder([
         () => mockSyncApiRepo.streamChanges(
           any(),
           onReset: any(named: 'onReset'),
+          serverVersion: any(named: 'serverVersion'),
+          abortSignal: any(named: 'abortSignal'),
+        ),
+        () => mockLocalAssetRepo.linkStorageSaverCopies(),
+      ]);
+      verifyNever(() => mockLocalAssetRepo.unlinkStorageSaverCopies());
+    });
+
+    test('unlinks Storage saver copies after remote assets are permanently deleted', () async {
+      await simulateEvents([SyncStreamStub.assetDeleteV1]);
+
+      verifyInOrder([
+        () => mockSyncStreamRepo.deleteAssetsV1(any()),
+        () => mockLocalAssetRepo.unlinkStorageSaverCopies(),
+      ]);
+    });
+
+    test('unlinks then links Storage saver copies after a sync reset', () async {
+      when(
+        () => mockSyncApiRepo.streamChanges(
+          any(),
+          onReset: any(named: 'onReset'),
+          serverVersion: any(named: 'serverVersion'),
+          abortSignal: any(named: 'abortSignal'),
+        ),
+      ).thenAnswer((invocation) async {
+        (invocation.namedArguments[#onReset] as Function()?)?.call();
+      });
+
+      await sut.sync();
+
+      verifyInOrder([
+        () => mockSyncApiRepo.streamChanges(
+          any(),
           serverVersion: any(named: 'serverVersion'),
           abortSignal: any(named: 'abortSignal'),
         ),

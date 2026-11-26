@@ -102,7 +102,9 @@ class SyncStreamService {
     }
 
     if (!isCancelled) {
-      await _localAssetRepository.unlinkStorageSaverCopies();
+      if (shouldReset) {
+        await _localAssetRepository.unlinkStorageSaverCopies();
+      }
       await _localAssetRepository.linkStorageSaverCopies();
     }
 
@@ -228,7 +230,8 @@ class SyncStreamService {
         if (CurrentPlatform.isAndroid && Store.get(StoreKey.manageLocalMediaAndroid, false)) {
           await _syncAssetDeletion(remoteSyncAssets.map((e) => e.assetId).toList());
         }
-        return _syncStreamRepository.deleteAssetsV1(remoteSyncAssets);
+        await _syncStreamRepository.deleteAssetsV1(remoteSyncAssets);
+        return _localAssetRepository.unlinkStorageSaverCopies();
       case SyncEntityType.assetExifV1:
         return _syncStreamRepository.updateAssetsExifV1(data.cast());
       case SyncEntityType.assetEditV1:
