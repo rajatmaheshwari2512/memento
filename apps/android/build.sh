@@ -5,10 +5,6 @@
 #   Source: ../../immich   (Immich's code with Memento's changes, in this repo)
 #   Output: dist/memento-<immich version>-<commit>.apk   (arm64 phones)
 #
-# Follows Immich's own CI (.github/workflows/build-mobile.yml): install, codegen,
-# `flutter build apk --release`, running Immich's mise tasks by name. Two tasks are
-# skipped: install:ios (CocoaPods, iOS only) and //:i18n:format-fix (re-formats the
-# whole repo with prettier; not needed to build).
 #
 # One-time setup:
 #   - tools at the versions Immich pins, installed with mise from inside the repo so its
@@ -64,15 +60,12 @@ if [ -z "$password" ]; then
   exit 1
 fi
 
-# Never let mise install the other tools Immich's config lists (ffmpeg, OpenTofu, ...).
 export MISE_AUTO_INSTALL=false MISE_TASK_RUN_AUTO_INSTALL=false MISE_EXEC_AUTO_INSTALL=false
-# Immich's "//mobile:task" names use mise's monorepo feature, still marked experimental.
 export MISE_EXPERIMENTAL=1
 export MISE_YES=1
 export ANDROID_HOME="${ANDROID_HOME:-$(brew --prefix)/share/android-commandlinetools}"
 export ANDROID_SDK_ROOT="$ANDROID_HOME"
 
-# The release build signs with android/key.jks if it exists (Immich's build.gradle).
 saved="$(mktemp -d)"
 mkdir -p "$saved/mobile" "$saved/native" "$saved/i18n"
 cp mise.lock "$saved/mise.lock"
@@ -90,8 +83,7 @@ trap restore EXIT
 cp "$keystore" mobile/android/key.jks
 export ALIAS="$key_alias" ANDROID_KEY_PASSWORD="$password" ANDROID_STORE_PASSWORD="$password"
 
-# Memento branding for the UI texts (all languages), only for this build: codegen turns
-# them into Dart code below, then the trap restores Immich's own translation files.
+# Memento branding for the UI texts (all languages), only for this build.
 python3 -I "$here/../brand/rebrand-i18n.py" "$src"
 
 echo "== Generating the API client"
@@ -111,10 +103,7 @@ mise run //mobile:i18n:loader
 mise run //mobile:i18n:keys
 
 echo "== Making sure Gradle itself is downloaded"
-# Gradle's launcher downloads Gradle from GitHub and sticks to the first address it gets;
-# one of GitHub's download addresses doesn't answer from this network, so it can hang and
-# fail. curl tries the other addresses, so fetch it with curl into the folder the launcher
-# looks in (named from an MD5 of the URL, in base 36), checked against Gradle's checksum.
+# Fetches Gradle with curl into the folder the launcher looks in.
 dist_url="$(sed -n 's/^distributionUrl=//p' android/gradle/wrapper/gradle-wrapper.properties | sed 's/\\:/:/g')"
 dist_name="$(basename "$dist_url" .zip)"
 dist_hash="$(python3 -I -c 'import hashlib,sys

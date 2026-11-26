@@ -59,7 +59,6 @@ def main() -> None:
         out = {k: (v if keep(k) else rebrand(v)) for k, v in data.items()}
         if out != data:
             changed += sum(1 for k in data if out[k] != data[k])
-            # Same layout as Immich's files (2-space indent, UTF-8 kept as is).
             path.write_text(json.dumps(out, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"Rebranded {changed} texts in {len(files)} languages (Immich -> Memento).")
 

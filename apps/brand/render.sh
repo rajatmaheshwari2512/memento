@@ -23,8 +23,7 @@ res="$mobile/android/app/src/main/res"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
-# render <svg> <width> <height> <out.png>: sips renders an SVG at its own width/height, so
-# those are set to the target size first (crisp, no upscaling); the background stays transparent.
+# render <svg> <width> <height> <out.png>: renders an SVG at that size, background transparent.
 render() {
   python3 -I - "$1" "$2" "$3" "$tmp/in.svg" <<'PY'
 import re, sys
@@ -48,7 +47,7 @@ done
 render "$brand/memento-glyph-white.svg" 1024 1024 "$tmp/glyph.png"
 
 # --- web app (web/static, web/src/lib/assets/memento) ---
-rm -f "$web/src/lib/assets/memento/memento-icon.svg"   # the old green tile
+rm -f "$web/src/lib/assets/memento/memento-icon.svg"
 cp "$brand"/memento-{mark-light,mark-dark,inline-light,inline-dark,stacked-light,stacked-dark}.svg "$web/src/lib/assets/memento/"
 cp "$brand/memento-mark-auto.svg" "$web/static/icon.svg"
 resize "$tmp/home-light.png" 180 "$web/static/apple-icon-180.png"
@@ -60,7 +59,7 @@ import struct, sys
 out, files = sys.argv[1], sys.argv[2:]
 imgs = [open(f, "rb").read() for f in files]
 entries, blobs, offset = b"", b"", 6 + 16 * len(imgs)
-for size, data in zip((16, 32, 48), imgs):  # ICO entries holding PNG images
+for size, data in zip((16, 32, 48), imgs):
     entries += struct.pack("<BBBBHHII", size, size, 0, 0, 1, 32, len(data), offset)
     offset += len(data)
     blobs += data
@@ -76,7 +75,6 @@ for t in light dark; do
   cp "$brand/memento-inline-$t.svg" "$mobile/assets/immich-logo-inline-$t.svg"
   cp "$tmp/wordmark-$t.png" "$mobile/assets/immich-text-$t.png"
 done
-# Inputs of Immich's icon/splash generators (not shown at run time); kept consistent anyway.
 cp "$tmp/home-light.png" "$mobile/assets/immich-logo-w-bg.png"
 resize "$tmp/home-light.png" 3072 "$mobile/assets/immich-logo-w-bg-android.png"
 resize "$tmp/home-light.png" 324 "$mobile/assets/immich-logo-android-adaptive-icon.png"

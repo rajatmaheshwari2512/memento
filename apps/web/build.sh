@@ -43,8 +43,6 @@ docker build --target web -f "$src/server/Dockerfile" --build-arg "BUILD_ID=self
 
 out="$dist/$version"
 mkdir -p "$out"
-# Empty the folder rather than deleting it, so a running preview.sh (which mounts this
-# folder) shows the new build after a page reload.
 find "$out" -mindepth 1 -delete
 cid="$(docker create "$image")"
 docker cp "$cid:/usr/src/app/web/build/." "$out/"
