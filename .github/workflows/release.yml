@@ -1,7 +1,7 @@
 # Builds a Memento release when a tag like v1.2.0 is pushed, or by hand (Actions → Release → Run
 # workflow, with a tag that's already pushed). Each fork builds its own, into its own packages.
 #
-#   Images, for linux/amd64 and linux/arm64, at ghcr.io/<owner>/<name>:<tag> (and :latest):
+#   Images, for linux/amd64 and linux/arm64, at ghcr.io/<owner>/<name>:<tag>:
 #     memento-server     Immich's server image with Memento's website in it
 #     memento-extras     Memento's service
 #     memento-reader     Ask's reader, with its model
@@ -9,9 +9,10 @@
 #   A GitHub Release for the tag: the website (.tar.gz), the Android app (.apk) and SHA256SUMS.
 #
 # Servers never follow it by themselves: ./memento prod update <tag> (docs/upgrades.md).
-# The app is signed with three repo secrets (docs/setup-prod.md, "Releases"):
-# ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD and ANDROID_KEYSTORE_ALIAS. Without them the
-# release has no app, and says so.
+# A tag is built once: a tag whose release is published is refused (cut a new one).
+# The app is signed with three secrets of the "release" environment (docs/setup-prod.md,
+# "Releases"): ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD and ANDROID_KEYSTORE_ALIAS.
+# Without them, or if the app's build fails, the release has no app and says so.
 name: Release
 
 on:
@@ -54,6 +55,16 @@ jobs:
             exit 1
           fi
 
+      - name: Check the tag isn't released yet
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            echo "::error::$TAG is released already, and servers may run its images. Cut a new tag (like v1.2.1) instead."
+            exit 1
+          fi
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: refs/tags/${{ env.TAG }}
@@ -87,7 +98,6 @@ jobs:
           ref: refs/tags/${{ env.TAG }}
           persist-credentials: false
 
-      # The same build as on a computer; packed like the deploy packs it (hidden files included).
       - name: Build the website (apps/web/build.sh)
         env:
           WEB_BUILD_DIR: ${{ runner.temp }}/web
@@ -112,7 +122,7 @@ jobs:
     timeout-minutes: 90
     permissions:
       contents: read
-      packages: write # pushes the images to ghcr.io
+      packages: write
     strategy:
       matrix:
         include:
@@ -131,7 +141,6 @@ jobs:
           ref: refs/tags/${{ env.TAG }}
           persist-credentials: false
 
-      # The pin is in host/roles/memento_extras/defaults/main.yml, read as ./memento reads it.
       - name: Download Ask's reader model
         if: matrix.name == 'memento-reader'
         run: |
@@ -147,18 +156,6 @@ jobs:
             [ -f "memento-extras/reader/model/$file" ] || { echo "::error::No $file: check the reader's pin in $defaults"; exit 1; }
           done
 
-      - name: Name the image
-        id: tags
-        env:
-          IMAGES: ${{ needs.prepare.outputs.images }}
-          NAME: ${{ matrix.name }}
-          VERSION: ${{ needs.prepare.outputs.version }}
-          PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
-        run: |
-          tags="$IMAGES/$NAME:$VERSION"
-          if [ "$PRERELEASE" = false ]; then tags="$tags,$IMAGES/$NAME:latest"; fi
-          echo "tags=$tags" >> "$GITHUB_OUTPUT"
-
       - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
@@ -172,7 +169,7 @@ jobs:
           context: ${{ matrix.context }}
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ steps.tags.outputs.tags }}
+          tags: ${{ needs.prepare.outputs.images }}/${{ matrix.name }}:${{ needs.prepare.outputs.version }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.version=${{ needs.prepare.outputs.version }}
@@ -189,7 +186,7 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
-      packages: write # pushes the images to ghcr.io
+      packages: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -201,19 +198,13 @@ jobs:
           name: website
           path: ${{ runner.temp }}/website
 
-      - name: Unpack the website, and name the image
-        id: tags
+      - name: Unpack the website
         env:
-          IMAGES: ${{ needs.prepare.outputs.images }}
           VERSION: ${{ needs.prepare.outputs.version }}
-          PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
         run: |
           mkdir -p "$RUNNER_TEMP/server/www"
           tar -xzf "$RUNNER_TEMP/website/memento-website-$VERSION.tar.gz" -C "$RUNNER_TEMP/server/www"
           [ -f "$RUNNER_TEMP/server/www/index.html" ] || { echo "::error::The website has no index.html"; exit 1; }
-          tags="$IMAGES/memento-server:$VERSION"
-          if [ "$PRERELEASE" = false ]; then tags="$tags,$IMAGES/memento-server:latest"; fi
-          echo "tags=$tags" >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
@@ -230,7 +221,7 @@ jobs:
           build-args: IMMICH_VERSION=${{ needs.prepare.outputs.immich }}
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ steps.tags.outputs.tags }}
+          tags: ${{ needs.prepare.outputs.images }}/memento-server:${{ needs.prepare.outputs.version }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.version=${{ needs.prepare.outputs.version }}
@@ -245,6 +236,7 @@ jobs:
     needs: prepare
     runs-on: ubuntu-24.04
     timeout-minutes: 120
+    environment: release
     permissions:
       contents: read
     outputs:
@@ -262,12 +254,13 @@ jobs:
             exit 0
           fi
           echo "ready=false" >> "$GITHUB_OUTPUT"
-          echo "::notice title=No Android app in this release::The repo secrets ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD and ANDROID_KEYSTORE_ALIAS aren't all set."
+          echo "::notice title=No Android app in this release::The release environment's secrets ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD and ANDROID_KEYSTORE_ALIAS aren't all set."
           {
             echo "### No Android app in this release"
             echo
-            echo "The app is signed with the repo secrets ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD and"
-            echo "ANDROID_KEYSTORE_ALIAS, and they aren't all set. The rest of the release is published without it."
+            echo "The app is signed with the \"release\" environment's secrets ANDROID_KEYSTORE_BASE64,"
+            echo "ANDROID_KEYSTORE_PASSWORD and ANDROID_KEYSTORE_ALIAS, and they aren't all set. The rest of the"
+            echo "release is published without it."
             echo "To add them: docs/setup-prod.md, \"Releases\"."
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -277,7 +270,6 @@ jobs:
           ref: refs/tags/${{ env.TAG }}
           persist-credentials: false
 
-      # Flutter, Gradle, the NDK and two Rust toolchains need more room than the runner has free.
       - name: Make room on the disk
         if: steps.signing.outputs.ready == 'true'
         run: sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/local/share/boost /opt/hostedtoolcache/CodeQL
@@ -294,7 +286,6 @@ jobs:
           install: false
           cache: false
 
-      # apps/android/build.sh's one-time setup: only the tools the build uses, at Immich's pins.
       - name: Install the build tools
         if: steps.signing.outputs.ready == 'true'
         working-directory: immich
@@ -317,6 +308,7 @@ jobs:
         run: |
           umask 077
           printf '%s' "$KEYSTORE" | base64 -d > "$RUNNER_TEMP/memento.jks"
+          unset KEYSTORE
           printf 'ANDROID_KEYSTORE_PATH=%s\nANDROID_KEYSTORE_ALIAS=%s\nANDROID_KEYSTORE_PASSWORD=%s\n' \
             "$RUNNER_TEMP/memento.jks" "$ALIAS" "$PASSWORD" > "$RUNNER_TEMP/android.env"
           MEMENTO_ENV_FILE="$RUNNER_TEMP/android.env" apps/android/build.sh
@@ -340,10 +332,13 @@ jobs:
   release:
     name: GitHub Release
     needs: [prepare, website, images, server-image, android]
+    if: >-
+      ${{ !cancelled() && needs.website.result == 'success' && needs.images.result == 'success'
+      && needs.server-image.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
-      contents: write # makes the GitHub Release and uploads its files
+      contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -357,7 +352,6 @@ jobs:
           path: ${{ runner.temp }}/release
           merge-multiple: true
 
-      # A server pulls the images without logging in; GitHub may make a new package private.
       - name: Check anyone can pull the images
         env:
           IMAGES: ${{ needs.prepare.outputs.images }}
@@ -381,7 +375,8 @@ jobs:
           IMAGES: ${{ needs.prepare.outputs.images }}
           IMMICH: ${{ needs.prepare.outputs.immich }}
           PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
-          APP: ${{ needs.android.outputs.built }}
+          APP: ${{ needs.android.result }}
+          APP_SIGNED: ${{ needs.android.outputs.built }}
         run: |
           cd "$RUNNER_TEMP/release"
           sha256sum -- * > "$RUNNER_TEMP/SHA256SUMS"
@@ -389,11 +384,13 @@ jobs:
           {
             echo "Memento $VERSION, on Immich $IMMICH."
             echo
-            if [ "$APP" = true ]; then
+            if [ "$APP" = success ] && [ "$APP_SIGNED" = true ]; then
               echo "**The Android app:** \`memento-$VERSION.apk\` below, for 64-bit ARM phones. It installs over an"
               echo "older Memento app signed with the same key."
+            elif [ "$APP" = success ]; then
+              echo "**No Android app in this release:** the release environment's signing secrets aren't set."
             else
-              echo "**No Android app in this release:** the repo's signing secrets aren't set."
+              echo "**No Android app in this release:** its build didn't finish (the run's \"Android app\" job)."
             fi
             echo
             echo "**Server images**, for linux/amd64 and linux/arm64:"
