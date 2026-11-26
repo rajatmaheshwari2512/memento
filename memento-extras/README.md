@@ -151,7 +151,7 @@ creations/           the creations container: Node (no packages) driving vips an
                      own Dockerfile, built on the VM like reader/. check-reduce-noise.sh checks
                      Reduce noise end to end on the Mac (builds the image, cleans test videos)
 src/scripts/         run by hand or at night, not by the server:
-  caption-night        new photos' captions, at night on this server (docs/runbooks.md)
+  caption-night        new photos' captions, at night on this server
 ```
 
 All the SQLite tables are in one file (`<DATA_DIR>/data.db`).

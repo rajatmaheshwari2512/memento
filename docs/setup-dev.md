@@ -100,8 +100,7 @@ Ask uses a small trained model to pick people, dates and places out of a questio
 - Otherwise it downloads the model from Hugging Face (`mahesraj/memento-ask-reader`, a fixed
   version, about 210 MB) and checks each file's fingerprint (sha256). A file that doesn't match is
   deleted. The download is kept in `.local/reader-model/`, so `reset` doesn't download it again.
-- With no model (or no `memento-extras/reader/common.py`), dev starts without the
-  reader and prints a warning. Ask still works: it searches the question as typed, and says so.
+- With no model, dev starts without the reader and prints a warning. Ask still works: it searches the question as typed, and says so.
 
 ### Music for recaps (`MUSIC_DIR`)
 

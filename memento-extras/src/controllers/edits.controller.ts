@@ -37,6 +37,7 @@ export const editsController = {
 
   // A whole-photo edit, typed or with tools (refused with the AI tools switched off).
   async create(req, res) {
+    jsonRequest(req, MAX_AREA_REQUEST_BYTES);
     const { user, cred } = await requireUser(req);
     const body = await readJson(req);
     const flags = requireGemini();

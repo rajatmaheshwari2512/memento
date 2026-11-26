@@ -29,7 +29,7 @@ export function migrate(database: DatabaseSync, migrations: readonly Migration[]
     throw new Error(`The database is from a newer version of this service (version ${version()}); refusing to use it.`);
   }
   if (version() > 0 && version() < BASELINE_VERSION) {
-    throw new Error(`The database is too old to update (version ${version()}, the oldest this service can update is ${BASELINE_VERSION}). Start a fresh database.`);
+    throw new Error(`The database is too old to update (version ${version()}, the oldest this service can update is ${BASELINE_VERSION}). Start a fresh database (in dev: ./memento dev reset).`);
   }
   for (let v = Math.max(version(), BASELINE_VERSION - 1); v < latest; v++) {
     const step = migrations[v - (BASELINE_VERSION - 1)]!;
