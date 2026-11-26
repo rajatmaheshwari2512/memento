@@ -2,8 +2,9 @@ import 'package:immich_mobile/domain/models/store.model.dart';
 import 'package:immich_mobile/entities/store.entity.dart';
 import 'package:openapi/api.dart';
 
-String getOriginalUrlForRemoteId(final String id, {bool edited = true}) {
-  return '${Store.get(StoreKey.serverEndpoint)}/assets/$id/original?edited=$edited';
+String getOriginalUrlForRemoteId(final String id, {bool edited = true, String? thumbhash}) {
+  final url = '${Store.get(StoreKey.serverEndpoint)}/assets/$id/original?edited=$edited';
+  return thumbhash != null ? '$url&c=${Uri.encodeComponent(thumbhash)}' : url;
 }
 
 String getThumbnailUrlForRemoteId(

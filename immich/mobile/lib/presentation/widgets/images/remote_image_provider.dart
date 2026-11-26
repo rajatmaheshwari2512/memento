@@ -184,7 +184,7 @@ class RemoteFullImageProvider extends ImageProvider<RemoteFullImageProvider> {
   );
 
   RemoteImageRequest _originalRequest(RemoteFullImageProvider key) =>
-      RemoteImageRequest(uri: getOriginalUrlForRemoteId(key.assetId, edited: key.edited));
+      RemoteImageRequest(uri: getOriginalUrlForRemoteId(key.assetId, edited: key.edited, thumbhash: key.thumbhash));
 
   @override
   bool operator ==(Object other) {
