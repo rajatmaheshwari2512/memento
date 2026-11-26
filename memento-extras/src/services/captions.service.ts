@@ -1,10 +1,10 @@
-// Captions: a one-line description and a few tags for each photo, written by a small open vision model. This file asks the model for one photo's caption; the backlog and night scripts share it.
+// Captions: a one-line description and a few tags for each photo, written by a small open vision model. This file asks the model for one photo's caption.
 
 import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { PROMPT } from "../constants/captions.constants.ts";
 import { parseCaption, SCHEMA } from "../schemas/captions.schema.ts";
-import type { CaptionResult, PhotoToCaption, Reply } from "../types/captions.types.ts";
+import type { CaptionRecord, PhotoToCaption, Reply } from "../types/captions.types.ts";
 
 // The body for llama-server's OpenAI-style POST /v1/chat/completions.
 export function captionRequest(jpeg: Buffer, model?: string): Record<string, unknown> {
@@ -45,16 +45,14 @@ export async function modelName(url: string): Promise<string> {
 }
 
 // One photo's preview → llama-server → a checked caption. Throws when it can't be had; the message is only the kind of failure.
-export async function captionPhoto(url: string, model: string, photo: PhotoToCaption, timeoutMs: number): Promise<CaptionResult> {
+export async function captionPhoto(url: string, model: string, photo: PhotoToCaption, timeoutMs: number): Promise<CaptionRecord> {
   const jpeg = await readFile(photo.path);
-  const started = performance.now();
   const res = await fetch(`${url}/v1/chat/completions`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(captionRequest(jpeg)),
     signal: AbortSignal.timeout(timeoutMs),
   });
-  const seconds = Math.round(performance.now() - started) / 1000;
   if (!res.ok) throw new Error(`llama-server answered ${res.status}`, { cause: (await res.text()).slice(0, 200) });
   const reply = (await res.json()) as Reply;
   const message = reply.choices?.[0]?.message;
@@ -68,9 +66,6 @@ export async function captionPhoto(url: string, model: string, photo: PhotoToCap
     ownerId: photo.ownerId,
     model,
     ...caption,
-    seconds,
-    promptTokens: reply.usage?.prompt_tokens,
-    completionTokens: reply.usage?.completion_tokens,
   };
 }
 

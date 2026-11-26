@@ -57,10 +57,6 @@ export function deleteCaptions(assetIds: string[]): void {
   });
 }
 
-export function captionCount(): number {
-  return (database().prepare("SELECT count(*) AS n FROM captions").get() as { n: number }).n;
-}
-
 // The full-text query for `query`: every word must match; null when there are no words.
 function matchQuery(query: string): string | null {
   const words = query.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];

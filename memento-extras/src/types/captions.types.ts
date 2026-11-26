@@ -6,7 +6,7 @@ export type Tag = (typeof TAGS)[number];
 
 export type Caption = { caption: string; tags: Tag[] };
 
-// One finished caption, as a line of the backlog's results file and as imported.
+// One finished caption.
 export type CaptionRecord = Caption & {
   assetId: string;
   ownerId: string;
@@ -18,13 +18,9 @@ export type PhotoToCaption = { id: string; ownerId: string; path: string; upload
 
 export type Reply = {
   choices?: { message?: { content?: unknown; reasoning_content?: unknown } }[];
-  usage?: { prompt_tokens?: number; completion_tokens?: number };
 };
-
-export type CaptionResult = CaptionRecord & { seconds: number; promptTokens?: number; completionTokens?: number };
 
 export type CaptionMatch = { assetId: string; caption: string; tags: Tag[] };
 
-// What a night's clean-up found and did, and what an import did (caption-records.service.ts).
+// What a night's clean-up found and did (caption-records.service.ts).
 export type GoneCaptions = { gone: number; removed: boolean };
-export type ImportResult = { imported: number; skipped: number; total: number };

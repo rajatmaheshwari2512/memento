@@ -1,8 +1,7 @@
 // What the caption model must answer, and the checks every caption passes before it's kept.
 
 import { MAX_CAPTION_CHARS, MAX_TAGS, TAGS } from "../constants/captions.constants.ts";
-import type { Caption, CaptionRecord, Tag } from "../types/captions.types.ts";
-import { isUuid } from "../utils/http-error.ts";
+import type { Caption, Tag } from "../types/captions.types.ts";
 
 // Makes the model's reply valid JSON of this shape (llama-server turns it into a grammar).
 export const SCHEMA = {
@@ -42,21 +41,4 @@ export function parseCaption(text: unknown): Caption | null {
     }
   }
   return { caption: clean, tags: chosen };
-}
-
-// A results-file line → a record, re-checked with the same rules. Null if anything's off.
-export function parseRecord(line: string): CaptionRecord | null {
-  let data: Record<string, unknown>;
-  try {
-    data = JSON.parse(line);
-  } catch {
-    return null;
-  }
-  if (typeof data !== "object" || data === null) return null;
-  const { assetId, ownerId, model } = data;
-  if (!isUuid(assetId)) return null;
-  if (!isUuid(ownerId)) return null;
-  if (typeof model !== "string" || model === "") return null;
-  const caption = parseCaption(JSON.stringify({ caption: data.caption, tags: data.tags }));
-  return caption && { assetId, ownerId, model, ...caption };
 }

@@ -122,9 +122,8 @@ src/services/        the work; no requests or replies (a refusal is an HttpError
                        search + the caption search, merged
   ask-parser           dates and People-page names in a phrase the model marked (pure, no I/O)
   ask-places           the place the model marked, in the asker's own places
-  captions             asking llama-server for one photo's caption (no database, so the
-                       backlog script can run it on its own)
-  caption-records      loading a results file; removing captions of photos gone for good
+  captions             asking llama-server for one photo's caption (no database)
+  caption-records      removing captions of photos gone for good
   repositories/        everything that reads or writes the database or stored files:
     edits                results waiting to be saved or discarded (files)
     limits               the edit log and per-person limits
@@ -154,14 +153,12 @@ creations/           the creations container: Node (no packages) driving vips an
                      own Dockerfile, built on the VM like reader/. check-reduce-noise.sh checks
                      Reduce noise end to end on the Mac (builds the image, cleans test videos)
 src/scripts/         run by hand or at night, not by the server:
-  caption-backlog      one-off: every preview → llama-server → a results file
-  import-captions      loads a results file into the captions table
   caption-night        new photos' captions, at night on this server (docs/runbooks.md)
 ```
 
 All the SQLite tables are in one file (`<DATA_DIR>/data.db`).
 
-Captions get in through `import-captions.ts` (the backlog) and `caption-night.ts` (new photos, each night); Ask Photos (`POST /ask`) is what searches them. How the backlog is run: docs/runbooks.md, "Caption the backlog on it".
+Captions get in through `caption-night.ts` (new photos, each night); Ask Photos (`POST /ask`) is what searches them.
 
 ## Run it on your Mac (against the real Immich)
 

@@ -3,11 +3,12 @@
 
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
+import type { Tag } from "../src/types/captions.types.ts";
 import { call as callService, COOKIE, freePort, json, listen, readBody, Service, type CallOptions } from "./helpers.ts";
 
 const A = { id: randomUUID(), name: "Asha Rao", isAdmin: true };
@@ -196,11 +197,9 @@ const dataDir = mkdtempSync(join(tmpdir(), "memento-extras-ask-"));
 before(async () => {
   process.env.DATA_DIR = dataDir;
   process.env.GEMINI_API_KEY = "unused";
-  const { importCaptions } = await import("../src/services/caption-records.service.ts");
+  const { saveCaption } = await import("../src/services/repositories/captions.repository.ts");
   const { closeDatabase } = await import("../src/db/database.ts");
-  const file = join(dataDir, "captions.jsonl");
-  writeFileSync(file, captions.map((c) => JSON.stringify({ ...c, model: "test-model" })).join("\n"));
-  assert.equal(importCaptions(file).imported, captions.length);
+  for (const c of captions) saveCaption({ ...c, tags: c.tags as Tag[], model: "test-model" });
   closeDatabase();
 
   immich = createServer((req, res) => void fakeImmich(req, res));
