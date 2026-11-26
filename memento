@@ -332,7 +332,6 @@ download_reader() {
 find_reader() {
   local dir file
   reader_dir=""
-  [ -f "$root/memento-extras/reader/common.py" ] || return 0
   dir=$(path_setting READER_MODEL_DIR)
   if [ -n "$dir" ]; then
     for file in config.json tokenizer.json model.onnx; do
@@ -406,7 +405,7 @@ up() {
     profiles="--profile reader"
   else
     say ""
-    say "WARNING: Ask's reader isn't started (no model, or no memento-extras/reader/common.py)."
+    say "WARNING: Ask's reader isn't started (no model)."
     say "Ask still works: it searches the question as typed, without picking out people, dates or places."
     say ""
     memento_compose --profile reader rm -sf memento-reader >/dev/null 2>&1 || true
@@ -615,7 +614,7 @@ check_settings() {
   fi
   v=$(value MEMENTO_SECRET)
   if [ -z "$v" ]; then todos+=(MEMENTO_SECRET)
-  elif [ "${#v}" -lt 44 ] || [ "$v" = CHANGE_ME ]; then problems+=("MEMENTO_SECRET: must be what openssl rand -base64 32 prints (44 characters).")
+  elif [ "${#v}" -lt 44 ]; then problems+=("MEMENTO_SECRET: must be what openssl rand -base64 32 prints (44 characters).")
   fi
   v=$(value TZ)
   [ -z "$v" ] || [[ $v =~ ^[A-Za-z0-9_+-]+(/[A-Za-z0-9_+-]+)*$ ]] || problems+=("TZ: \"$v\" isn't a time zone like Europe/London.")
@@ -688,14 +687,6 @@ check_settings() {
   elif [ "$aws" = 1 ]; then
     problems+=("BACKUP_BUCKET_NAME: empty, but the AWS settings are set. The name setup should give the bucket: unique across all of AWS,
     like memento-backup-<random letters>.")
-  fi
-  if [ "$terraform_on" = 1 ] && [ -f "$root/infra/terraform.tfvars" ]; then
-    problems+=("infra/terraform.tfvars: Terraform reads it over .env. Move its values into .env, then delete it:
-      oci_tenancy_ocid → OCI_TENANCY_OCID, oci_config_profile → OCI_CONFIG_PROFILE, oci_region → OCI_REGION,
-      ssh_public_key_path → SSH_PUBLIC_KEY_PATH, ssh_allowed_cidr → SSH_ALLOWED_CIDR, budget_amount → OCI_BUDGET_AMOUNT,
-      budget_alert_email → OCI_BUDGET_EMAIL, aws_profile → AWS_PROFILE, aws_region → AWS_REGION,
-      backup_bucket_name → BACKUP_BUCKET_NAME, domain → CLOUDFLARE_ZONE (or nothing: MEMENTO_DOMAIN's end),
-      subdomains → MEMENTO_DOMAIN's first part (photos.example.com).")
   fi
 }
 

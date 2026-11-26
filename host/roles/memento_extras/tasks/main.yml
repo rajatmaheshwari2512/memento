@@ -14,7 +14,6 @@
   ansible.builtin.assert:
     that:
       - memento_extras_secret | length >= 44
-      - memento_extras_secret != "CHANGE_ME"
     fail_msg: Fill in MEMENTO_SECRET in .env (openssl rand -base64 32).
     quiet: true
 
