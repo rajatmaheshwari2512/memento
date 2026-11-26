@@ -219,6 +219,9 @@ class ForegroundUploadService {
     }
     try {
       final quality = await _storageSaverService.backupQuality();
+      if (cancelToken?.isCompleted ?? false) {
+        return BackupQuality.original;
+      }
       if (quality != BackupQuality.original) {
         await _clearStorageSaverFolders();
         if (cancelToken != null) {

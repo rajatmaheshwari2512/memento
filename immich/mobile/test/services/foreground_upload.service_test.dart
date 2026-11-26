@@ -515,6 +515,19 @@ void main() {
       expect(uploads, isEmpty);
     });
 
+    test('a run cancelled while reading the quality leaves other runs\' shrinks alone', () async {
+      final cancelToken = Completer<void>()..complete();
+      stubAsset(photo, '/path/to/photo.jpg', 'photo.jpg');
+      when(() => mockStorageSaverService.backupQuality()).thenAnswer((_) async => BackupQuality.saver);
+      final uploads = captureUploads();
+
+      await sut.uploadManual([photo], cancelToken: cancelToken);
+      await pumpEventQueue();
+
+      expect(uploads, isEmpty);
+      verifyZeroInteractions(mockStorageSaverNative);
+    });
+
     test('leaves an asset whose shrink was cancelled for the next backup', () async {
       stubAsset(photo, '/path/to/photo.jpg', 'photo.jpg');
       stubShrink(() => const StorageSaverResult(shrunk: false, reason: 'cancelled'));
