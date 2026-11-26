@@ -4,7 +4,7 @@ import { chmodSync, mkdirSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { config } from "../config.ts";
-import { MIGRATIONS } from "./migrations.ts";
+import { BASELINE_VERSION, MIGRATIONS } from "./migrations.ts";
 import type { Migration } from "../types/db.types.ts";
 
 let db: DatabaseSync | undefined;
@@ -20,15 +20,19 @@ export function database(): DatabaseSync {
   return db;
 }
 
-// Brings the database up to date (migrations.ts): runs each step not yet run, in order.
+// Brings the database up to date (migrations.ts): runs each step not yet run, in order. An empty database starts at the baseline.
 export function migrate(database: DatabaseSync, migrations: readonly Migration[]): void {
   database.exec("PRAGMA foreign_keys = OFF;");
   const version = () => (database.prepare("PRAGMA user_version").get() as { user_version: number }).user_version;
-  if (version() > migrations.length) {
+  const latest = BASELINE_VERSION - 1 + migrations.length;
+  if (version() > latest) {
     throw new Error(`The database is from a newer version of this service (version ${version()}); refusing to use it.`);
   }
-  for (let v = version(); v < migrations.length; v++) {
-    const step = migrations[v]!;
+  if (version() > 0 && version() < BASELINE_VERSION) {
+    throw new Error(`The database is too old to update (version ${version()}, the oldest this service can update is ${BASELINE_VERSION}). Start a fresh database.`);
+  }
+  for (let v = Math.max(version(), BASELINE_VERSION - 1); v < latest; v++) {
+    const step = migrations[v - (BASELINE_VERSION - 1)]!;
     database.exec("BEGIN IMMEDIATE");
     try {
       step.run(database);
