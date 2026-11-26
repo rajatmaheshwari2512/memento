@@ -32,10 +32,7 @@ class ExtrasClient {
 
   Map<String, String> get headers {
     final token = Store.tryGet(StoreKey.accessToken);
-    return {
-      'content-type': 'application/json',
-      if (token != null && token.isNotEmpty) 'x-immich-user-token': token,
-    };
+    return {'content-type': 'application/json', if (token != null && token.isNotEmpty) 'x-immich-user-token': token};
   }
 
   /// Sends a JSON request and returns the decoded answer (null for 204).
@@ -80,8 +77,7 @@ class ExtrasClient {
     Object? data;
     try {
       data = jsonDecode(utf8.decode(response.bodyBytes));
-    } catch (_) {
-    }
+    } catch (_) {}
     if (response.statusCode < 200 || response.statusCode >= 300) {
       final error = data is Map ? data['error'] : null;
       throw ExtrasException(
@@ -113,6 +109,7 @@ class MementoFlags {
   final bool themedMemories;
   final bool creations;
   final bool reduceNoise;
+  final bool storageSaver;
 
   const MementoFlags({
     required this.gemini,
@@ -123,6 +120,7 @@ class MementoFlags {
     required this.themedMemories,
     required this.creations,
     required this.reduceNoise,
+    required this.storageSaver,
   });
 
   static const unknown = MementoFlags(
@@ -134,6 +132,7 @@ class MementoFlags {
     themedMemories: false,
     creations: false,
     reduceNoise: true,
+    storageSaver: false,
   );
 
   static bool _enabled(Object? flags, String group, {bool otherwise = true, String name = 'enabled'}) {
@@ -164,6 +163,7 @@ class MementoFlags {
       themedMemories: _enabled(flags, 'themedMemories', otherwise: false),
       creations: _enabled(flags, 'creations', otherwise: false),
       reduceNoise: _enabled(flags, 'reduceNoise', otherwise: false),
+      storageSaver: _enabled(flags, 'storageSaver', otherwise: false),
     );
   }
 }

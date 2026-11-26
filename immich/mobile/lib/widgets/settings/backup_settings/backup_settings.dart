@@ -14,6 +14,7 @@ import 'package:immich_mobile/providers/backup/backup_album.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/platform.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/settings.provider.dart';
 import 'package:immich_mobile/providers/user.provider.dart';
+import 'package:immich_mobile/selfphotos/storage_saver/backup_quality_settings.dart';
 import 'package:immich_ui/immich_ui.dart';
 
 class BackupSettings extends StatelessWidget {
@@ -35,6 +36,7 @@ class BackupSettings extends StatelessWidget {
         const Divider(),
         SettingGroupTitle(title: context.t.backup_albums_sync, icon: Icons.sync),
         const _AlbumSyncActionButton(),
+        if (CurrentPlatform.isAndroid) const MementoBackupQualitySettings(), // SelfPhotos Storage saver
       ],
     );
   }
