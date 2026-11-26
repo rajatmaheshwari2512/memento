@@ -8,6 +8,12 @@ from collections.abc import Sequence
 # PLACE: where the photo was taken, not any place name ("[WORD india gate]").
 LABELS = ("PER", "DATE", "NEW", "OLD", "VIDEO", "FAV", "WORD", "PLACE")
 
+# A PER span whose text is one of these (lowercased) means the asker: "me".
+FIRST_PERSON = frozenset({
+    "me", "myself", "i", "i'm", "im", "i'am", "i've", "ive", "i'd", "self",
+    "main", "mai", "mein", "mujhe", "muje", "mujhko", "maine", "mene", "khud", "meri", "mera", "mere", "apun",
+})
+
 # ---------------------------------------------------------------- splitting into words
 
 _ZWJ = 0x200D
