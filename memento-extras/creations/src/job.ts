@@ -48,8 +48,6 @@ export type QualityJob = { id: string; files: string[] };
 
 const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const FILE = /^[a-z0-9][a-z0-9_-]{0,40}\.(jpg|jpeg|webp|png|mp4|mov|webm|mkv|3gp)$/;
-const LOCAL = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d$/;
-const OFFSET = /^[+-]\d\d:\d\d$/;
 
 export const LIMITS = {
   collage: { ms: 120_000, bytes: 20 * 1024 * 1024 },
@@ -74,33 +72,15 @@ function check(ok: boolean, what: string): void {
   if (!ok) throw new BadJob(what);
 }
 
-function fraction(v: unknown): boolean {
-  return typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 1;
-}
-
-export function parseStamp(v: unknown): Stamp {
-  const s = v as Stamp;
-  check(typeof s === "object" && s !== null && typeof s.local === "string" && LOCAL.test(s.local), "stamp.local");
-  check(typeof s.offset === "string" && OFFSET.test(s.offset), "stamp.offset");
-  if (s.gps !== null) {
-    check(typeof s.gps === "object" && Math.abs(s.gps.lat) <= 90 && Math.abs(s.gps.lon) <= 180, "stamp.gps");
-  }
-  return { local: s.local, offset: s.offset, gps: s.gps === null ? null : { lat: Number(s.gps.lat), lon: Number(s.gps.lon) } };
-}
-
-export function parsePhoto(v: unknown): Photo {
-  const p = v as Photo;
-  check(typeof p === "object" && p !== null, "photo");
-  parseFile(p.file, "photo.file");
-  check(Array.isArray(p.faces) && p.faces.length <= LIMITS.faces, "photo.faces");
-  for (const f of p.faces) check(Array.isArray(f) && f.length === 4 && f.every(fraction) && f[0] < f[2] && f[1] < f[3], "photo.faces");
-  return { file: p.file, faces: p.faces.map((f) => [f[0], f[1], f[2], f[3]]) };
-}
-
 function parseId(body: unknown): string {
   const j = body as { id?: unknown };
   check(typeof j === "object" && j !== null && typeof j.id === "string" && ID.test(j.id), "id");
   return j.id as string;
+}
+
+function parseFile(v: unknown, what: string): string {
+  check(typeof v === "string" && FILE.test(v), what);
+  return v as string;
 }
 
 export function parseQualityJob(body: unknown): QualityJob {
@@ -110,48 +90,29 @@ export function parseQualityJob(body: unknown): QualityJob {
   return { id, files: files.map((f) => parseFile(f, "files")) };
 }
 
-function parseFile(v: unknown, what: string): string {
-  check(typeof v === "string" && FILE.test(v), what);
-  return v as string;
-}
-
-function parseRecapItem(v: unknown): RecapItem {
-  const item = v as RecapItem;
-  check(typeof item === "object" && item !== null, "item");
-  if (item.kind === "photo") return { kind: "photo", ...parsePhoto(item) };
-  check(item.kind === "video", "item.kind");
-  parseFile(item.file, "item.file");
-  const ms = (item as { durationMs: unknown }).durationMs;
-  check(typeof ms === "number" && Number.isFinite(ms) && ms > 0 && ms <= 6 * 3_600_000, "item.durationMs");
-  return { kind: "video", file: item.file, durationMs: ms as number };
-}
-
-function parseMoods(v: unknown): Mood[] {
-  if (v === undefined) return [];
-  check(Array.isArray(v) && v.length <= MOODS.length && v.every((m) => (MOODS as readonly unknown[]).includes(m)), "moods");
-  return [...(v as Mood[])];
-}
-
+// Checks the job's id and file names (what the job may read in its own folder); the rest comes from our own service.
 export function parseJob(body: unknown): RenderJob {
-  const id = parseId(body);
+  parseId(body);
   const j = body as RenderJob;
-  if (j.kind === "recap") {
-    check(Array.isArray(j.items) && j.items.length >= LIMITS.recapItems.min && j.items.length <= LIMITS.recapItems.max, "items");
-    return { id, kind: "recap", items: j.items.map(parseRecapItem), stamp: parseStamp(j.stamp), moods: parseMoods(j.moods) };
+  switch (j.kind) {
+    case "collage":
+      for (const photo of j.photos) parseFile(photo.file, "photo.file");
+      break;
+    case "recap":
+      for (const item of j.items) parseFile(item.file, "item.file");
+      j.moods ??= [];
+      break;
+    case "animation":
+      for (const frame of j.frames) parseFile(frame, "frames");
+      break;
+    case "cinematic":
+      parseFile(j.photo.file, "photo.file");
+      break;
+    case "reduce-noise":
+      check(parseFile(j.video, "video").endsWith(`.${j.format}`), "video");
+      break;
+    default:
+      throw new BadJob("kind");
   }
-  if (j.kind === "animation") {
-    const { min, max } = LIMITS.animationFrames;
-    check(Array.isArray(j.frames) && j.frames.length >= min && j.frames.length <= max, "frames");
-    return { id, kind: "animation", frames: j.frames.map((f) => parseFile(f, "frames")), stamp: parseStamp(j.stamp) };
-  }
-  if (j.kind === "cinematic") return { id, kind: "cinematic", photo: parsePhoto(j.photo), stamp: parseStamp(j.stamp) };
-  if (j.kind === "reduce-noise") {
-    const format = j.format;
-    check((VIDEO_FORMATS as readonly unknown[]).includes(format), "format");
-    check(parseFile(j.video, "video").endsWith(`.${format}`), "video");
-    return { id, kind: "reduce-noise", video: j.video, format };
-  }
-  check(j.kind === "collage", "kind");
-  check(Array.isArray(j.photos) && (LIMITS.collageSizes as readonly number[]).includes(j.photos.length), "photos");
-  return { id, kind: "collage", photos: j.photos.map(parsePhoto), stamp: parseStamp(j.stamp) };
+  return j;
 }

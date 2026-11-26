@@ -82,7 +82,7 @@ test("the EXIF block: date, time zone and place as Immich reads them", () => {
   assert.throws(() => withExif(Buffer.from("nope"), stamp, { w: 1, h: 1 }));
 });
 
-test("jobs name only files in their own folder, and only sensible values", () => {
+test("jobs name only files in their own folder, under an id of their own", () => {
   const photo = { file: "0.jpg", faces: [[0.1, 0.1, 0.2, 0.2]] };
   const stamp = { local: "2026-10-20T08:59:59", offset: "+05:30", gps: null };
   const good = { id: ID, kind: "collage", photos: [photo, { file: "1.jpg", faces: [] }], stamp };
@@ -91,58 +91,26 @@ test("jobs name only files in their own folder, and only sensible values", () =>
   for (const bad of [
     { ...good, id: "../x" },
     { ...good, kind: "rm" },
-    { ...good, photos: [photo] },
     { ...good, photos: [{ ...photo, file: "../../data.db" }, photo] },
     { ...good, photos: [{ ...photo, file: "/etc/passwd" }, photo] },
-    { ...good, photos: [{ ...photo, faces: [[0.5, 0.5, 0.2, 0.9]] }, photo] },
-    { ...good, stamp: { ...stamp, local: "yesterday" } },
-    { ...good, stamp: { ...stamp, gps: { lat: 100, lon: 0 } } },
   ]) assert.throws(() => parseJob(bad), BadJob, JSON.stringify(bad).slice(0, 80));
-  const recap = { id: ID, kind: "recap", stamp, items: [photo, { kind: "video", file: "1.mp4", durationMs: 8000 }, { ...photo, kind: "photo" }] };
-  assert.equal((recap.items[0] as any).kind, undefined);
-  assert.throws(() => parseJob(recap), BadJob, "every item says what it is");
-  recap.items[0] = { ...photo, kind: "photo" } as any;
+  const recap = { id: ID, kind: "recap", stamp, items: [{ ...photo, kind: "photo" }, { kind: "video", file: "1.mp4", durationMs: 8000 }, { ...photo, kind: "photo" }] };
   const parsedRecap = parseJob(recap);
-  assert.deepEqual(parsedRecap.kind === "recap" ? parsedRecap.items.map((i) => i.kind) : [], ["photo", "video", "photo"]);
   assert.deepEqual(parsedRecap.kind === "recap" ? parsedRecap.moods : null, [], "no moods given: none");
   const withMoods = parseJob({ ...recap, moods: ["festive", "indian-calm"] });
   assert.deepEqual(withMoods.kind === "recap" ? withMoods.moods : null, ["festive", "indian-calm"]);
-  for (const bad of [
-    { ...recap, moods: "festive" },
-    { ...recap, moods: ["Festive"] },
-    { ...recap, moods: ["festive-"] },
-    { ...recap, moods: ["../music/x"] },
-    { ...recap, moods: [1] },
-    { ...recap, moods: Array(8).fill("calm") },
-    { ...recap, items: recap.items.slice(0, 2) },
-    { ...recap, items: [...recap.items.slice(0, 2), { kind: "video", file: "2.mp4", durationMs: -1 }] },
-    { ...recap, items: [...recap.items.slice(0, 2), { kind: "video", file: "../2.mp4", durationMs: 1000 }] },
-  ]) assert.throws(() => parseJob(bad), BadJob);
+  assert.throws(() => parseJob({ ...recap, items: [...recap.items.slice(0, 2), { kind: "video", file: "../2.mp4", durationMs: 1000 }] }), BadJob);
   const animation = { id: ID, kind: "animation", stamp, frames: ["0.jpg", "1.jpg", "2.jpg"] };
   assert.deepEqual(parseJob(animation), animation);
-  for (const bad of [
-    { ...animation, frames: ["0.jpg", "1.jpg"] },
-    { ...animation, frames: Array.from({ length: 13 }, (_, i) => `${i}.jpg`) },
-    { ...animation, frames: ["0.jpg", "1.jpg", "../2.jpg"] },
-    { ...animation, frames: ["0.jpg", "1.jpg", { file: "2.jpg" }] },
-    { ...animation, frames: "0.jpg" },
-  ]) assert.throws(() => parseJob(bad), BadJob, JSON.stringify(bad).slice(0, 80));
+  assert.throws(() => parseJob({ ...animation, frames: ["0.jpg", "1.jpg", "../2.jpg"] }), BadJob);
   const cinematic = { id: ID, kind: "cinematic", stamp, photo };
   assert.deepEqual(parseJob(cinematic), cinematic);
-  for (const bad of [
-    { ...cinematic, photo: { ...photo, file: "../0.jpg" } },
-    { ...cinematic, photo: "0.jpg" },
-    { ...cinematic, photo: undefined },
-    { ...cinematic, photo: { ...photo, faces: [[0, 0, 2, 2]] } },
-  ]) assert.throws(() => parseJob(bad), BadJob, JSON.stringify(bad).slice(0, 80));
+  assert.throws(() => parseJob({ ...cinematic, photo: { ...photo, file: "../0.jpg" } }), BadJob);
   const noise = { id: ID, kind: "reduce-noise", video: "video.mov", format: "mov" };
   assert.deepEqual(parseJob(noise), noise);
   for (const bad of [
     { ...noise, video: "../video.mov" },
     { ...noise, video: "video.mp4" },
-    { ...noise, format: "avi", video: "video.avi" },
-    { ...noise, video: undefined },
-    { ...noise, video: "video.jpg", format: "jpg" },
   ]) assert.throws(() => parseJob(bad), BadJob, JSON.stringify(bad).slice(0, 80));
   assert.deepEqual(parseQualityJob({ id: ID, files: ["0.webp"] }).files, ["0.webp"]);
   assert.throws(() => parseQualityJob({ id: ID, files: ["../0.webp"] }), BadJob);
