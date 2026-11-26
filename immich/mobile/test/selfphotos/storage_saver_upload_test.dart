@@ -110,7 +110,13 @@ void main() {
           kind: any(named: 'kind'),
           videoBitrate: any(named: 'videoBitrate'),
         ),
-      ).thenAnswer((_) async => answer());
+      ).thenAnswer((invocation) async {
+        final result = answer();
+        if (result.shrunk) {
+          File(invocation.positionalArguments[1] as String).writeAsStringSync('copy');
+        }
+        return result;
+      });
     }
 
     List<({String path, String name, Map<String, String> fields})> captureUploads() {
@@ -135,7 +141,9 @@ void main() {
       return captured;
     }
 
-    const shrunk = StorageSaverResult(shrunk: true, size: 100, checksum: 'copy-sha');
+    const shrunk = StorageSaverResult(shrunk: true);
+    // base64 SHA-1 of the stubbed copy's content, 'copy'
+    const copySha = '+E4uLa3Yc4T7VfJYhpJrd36DePE=';
 
     setUp(() => when(() => mockStorageRepository.clearCache()).thenAnswer((_) async {}));
 
@@ -184,24 +192,14 @@ void main() {
       );
 
       verifyInOrder([
-        () => mockAssetService.linkStorageSaverCopy(photo.id, 'original-sha', 'copy-sha'),
-        () => mockAssetService.stackEditedUpload(photo.localId!, 'remote-1', 'copy-sha'),
+        () => mockAssetService.linkStorageSaverCopy(photo.id, 'original-sha', copySha),
+        () => mockAssetService.stackEditedUpload(photo.localId!, 'remote-1', copySha),
       ]);
     });
 
     test('names a shrunk video after the original with the copy\'s extension', () async {
       stubAsset(video, '/path/to/clip.mov', 'clip.mov');
-      when(
-        () => mockStorageSaverNative.shrink(
-          any(),
-          any(),
-          kind: any(named: 'kind'),
-          videoBitrate: any(named: 'videoBitrate'),
-        ),
-      ).thenAnswer((invocation) async {
-        File(invocation.positionalArguments[1] as String).writeAsStringSync('copy');
-        return shrunk;
-      });
+      stubShrink(() => shrunk);
       final uploads = captureUploads();
 
       await sut.uploadSingleAsset(

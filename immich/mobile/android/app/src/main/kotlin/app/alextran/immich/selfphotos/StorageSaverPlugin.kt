@@ -11,7 +11,6 @@ import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
-import android.util.Base64
 import android.util.Log
 import androidx.exifinterface.media.ExifInterface
 import androidx.media3.common.MediaItem
@@ -31,7 +30,6 @@ import io.flutter.plugin.common.MethodChannel
 import java.io.DataInputStream
 import java.io.File
 import java.io.FileOutputStream
-import java.security.MessageDigest
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -112,7 +110,7 @@ class StorageSaverPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
       output.delete()
       return notShrunk("notSmaller")
     }
-    return mapOf("shrunk" to true, "size" to output.length(), "checksum" to sha1(output))
+    return mapOf("shrunk" to true)
   }
 
   // Returns why the video is kept as it is, or null once [output] is written.
@@ -180,19 +178,6 @@ class StorageSaverPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     to.saveAttributes()
   }
 
-  private fun sha1(file: File): String {
-    val digest = MessageDigest.getInstance("SHA-1")
-    file.inputStream().use { input ->
-      val buffer = ByteArray(HASH_BUFFER_SIZE)
-      while (true) {
-        val read = input.read(buffer)
-        if (read == -1) break
-        digest.update(buffer, 0, read)
-      }
-    }
-    return Base64.encodeToString(digest.digest(), Base64.NO_WRAP)
-  }
-
   private fun notShrunk(reason: String): Map<String, Any> = mapOf("shrunk" to false, "reason" to reason)
 
   private companion object {
@@ -203,7 +188,6 @@ class StorageSaverPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     const val MAX_PIXELS = 16_000_000L
     const val JPEG_QUALITY = 85
     const val TIME_LIMIT_EXTRA_MS = 60_000L
-    const val HASH_BUFFER_SIZE = 2 * 1024 * 1024
 
     val worker = Executors.newSingleThreadExecutor()
 

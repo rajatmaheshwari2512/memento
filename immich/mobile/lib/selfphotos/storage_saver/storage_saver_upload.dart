@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:immich_mobile/domain/models/asset/asset_metadata.model.dart';
 import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
 import 'package:immich_mobile/extensions/platform_extensions.dart';
@@ -108,10 +109,11 @@ class StorageSaverUpload {
         _logger.info("Storage saver kept ${asset.id} - ${asset.name} full size: ${result.reason}");
         return null;
       }
-      _logger.info("Storage saver shrank ${asset.id} - ${asset.name} to ${result.size} bytes");
+      final checksum = base64.encode((await sha1.bind(output.openRead()).first).bytes);
+      _logger.info("Storage saver shrank ${asset.id} - ${asset.name} to ${await output.length()} bytes");
       return StorageSaverCopy(
         file: output,
-        checksum: result.checksum!,
+        checksum: checksum,
         originalChecksum: originalChecksum,
         quality: run.quality,
       );

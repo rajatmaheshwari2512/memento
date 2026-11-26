@@ -18,26 +18,16 @@ enum StorageSaverKind { video, photo }
 class StorageSaverResult {
   final bool shrunk;
 
-  /// The shrunk copy's size in bytes.
-  final int? size;
-
-  /// The shrunk copy's base64 SHA-1, as local_asset_entity.checksum stores it.
-  final String? checksum;
-
   /// Why it wasn't shrunk, e.g. hdr, alreadySmall or notSmaller.
   final String? reason;
 
-  const StorageSaverResult({required this.shrunk, this.size, this.checksum, this.reason});
+  const StorageSaverResult({required this.shrunk, this.reason});
 
   /// Stopped by [StorageSaverNative.cancel]; the asset is left for the next backup.
   bool get isCancelled => reason == 'cancelled';
 
-  factory StorageSaverResult.fromMap(Map<Object?, Object?> map) => StorageSaverResult(
-    shrunk: map['shrunk'] == true,
-    size: map['size'] as int?,
-    checksum: map['checksum'] as String?,
-    reason: map['reason'] as String?,
-  );
+  factory StorageSaverResult.fromMap(Map<Object?, Object?> map) =>
+      StorageSaverResult(shrunk: map['shrunk'] == true, reason: map['reason'] as String?);
 }
 
 class StorageSaverNative {
