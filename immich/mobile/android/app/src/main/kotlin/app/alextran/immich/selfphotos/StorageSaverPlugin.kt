@@ -34,6 +34,7 @@ import java.io.FileOutputStream
 import java.security.MessageDigest
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.floor
 import kotlin.math.min
@@ -126,7 +127,7 @@ class StorageSaverPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     running = export
     try {
       if (job <= cancelledUpTo) export.cancel()
-      return export.run()
+      return export.run(facts.durationMs * 2 + TIME_LIMIT_EXTRA_MS)
     } finally {
       running = null
     }
@@ -201,6 +202,7 @@ class StorageSaverPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     const val MAX_SHORT_SIDE = 1080
     const val MAX_PIXELS = 16_000_000L
     const val JPEG_QUALITY = 85
+    const val TIME_LIMIT_EXTRA_MS = 60_000L
     const val HASH_BUFFER_SIZE = 2 * 1024 * 1024
 
     val worker = Executors.newSingleThreadExecutor()
@@ -252,7 +254,13 @@ class StorageSaverPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
 }
 
 // The facts that decide whether a video is shrunk.
-private class VideoFacts(val shortSide: Int, val frameRate: Float, val hdr: Boolean, val bitrate: Long) {
+private class VideoFacts(
+  val shortSide: Int,
+  val frameRate: Float,
+  val hdr: Boolean,
+  val bitrate: Long,
+  val durationMs: Long,
+) {
   companion object {
     fun read(file: File): VideoFacts {
       val extractor = MediaExtractor()
@@ -286,6 +294,7 @@ private class VideoFacts(val shortSide: Int, val frameRate: Float, val hdr: Bool
           frameRate = frameRate,
           hdr = transfer == MediaFormat.COLOR_TRANSFER_HLG || transfer == MediaFormat.COLOR_TRANSFER_ST2084,
           bitrate = if (durationMs > 0) file.length() * 8 * 1000 / durationMs else Long.MAX_VALUE,
+          durationMs = durationMs,
         )
       } finally {
         extractor.release()
@@ -310,11 +319,14 @@ private class VideoExport(
   private var transformer: Transformer? = null
   @Volatile private var failure: String? = null
 
-  // Returns null once [output] is written, or why it wasn't.
-  fun run(): String? {
+  // Returns null once [output] is written within [timeLimitMs], or why it wasn't.
+  fun run(timeLimitMs: Long): String? {
     try {
       handler.post(::start)
-      done.await()
+      if (!done.await(timeLimitMs, TimeUnit.MILLISECONDS)) {
+        handler.post { transformer?.cancel() }
+        return "failed: timedOut"
+      }
       return failure
     } finally {
       thread.quitSafely()
