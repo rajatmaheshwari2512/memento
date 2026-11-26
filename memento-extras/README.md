@@ -98,7 +98,6 @@ src/controllers/     one function per route: who's asking, what they sent, what 
 src/services/        the work; no requests or replies (a refusal is an HttpError):
   edits                AI edits: make, show, save next to the original (as made, or pasted
                        onto the original by the app for a highlighted area), discard
-  free-first           where a free tool will answer an edit before Gemini (no worker yet)
   adjust               Adjust's save: a photo the app adjusted, saved next to the original
   copies               the one save path for both, and for videos' cleaned copies: upload the copy
                        (streamed from a file), the original's date and place, stacked on top

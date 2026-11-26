@@ -1,8 +1,8 @@
-# The whole VM setup. Run from this folder (host/):
+# The whole VM setup. Run it through ./memento at the top of the repo, which checks .env first:
 #
-#   ansible-playbook site.yml --check --diff    preview, changes nothing
-#   ansible-playbook site.yml --diff            apply
-#   ansible-playbook site.yml --tags caddy      run one role only
+#   ./memento prod dry-run                         preview, changes nothing
+#   ./memento prod deploy                          apply
+#   ./memento prod deploy --tags caddy             run one role only
 
 - name: Check .env
   hosts: photos
