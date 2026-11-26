@@ -130,7 +130,7 @@ export async function makeEdit(
     await copyFile(editImagePath(previous), path);
     source = { path, mime: previous.mime, bytes: (await stat(path)).size, from: "edit" };
     parentEditId = previous.id;
-    size = allowedSize(previous.size ?? sizeFor(asset), flags);
+    size = allowedSize(previous.size, flags);
   } else {
     // A highlighted edit: the app's upright photo, so it matches the mark (EditRequest).
     source = photo ? { ...photo, from: "app" } : await getSourceImage(cred, asset, folder);

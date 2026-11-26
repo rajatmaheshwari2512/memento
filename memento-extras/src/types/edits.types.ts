@@ -11,7 +11,7 @@ export type EditRecord = {
   assetId: string;
   mime: ImageMime;
   model: string;
-  size?: ImageSize; // the result's size class; "Edit more" keeps it (missing on older records)
+  size: ImageSize; // the result's size class; "Edit more" keeps it
   area?: boolean; // an edit of a highlighted area (saved by the app, pasted onto the original)
   createdAt: string;
   parentEditId: string | null;
