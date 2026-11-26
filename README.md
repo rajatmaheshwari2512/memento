@@ -127,7 +127,7 @@ name and backup storage.
 
 ## Releases
 
-Each tag like `v1.2.0` makes a release on GitHub, built by GitHub Actions: on the Releases page,
+Each push to main with a feature or fix makes a release on GitHub, built by GitHub Actions: on the Releases page,
 **download the Android app** (`memento-<version>.apk`) and the website, and the four server images
 are on GitHub's container registry. A server can run a release instead of building from the code:
 `./memento prod update v1.2.0`. It stays on that version until you update it again. A fork builds

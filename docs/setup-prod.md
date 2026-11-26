@@ -333,7 +333,8 @@ same key, or the phone refuses the update.
 Every push to `main` runs GitHub Actions (`.github/workflows/release.yml`). When the commits since
 the last release include a feature or a fix, it makes a new release: it builds everything, for ARM64
 and x86-64 servers, and puts it on the repo's Releases page; the app takes longest. Other pushes stop
-after a few seconds. Each fork builds its own, into its own packages.
+after the first job (they wait while a release is building). Each fork builds its own, into its own
+packages.
 
 - **The Android app**, `memento-<version>.apk`, signed with your key (the secrets below).
 - **The website**, `memento-website-<version>.tar.gz`.
@@ -350,9 +351,11 @@ after a few seconds. Each fork builds its own, into its own packages.
 | `feat!:`, or a `BREAKING CHANGE:` line in the message | 1.0.0 → 2.0.0 |
 | `docs:`, `chore:`, `refactor:`, `test:`, `ci:`, `build:`, `style:` | none |
 
-A scope is optional: `fix(web): …`. The release notes list the features and fixes. The first
-release is v1.0.0. If a run fails, use **Re-run failed jobs** on its page in Actions; if only the
-app fails, the release is published without it, and says so.
+A scope is optional: `fix(web): …`. The words `BREAKING CHANGE` anywhere in a commit message make
+a major release, so only write them when you mean it. The release notes list the features and fixes.
+The first release is v1.0.0. If a run fails, use **Re-run failed jobs** on its page in Actions, and
+only on the newest release run: an older one would push its images over a newer release's. If only
+the app fails, the release is published without it, and says so.
 
 **MANUAL, once, after the first release: make the four packages public.** A server pulls them
 without logging in, and GitHub may make new packages private: github.com/<owner>?tab=packages → each

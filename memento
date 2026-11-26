@@ -1107,7 +1107,7 @@ server setup comes from this checkout. Check it out first (git checkout $version
   say "== Release $version: are its images at $images? (checked without logging in, as the server pulls them)"
   python3 -I "$root/scripts/check-release.py" "$images" "$version" ||
     fail "Release $version isn't there for anyone to pull. Its images come from the repo's Release workflow (GitHub →
-Actions → Release, for tag $version): did it run, and finish? GitHub may make a new package private: make each one
+Actions → Release, the run that made $version): did it run, and finish? GitHub may make a new package private: make each one
 public ($packages → the package → Package settings → Change visibility). Nothing was changed."
   if ! git -C "$root" tag --points-at HEAD 2>/dev/null | grep -qxF "$version"; then
     say "NOTE: this checkout isn't at $version, and the server setup (host/) and immich_version come from it."

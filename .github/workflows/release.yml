@@ -1,5 +1,6 @@
 # Builds a Memento release from each push to main that has a feat or fix since the last release,
-# or by hand (Actions → Release → Run workflow, on main). Other pushes stop after the first job.
+# or by hand (Actions → Release → Run workflow, on main). Other pushes stop after the first job
+# (queued behind a release that's still building).
 # The version comes from the commit messages (Conventional Commits): fix: or perf: → 1.0.1,
 # feat: → 1.1.0, feat!: or a BREAKING CHANGE: footer → 2.0.0. Each fork builds its own, into its own packages.
 #
@@ -58,7 +59,8 @@ jobs:
           "$bin" --no-ci --dry --allow-no-changes --version-file --changelog "$RUNNER_TEMP/changes.md" \
             --plugin-resolver github --ci-condition default@1.11.0 \
             --provider git@1.13.0 --provider-opt default_branch=main \
-            --commit-analyzer default@1.15.0 --changelog-generator default@1.15.0
+            --commit-analyzer default@1.15.0 --commit-analyzer-opt patch_release_rules=fix,perf \
+            --changelog-generator default@1.15.0
           if [ ! -f .version-unreleased ]; then
             echo "version=" >> "$GITHUB_OUTPUT"
             echo "### No release: no feat or fix since the last one" >> "$GITHUB_STEP_SUMMARY"
