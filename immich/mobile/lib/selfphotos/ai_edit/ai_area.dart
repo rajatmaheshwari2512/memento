@@ -160,7 +160,7 @@ Future<Uint8List> markedCopy(
     paintStrokes(canvas, strokes, bounds.size, area.tintColor);
     canvas.restore();
   });
-  final folder = await Directory.systemTemp.createTemp('selfphotos-mark-');
+  final folder = await (await Directory.systemTemp.create(recursive: true)).createTemp('selfphotos-mark-');
   try {
     final pixels = await marked.toByteData();
     await native.createOutput(size);

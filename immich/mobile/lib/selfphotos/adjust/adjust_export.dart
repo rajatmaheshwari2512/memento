@@ -46,7 +46,7 @@ Future<AdjustExport> exportFullSize(
   AdjustService service = const AdjustService(),
   AdjustNative native = const AdjustNative(),
 }) async {
-  final folder = await Directory.systemTemp.createTemp('selfphotos-copy-');
+  final folder = await (await Directory.systemTemp.create(recursive: true)).createTemp('selfphotos-copy-');
   try {
     final source = await _openSource(asset, folder, service, native);
     final output = outputOf(source);

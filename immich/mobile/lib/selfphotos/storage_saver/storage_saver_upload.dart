@@ -115,7 +115,7 @@ class StorageSaverUpload {
     }
     try {
       final originalChecksum = asset.checksum ?? await _checksum(file);
-      final folder = _folder = await Directory.systemTemp.createTemp(_folderPrefix);
+      final folder = _folder = await (await Directory.systemTemp.create(recursive: true)).createTemp(_folderPrefix);
       final output = File(p.join(folder.path, copyName));
       final result = await _native.shrink(
         file.path,
