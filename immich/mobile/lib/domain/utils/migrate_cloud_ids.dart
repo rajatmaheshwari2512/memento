@@ -178,9 +178,16 @@ Future<List<CloudIdMapping>> fetchMapping(Drift db, String userId, int limit, St
         db.remoteAssetEntity.id.equalsExp(db.remoteAssetCloudIdEntity.assetId),
         useColumns: false,
       ),
+      leftOuterJoin(
+        db.remoteAssetStorageSaverEntity,
+        db.remoteAssetEntity.id.equalsExp(db.remoteAssetStorageSaverEntity.assetId),
+        useColumns: false,
+      ),
     ])
     ..where(
       db.remoteAssetEntity.ownerId.equals(userId) &
+          // SelfPhotos: Storage saver copies never take the phone item's cloud ID
+          db.remoteAssetStorageSaverEntity.assetId.isNull() &
           // Skip locked assets as we cannot update them without an elevated session
           db.remoteAssetEntity.visibility.isNotValue(AssetVisibility.locked.index) &
           db.localAssetEntity.iCloudId.isNotNull() &

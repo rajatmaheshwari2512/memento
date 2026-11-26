@@ -112,4 +112,19 @@ void main() {
       verify(() => mockNativeSyncApi.getCloudIdForAssetIds(any())).called(1);
     });
   });
+
+  group('fetchMapping', () {
+    test('leaves out Storage saver copies', () async {
+      final user = await ctx.newUser();
+      await ctx.newLocalAsset(checksum: 'copy', iCloudId: 'cloud-linked', deviceChecksum: 'original');
+      await ctx.newLocalAsset(checksum: 'plain', iCloudId: 'cloud-plain');
+      final copy = await ctx.newRemoteAsset(checksum: 'copy', ownerId: user.id);
+      final plain = await ctx.newRemoteAsset(checksum: 'plain', ownerId: user.id);
+      await ctx.newRemoteAssetStorageSaver(assetId: copy.id, originalChecksum: 'original');
+
+      final mappings = await fetchMapping(ctx.db, user.id, 10, null);
+
+      expect(mappings.map((m) => (m.remoteAssetId, m.cloudId)), [(plain.id, 'cloud-plain')]);
+    });
+  });
 }
