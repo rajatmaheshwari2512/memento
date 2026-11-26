@@ -1,10 +1,4 @@
-// SelfPhotos AI tools: lining the AI's result up with the photo before pasting. The same steps
-// and numbers as the web's ai-align.ts (see it for why). Not part of Immich.
-//
-// Gemini's content isn't exactly where the original's is (the first real 4K result was about
-// 0.35% larger and a few pixels off), so a pasted area's edge would be off by up to ~13 px. The
-// error is fitted as a scale and an offset per axis, from small patches of the photo outside the
-// highlighted area, matched by their detail between the photo and the result.
+// SelfPhotos AI tools: lining the AI's result up with the photo before pasting.
 import 'dart:math';
 import 'dart:typed_data';
 
@@ -17,9 +11,7 @@ class Grey {
   const Grey(this.width, this.height, this.data);
 }
 
-/// Where a point of the photo (x and y from 0 to 1) is in the result:
-/// (scaleX·x + offsetX, scaleY·y + offsetY). [error]: how far the matched patches still are
-/// from that, as a share of the photo's width.
+/// Where a point of the photo (x and y from 0 to 1) is in the result.
 class AiAlignment {
   final double scaleX;
   final double offsetX;
@@ -35,16 +27,15 @@ class AiAlignment {
 
 const _columns = 10;
 const _rows = 8;
-const _half = 16; // a patch is 33×33 px
-const _search = 12; // ±12 px, about ±50 px at full size
-const _flat = 2.0; // a patch whose detail varies less than this can't be matched
+const _half = 16;
+const _search = 12;
+const _flat = 2.0;
 const _minPatches = 5;
-const _detail = 4; // the detail: each value less the average of the box ±4 px around it (_detailOf)
+const _detail = 4;
 
 int _clamp(int value, int max) => value < 0 ? 0 : (value > max ? max : value);
 
-/// The average of the box ±[radius] px around each value (across, then down, by running sums;
-/// edges repeated). Also the mask's soft edge (ai_area.dart feather).
+/// The average of the box ±[radius] px around each value.
 Float32List boxBlur(Float32List data, int width, int height, int radius) {
   final span = radius * 2 + 1;
   final across = Float32List(data.length);
@@ -83,8 +74,6 @@ Grey _detailOf(Grey grey) {
   return Grey(grey.width, grey.height, out);
 }
 
-// How far `result` must move to match `base` at (cx, cy), to a fraction of a pixel; null when
-// the patch is flat or the best match is at the edge of the search.
 (double, double)? _match(Grey base, Grey result, int cx, int cy) {
   final width = base.width;
   var sum = 0.0;
@@ -125,7 +114,6 @@ Grey _detailOf(Grey grey) {
   if (bx == 0 || by == 0 || bx == span - 1 || by == span - 1) {
     return null;
   }
-  // A parabola through the best and its neighbours, for the fraction of a pixel.
   double refine(double before, double at, double after) {
     final curve = before - 2 * at + after;
     return curve > 0 ? (before - after) / (2 * curve) : 0;
@@ -138,8 +126,6 @@ Grey _detailOf(Grey grey) {
   );
 }
 
-// Least squares: shift = slope·position + intercept. With the positions bunched together, only
-// the intercept.
 (double, double) _fit(List<(double, double)> points, int extent) {
   final n = points.length;
   final meanP = points.fold(0.0, (s, p) => s + p.$1) / n;
@@ -158,8 +144,7 @@ Grey _detailOf(Grey grey) {
   return (slope, meanS - slope * meanP);
 }
 
-// Whether any of [changed] (above 0) is within [reach] px of (cx, cy): a summed-area table of
-// it, so each patch is one lookup.
+// Whether any of [changed] (above 0) is within [reach] px of (cx, cy).
 bool Function(int cx, int cy, int reach) _nearChange(Grey? changed) {
   if (changed == null) {
     return (_, _, _) => false;
@@ -184,9 +169,7 @@ bool Function(int cx, int cy, int reach) _nearChange(Grey? changed) {
 }
 
 /// The alignment of [edited] to [photo] (two pictures of the same size), from patches away from
-/// [changed] (the highlighted area as a mask of the same size, which the edit changed). Null
-/// when too few patches have texture to match: then there's nothing a misaligned edge would
-/// show against either.
+/// [changed].
 AiAlignment? estimateAlignment(Grey photo, Grey edited, Grey? changed) {
   final base = _detailOf(photo);
   final result = _detailOf(edited);
@@ -220,7 +203,6 @@ AiAlignment? estimateAlignment(Grey photo, Grey edited, Grey? changed) {
   }
 
   var fitted = solve();
-  // Patches that matched something else (a changed object, a repeating pattern) are dropped, once.
   final median = ([...fitted.misses]..sort())[fitted.misses.length ~/ 2];
   final kept = [
     for (final (i, p) in found.indexed)
@@ -231,7 +213,6 @@ AiAlignment? estimateAlignment(Grey photo, Grey edited, Grey? changed) {
     fitted = solve();
   }
   final error = sqrt(fitted.misses.fold(0.0, (s, m) => s + m * m) / fitted.misses.length) / width;
-  // The photo's x is at x + ax·x + bx in the result (the patch at x matched there).
   return AiAlignment(
     1 + fitted.ax,
     fitted.bx / width,

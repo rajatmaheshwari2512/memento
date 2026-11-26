@@ -1,9 +1,4 @@
-// SelfPhotos Reduce noise for videos: Memento's extras service cleans a video's sound on our own
-// server (DeepFilterNet; memento-extras POST /videos/:id/reduce-noise) and saves a copy stacked
-// on top of the video; the picture isn't touched. The job is followed here, outside any page
-// (GET /videos/jobs/:id every few seconds), so the person can keep browsing: a message when it
-// starts, one with "Open" when it's done, a plain one if it fails. Not part of Immich. The web
-// does the same (web/src/lib/ai-edit/reduce-noise.ts).
+// SelfPhotos Reduce noise for videos.
 import 'dart:async';
 
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -20,9 +15,9 @@ import 'package:immich_ui/immich_ui.dart';
 /// What the service says about a job (memento-extras src/types/reduce-noise.types.ts).
 class ReduceNoiseJob {
   final String jobId;
-  final String state; // queued, running, done or failed
-  final String? assetId; // the cleaned copy, once done
-  final String? error; // why not, in words for the person
+  final String state;
+  final String? assetId;
+  final String? error;
 
   const ReduceNoiseJob({required this.jobId, required this.state, this.assetId, this.error});
 
@@ -85,8 +80,7 @@ class ReduceNoiseUnderWay extends ReduceNoiseOutcome {
   const ReduceNoiseUnderWay();
 }
 
-/// Followed for longer than [ReduceNoiseFollower.giveUpAfter]: given up on here (it may still
-/// finish on the server, and the copy then lands on top of the video).
+/// Followed for longer than [ReduceNoiseFollower.giveUpAfter].
 class ReduceNoiseTooLong extends ReduceNoiseOutcome {
   const ReduceNoiseTooLong();
 }
@@ -97,12 +91,10 @@ class ReduceNoiseFollower {
   final ReduceNoiseService _service;
   final Duration interval;
 
-  /// An hour: the server's longest wait and cleaning together. As on the web.
+  /// An hour: the server's longest wait and cleaning together.
   final Duration giveUpAfter;
   final _following = <String>{};
 
-  /// The service unreachable this many times in a row (a minute): given up on here (it carries
-  /// on on the server; the copy still lands on top of the video).
   static const _maxMisses = 20;
 
   ReduceNoiseFollower(
@@ -129,7 +121,7 @@ class ReduceNoiseFollower {
           job = await _service.status(job.jobId);
           misses = 0;
         } on ExtrasException {
-          rethrow; // the service answered: that's its answer
+          rethrow;
         } catch (_) {
           if (++misses >= _maxMisses) {
             rethrow;
@@ -160,7 +152,6 @@ class ReduceNoiseController {
   ReduceNoiseController(this._ref) : _follower = ReduceNoiseFollower(const ReduceNoiseService());
 
   /// Cleans the video's sound: a message when it starts, and one when it ends (with "Open").
-  /// The messages go wherever the person is by then.
   Future<void> start(String videoId) async {
     final t = StaticTranslations.instance;
     final outcome = await _follower.run(videoId, onStarted: () => snackbar.info(t.reduce_noise_started));
@@ -180,8 +171,6 @@ class ReduceNoiseController {
     }
   }
 
-  // The copy in the viewer. It reaches the app's own database with the next sync, so one is
-  // asked for if it isn't there yet.
   Future<void> _open(String copyId) async {
     final assets = _ref.read(assetServiceProvider);
     var copy = await assets.getRemoteAsset(copyId);
@@ -193,7 +182,6 @@ class ReduceNoiseController {
       snackbar.info(StaticTranslations.instance.reduce_noise_done);
       return;
     }
-    // As AssetViewer.setAsset does, with this provider's ref (the page that asked may be gone).
     final viewer = _ref.read(assetViewerProvider.notifier)..reset();
     if (copy.isVideo) {
       viewer.setControls(false);

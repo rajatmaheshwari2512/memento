@@ -1,8 +1,4 @@
-// SelfPhotos editor pages (Adjust, AI Edit): laid out like Immich's crop screen
-// (presentation/pages/edit/edit.page.dart): dark theme, black app bar with close, title and a
-// done button, the photo on black, and a rounded panel with the editor's tabs (Adjust's pages;
-// AI Edit has none), the tool and a footer. Leaving with unsaved changes asks first, as
-// Immich's editor does. Not part of Immich.
+// SelfPhotos editor pages (Adjust, AI Edit).
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -12,7 +8,7 @@ import 'package:immich_mobile/providers/theme.provider.dart';
 import 'package:immich_mobile/theme/theme_data.dart';
 import 'package:immich_ui/immich_ui.dart';
 
-/// Immich's own words for leaving the editor with changes. True: discard them.
+/// Immich's own words for leaving the editor with changes.
 Future<bool?> confirmEditorDiscard(BuildContext context) => showDialog<bool>(
   context: context,
   builder: (context) => AlertDialog(
@@ -29,10 +25,7 @@ Future<bool?> confirmEditorDiscard(BuildContext context) => showDialog<bool>(
   ),
 );
 
-/// The dark theme wraps the page's scaffold, as on Immich's crop screen: dialogs and toasts
-/// opened with the page's own context (the discard question, "Saved") keep the app's theme,
-/// while [tool] and [footer] are built inside the dark one, so the styles they read from the
-/// context they're given are light on the dark panel, also on a phone in light mode.
+/// The dark theme wraps the page's scaffold.
 class EditorScaffold extends ConsumerWidget {
   /// The app bar's title; Immich's "Edit" when null.
   final String? title;
@@ -53,8 +46,7 @@ class EditorScaffold extends ConsumerWidget {
   final WidgetBuilder tool;
   final WidgetBuilder footer;
 
-  /// AI Edit's panel: only as tall as its tools, up to half the screen (as on the web), so
-  /// they show whole. Otherwise (Adjust's pages) the tools scroll beyond 38% of the height.
+  /// AI Edit's panel: only as tall as its tools, up to half the screen (as on the web).
   final bool compact;
 
   const EditorScaffold({
@@ -78,9 +70,6 @@ class EditorScaffold extends ConsumerWidget {
     final darkScheme = ref.watch(immichThemeProvider).dark;
     final screen = MediaQuery.sizeOf(context).height;
     final keyboard = MediaQuery.viewInsetsOf(context).bottom;
-    // Tall tools scroll, so the photo keeps most of the screen: beyond 38% of the height
-    // (above the keyboard when it's open, AI Edit's too); AI Edit's otherwise beyond the
-    // panel's half of the screen.
     Widget tools = SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
       child: Builder(builder: tool),
@@ -143,7 +132,6 @@ class EditorScaffold extends ConsumerWidget {
                       if (saving) LinearProgressIndicator(value: progress),
                       if (tabs case final tabs?)
                         Padding(padding: const EdgeInsets.only(left: 12, right: 12, top: 12), child: tabs),
-                      // AI Edit's: what doesn't fit in half the screen scrolls.
                       compact ? Flexible(child: tools) : tools,
                       Padding(
                         padding: const EdgeInsets.only(bottom: 36, left: 24, right: 24),

@@ -1,8 +1,4 @@
-// SelfPhotos: Memento admin on the phone (Settings → Memento admin, admins only). People,
-// storage and logins come from Immich's own admin API, the same one its web admin pages
-// use; AI-edit usage, per-person limits and Memento's switches come from Memento's extras
-// service (/admin/*). Not part of Immich. See SelfPhotos DECISIONS.md, "Memento admin on
-// the Android app".
+// SelfPhotos: Memento admin on the phone (Settings → Memento admin, admins only).
 import 'dart:math';
 
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -17,8 +13,8 @@ class PersonAiEdits {
   final int today;
   final int thisMonth;
   final double costUsd;
-  final int dailyLimit; // in force: their own, or everyone's default
-  final int? ownDailyLimit; // set just for them; null follows the default
+  final int dailyLimit;
+  final int? ownDailyLimit;
 
   const PersonAiEdits({
     required this.today,
@@ -49,11 +45,10 @@ class AiEditMonth {
 
 String usd(double amount) => '\$${amount.toStringAsFixed(2)}';
 
-/// Storage limits are in GiB, as on Immich's web admin ("Quota Size (GiB)").
+/// Storage limits are in GiB.
 const gib = 1024 * 1024 * 1024;
 
-/// A random password for a new person or a reset: 16 letters and digits that are easy to
-/// read out (no 0/O, 1/l/I), about 92 bits. Never logged or stored.
+/// A random password for a new person or a reset.
 String newPassword() {
   const letters = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   final random = Random.secure();
@@ -63,7 +58,7 @@ String newPassword() {
 /// A person on the server, with what the admin pages show about them.
 class AdminUser {
   final UserAdminResponseDto user;
-  final PersonAiEdits? aiEdits; // null when Memento's service couldn't be reached
+  final PersonAiEdits? aiEdits;
 
   const AdminUser({required this.user, required this.aiEdits});
 
@@ -84,19 +79,18 @@ class AdminUser {
 
 class AdminOverview {
   final List<AdminUser> users;
-  final AiEditMonth? month; // null when Memento's service couldn't be reached
+  final AiEditMonth? month;
 
   const AdminOverview({required this.users, required this.month});
 }
 
-/// One setting an admin can change, as Memento's service describes it (GET /admin/settings),
-/// so this screen shows the same list as the web's without an app update.
+/// One setting an admin can change.
 class MementoSetting {
-  final String key; // "gemini.enabled"
-  final String section; // "Gemini AI Edits"
+  final String key;
+  final String section;
   final String title;
   final String subtitle;
-  final bool isSwitch; // else a whole number from min to max
+  final bool isSwitch;
   final int min;
   final int max;
 
@@ -154,8 +148,7 @@ class AdminService {
   ApiService get _api => _ref.read(apiServiceProvider);
   UsersAdminApi get _users => UsersAdminApi(_api.apiClient);
 
-  /// People from Immich; their AI edits from Memento's service, if it answers. Immich's part
-  /// works on its own, so the list still shows when the service is down.
+  /// People from Immich; their AI edits from Memento's service, if it answers.
   Future<AdminOverview> overview() async {
     final users = await _users.searchUsersAdmin(withDeleted: true) ?? const <UserAdminResponseDto>[];
     Map? usage;
@@ -206,8 +199,7 @@ class AdminService {
 
   Future<MementoSettings> settings() async => MementoSettings.fromJson(await _client.send('GET', '/admin/settings'));
 
-  /// Changes one setting, e.g. ("gemini.enabled", false). The pages showing it load again
-  /// (also after the admin has left the screen), and so do the app's switched-off features.
+  /// Changes one setting, e.g. ("gemini.enabled", false).
   Future<void> changeSetting(String key, Object value) async {
     final [group, name] = key.split('.');
     await _client.send(
@@ -223,9 +215,7 @@ class AdminService {
       ..invalidate(mementoFlagsProvider);
   }
 
-  /// Adds a person, never as an admin: Immich only makes non-admins choose their own
-  /// password at first login, so admin rights are given afterwards, with a confirmation.
-  /// Immich sends no email here; the admin passes the password on.
+  /// Adds a person, never as an admin.
   Future<void> createUser({
     required String name,
     required String email,
@@ -258,15 +248,13 @@ class AdminService {
   Future<void> setAdmin(String userId, bool isAdmin) =>
       _update(userId, UserAdminUpdateDto(isAdmin: Optional.present(isAdmin)));
 
-  /// A new password they must change at their next login. Phones already logged in stay
-  /// logged in: Immich doesn't end their sessions.
+  /// A new password they must change at their next login.
   Future<void> resetPassword(String userId, String password) => _update(
     userId,
     UserAdminUpdateDto(password: Optional.present(password), shouldChangePassword: const Optional.present(true)),
   );
 
-  /// Signs them out everywhere at once; Immich deletes the account and its photos after
-  /// [deleteDelayDays], until then [restore] undoes it.
+  /// Signs them out everywhere at once.
   Future<void> remove(String userId) async {
     await _users.deleteUserAdmin(userId, UserAdminDeleteDto(force: const Optional.present(false)));
     _ref.invalidate(adminOverviewProvider);

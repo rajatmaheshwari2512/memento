@@ -1,6 +1,5 @@
 // SelfPhotos Adjust: the shared shader (web/src/lib/ai-edit/adjust/adjust-core.glsl, through
-// shaders/selfphotos_adjust.frag) for the preview, the filter thumbnails and the full-size
-// tiles. Not part of Immich. The web runs the same file (adjust-renderer.ts).
+// shaders/selfphotos_adjust.frag) for the preview, the filter thumbnails and the full-size tiles.
 import 'dart:ui' as ui;
 
 import 'package:flutter/painting.dart';
@@ -12,10 +11,10 @@ class AdjustRenderJob {
   final ShaderValues values;
   final double degrees;
   final Quad? perspective;
-  final AdjustSize source; // the whole source, upright
-  final AdjustSize output; // the whole output
-  final AdjustRect tile; // the part of the output drawn now
-  final AdjustRect texture; // the part of the source in the image
+  final AdjustSize source;
+  final AdjustSize output;
+  final AdjustRect tile;
+  final AdjustRect texture;
 
   const AdjustRenderJob({
     required this.values,
@@ -27,7 +26,6 @@ class AdjustRenderJob {
     this.perspective,
   });
 
-  /// The whole of [image] drawn at [output] size (the preview, a thumbnail).
   factory AdjustRenderJob.whole(
     ShaderValues values,
     double degrees,
@@ -56,11 +54,10 @@ class AdjustShader {
   static Future<AdjustShader> load() async =>
       AdjustShader._(await ui.FragmentProgram.fromAsset('shaders/selfphotos_adjust.frag'));
 
-  /// A new shader; [configure] sets it up for a render. The caller disposes it.
+  /// A new shader; [configure] sets it up for a render.
   ui.FragmentShader create() => _program.fragmentShader();
 
-  /// Sets [shader] up for [job], sampling [image]. [quality]: `medium` (with smaller copies)
-  /// for pictures drawn much smaller than they are, `low` (plain bilinear) at full size.
+  /// Sets [shader] up for [job], sampling [image].
   void configure(ui.FragmentShader shader, AdjustRenderJob job, ui.Image image, {required FilterQuality quality}) {
     shader.setImageSampler(0, image, filterQuality: quality);
     void vec2(String name, num x, num y) => shader.getUniformVec2(name).set(x.toDouble(), y.toDouble());
@@ -80,7 +77,7 @@ class AdjustShader {
     vec3('uPerspectiveX', (toPhoto[0], toPhoto[1], toPhoto[2]));
     vec3('uPerspectiveY', (toPhoto[3], toPhoto[4], toPhoto[5]));
     vec3('uPerspectiveW', (toPhoto[6], toPhoto[7], toPhoto[8]));
-    float('uPremultiplied', 1); // Flutter's images are
+    float('uPremultiplied', 1);
     for (final slider in AdjustSlider.values) {
       float('u${slider.name[0].toUpperCase()}${slider.name.substring(1)}', job.values.sliders[slider]!);
     }

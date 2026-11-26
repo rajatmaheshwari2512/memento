@@ -1,29 +1,4 @@
-// SelfPhotos AI edits for Android: the AI Edit page, opened by the "AI Edit" button
-// (ai_edit.action.dart), as on the web (routes/(user)/photos/edit/[id=id]). Only AI: no editor
-// tabs, and a compact panel (at most half the screen) so the photo keeps most of it for
-// brushing: three accordions, closed when the page opens ("Fixes" and "Styles", each header
-// naming what's picked in it and opening onto its presets in a row that scrolls sideways, then
-// the brush's "Highlight"), the instruction box, and Generate with the box's length and the AI
-// edits left beside it. Not part of Immich.
-//
-// - Presets (ai-tools.json, shared with the web), in two groups (fixes, styles), and/or a typed
-//   instruction. Tapping a preset only picks it (several fixes, one style, at most maxSelected,
-//   Move on its own); Generate sends them all as one instruction (combinedInstruction), so one
-//   edit, charged once, to Gemini through Memento's extras service. Typed instructions go to
-//   Gemini for now; the service is where a free tool will be tried first once the worker exists.
-// - Brushing over the photo marks an area: the AI changes only that, and only that area of its
-//   result is pasted onto the original (ai_area.dart), so the rest keeps its own pixels.
-// - The size (2K or 4K) is the service's, automatic by the photo. No price shows, only how many
-//   AI edits are left today (beside Generate; with a result, at the bottom): the closer of
-//   today's and this month's limits.
-// - The result shows in place of the photo; done saves it as a copy stacked on the original,
-//   Discard drops it, Edit more applies the next edit to it. Leaving discards it.
-// - A result is paid for, so a failure on this side never throws it away: one whose picture
-//   didn't load can be loaded again (free) or discarded; one whose area can't be pasted, on the
-//   preview or at full size at Save, can be used whole or tried again. Each failure's cause is
-//   logged. One that arrives after the page was left is discarded, as leaving discards one, and
-//   nothing is sent once it's left. Leaving while an edit is being made asks first, as leaving
-//   with a result does.
+// SelfPhotos AI edits for Android.
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
@@ -54,23 +29,18 @@ const aiEditLabel = 'AI Edit';
 
 final _log = Logger('AiEditPage');
 
-/// Reads the photo upright for a first highlighted edit (ai_area.dart uprightPhoto): a provider,
-/// so a test can stand in for the phone's side of it.
+/// Reads the photo upright for a first highlighted edit (ai_area.dart uprightPhoto).
 final aiUprightPhotoProvider = Provider(
   (ref) =>
       (RemoteAsset asset, AiAreaSettings area) => uprightPhoto(asset, area),
 );
 
-/// Lines a highlighted edit's result up with the photo (ai_area.dart alignFor): a provider, so a
-/// test can make it fail.
+/// Lines a highlighted edit's result up with the photo (ai_area.dart alignFor).
 final aiAlignProvider = Provider((ref) => alignFor);
 
-/// Pastes a highlighted edit's area onto the preview, to show (ai_area.dart pasteOnto): a
-/// provider, so a test can hold it.
 final aiPasteOntoProvider = Provider((ref) => pasteOnto);
 
-/// Pastes a highlighted edit's area onto the photo at full size, at Save (ai_area.dart pasteBack):
-/// a provider, so a test can make it fail.
+/// Pastes a highlighted edit's area onto the photo at full size, at Save (ai_area.dart pasteBack).
 final aiPasteBackProvider = Provider(
   (ref) =>
       (
@@ -83,18 +53,11 @@ final aiPasteBackProvider = Provider(
       }) => pasteBack(asset, result, strokes, area, alignment, onProgress: onProgress),
 );
 
-/// The photo is too large for AI edits: [kit]'s limits (ai-tools.json), written as the app's
-/// locale writes numbers ("12,000"). As the web's tooLargeMessage (ai-failure.ts).
+/// The photo is too large for AI edits.
 String aiTooLarge(BuildContext context, AiToolkit kit) =>
     context.t.editor_ai_too_large(megapixels: kit.maxMegapixels, pixels: kit.maxLongSide);
 
-/// A failure in AI Edit as a message to show (inside editor_ai_failed): the service's own words
-/// (already plain), or a translated text for everything else: the photo too large for AI edits
-/// (by [kit]'s limits), the service out of reach, a picture that can't be loaded or read, the
-/// photo too large for the device's memory, and otherwise "Something went wrong" (also for the
-/// app's own English fallbacks). Never an exception's own technical text, nor the notes of a kept
-/// result (editor_ai_shape_note, editor_ai_paste_failed, editor_ai_save_paste_failed): they offer
-/// buttons only the kept result has. As the web's failureMessage (ai-failure.ts).
+/// A failure in AI Edit as a message to show (inside editor_ai_failed).
 String aiEditFailure(BuildContext context, Object error, AiToolkit kit) => switch (error) {
   AiEditException(code: aiEditPhotoTooLarge) => aiTooLarge(context, kit),
   AiEditException(fromService: true, :final message) => message,
@@ -108,22 +71,16 @@ String aiEditFailure(BuildContext context, Object error, AiToolkit kit) => switc
 
 enum _Phase { idle, working, saving }
 
-/// One request to the AI, kept so it can be tried again.
 class _Run {
-  final List<AiTool> tools; // the presets picked (none: only typed words)
+  final List<AiTool> tools;
   final String prompt;
   final String label;
-  final List<AiStroke> highlight; // empty: the whole photo
-  final _Result? from; // "Edit more": the result this edit applies to
+  final List<AiStroke> highlight;
+  final _Result? from;
 
   const _Run(this.tools, this.prompt, this.label, this.highlight, this.from);
 }
 
-/// A result. [marked]: made with a highlight (the service then saves the whole result only when
-/// asked). [area]: the strokes whose area is pasted onto the original (every highlight since
-/// the first edit, for Edit more), or null when the whole result is used; [alignment]: how the
-/// result is lined up with the photo for that. [shown]: what the photo shows (the paste on the
-/// preview, or the whole result).
 class _Result {
   final String editId;
   final String label;
@@ -135,7 +92,6 @@ class _Result {
 
   const _Result(this.editId, this.label, this.image, this.marked, this.area, this.alignment, this.shown);
 
-  /// As the AI's whole picture: its paste on the preview, if any, is freed.
   _Result whole() {
     _freePaste();
     return _Result(editId, label, image, true, null, AiAlignment.identity, image);
@@ -146,7 +102,6 @@ class _Result {
     image.dispose();
   }
 
-  // Its paste on the preview, if it shows one, freed.
   void _freePaste() {
     if (shown != image) {
       shown.dispose();
@@ -154,11 +109,6 @@ class _Result {
   }
 }
 
-/// A highlighted edit's [result] whose area can't be pasted: another shape, or not lined up
-/// closely enough ([AiRefusal.shape]), or something else went wrong lining it up or pasting it
-/// ([AiRefusal.failed]), on the preview or at full size at Save. It was paid for, so it's kept:
-/// the person can use it whole, or try again: the edit made again ([run]), or, when its paste
-/// failed at Save (no [run]), the result put back and saved again, which costs nothing.
 class _Refused {
   final _Result result;
   final AiRefusal reason;
@@ -167,16 +117,12 @@ class _Refused {
   const _Refused(this.result, this.reason, this.run);
 }
 
-/// A kept result's note: why it's kept, and (at Save) that trying again is free. As the web's
-/// refusedNote.
 String _refusedNote(BuildContext context, _Refused kept) => kept.run == null
     ? context.t.editor_ai_save_paste_failed
     : kept.reason == AiRefusal.shape
     ? context.t.editor_ai_shape_note
     : context.t.editor_ai_paste_failed;
 
-/// An edit that was made (and paid for) but whose picture didn't load or open: kept, to load
-/// again, which costs nothing, or to discard. [again]: it didn't load when loaded again either.
 class _Unloaded {
   final String editId;
   final _Run run;
@@ -204,7 +150,7 @@ class _AiEditPageState extends ConsumerState<AiEditPage> {
   bool _failed = false;
   List<AiStroke> _strokes = const [];
   double _brushRadius = 0.04;
-  List<AiTool> _picked = const []; // the presets picked, in ai-tools.json order
+  List<AiTool> _picked = const [];
   _Result? _result;
   bool _refining = false;
   _Phase _phase = _Phase.idle;
@@ -214,12 +160,10 @@ class _AiEditPageState extends ConsumerState<AiEditPage> {
   _Refused? _refused;
   _Unloaded? _unloaded;
   bool _comparing = false;
-  // The accordions (Fixes, Styles, Highlight): closed each time the page opens.
   final _groupsOpen = <AiGroup>{};
   bool _highlightOpen = false;
 
   MementoFlags get _features => ref.read(mementoFeaturesProvider);
-  // Too large for AI edits (ai_tools.dart): said in place of the tools, before anything is sent.
   bool get _tooLarge => _kit?.tooLargeForAi(widget.asset.width, widget.asset.height) ?? false;
   bool get _composing =>
       !_tooLarge &&
@@ -231,12 +175,8 @@ class _AiEditPageState extends ConsumerState<AiEditPage> {
       _unloaded == null &&
       (_result == null || _refining);
   bool get _highlighted => _features.geminiTools && _strokes.isNotEmpty;
-  // A picked preset changes the whole photo (a style, Auto frame): no brushing meanwhile.
   bool get _wholePhoto => _picked.any((tool) => tool.highlight == AiHighlight.ignored);
-  // Move: the words are where to.
   AiTool? get _asking => _picked.where((tool) => tool.ask).firstOrNull;
-  // Presets, words or both, and every picked preset still usable: Move needs its words and a
-  // highlight (which may have been cleared since it was picked).
   bool get _canGenerate => _composing && canGenerate(_picked, _words.text, highlighted: _highlighted);
 
   @override
@@ -271,12 +211,10 @@ class _AiEditPageState extends ConsumerState<AiEditPage> {
       _service
           .usage()
           .then((usage) => mounted ? setState(() => _usage = usage) : null)
-          .catchError((_) {}), // only informational
+          .catchError((_) {}),
     );
     try {
       final (_, preview) = await (
-        // The tools as soon as they're read, so a photo too large for AI edits says so at once,
-        // also if its preview doesn't load.
         AiToolkit.load().then((kit) {
           if (mounted) {
             setState(() => _kit = kit);
@@ -320,9 +258,6 @@ class _AiEditPageState extends ConsumerState<AiEditPage> {
       _phase = _Phase.working;
     });
     try {
-      // A first highlighted edit sends the photo upright with the mark, both from the full-size
-      // picture the paste starts from, read first: if only the preview can be read here, nothing
-      // is paid for (NeedsOriginalException).
       Uint8List? mark;
       Uint8List? photo;
       if (run.highlight.isNotEmpty && run.from != null) {
@@ -336,7 +271,6 @@ class _AiEditPageState extends ConsumerState<AiEditPage> {
         }
         photo = upright.jpeg;
       }
-      // Left while the photo was read: nothing is sent, so nothing is paid for.
       if (!mounted) {
         return;
       }
@@ -369,13 +303,6 @@ class _AiEditPageState extends ConsumerState<AiEditPage> {
     }
   }
 
-  // A made edit's picture, loaded and shown in place of the photo: only its highlighted area,
-  // pasted onto [preview], unless a tool moves things (or an earlier edit in this chain changed the
-  // whole photo). It was paid for, so nothing here throws it away while the page is open: a
-  // picture that doesn't load or open is kept to load again (_Unloaded), and a paste that fails is
-  // kept to use whole or try again (_Refused), whatever went wrong lining it up or pasting it.
-  // [again]: the picture is being loaded again (failing again has its own note). If the page was
-  // left meanwhile, the edit is discarded (and its picture not downloaded, if it's not yet).
   Future<void> _show(String editId, _Run run, AiToolkit kit, ui.Image preview, {bool again = false}) async {
     if (_discardIfLeft(editId)) {
       return;
@@ -423,8 +350,6 @@ class _AiEditPageState extends ConsumerState<AiEditPage> {
     }
   }
 
-  // Whether the page was left while [editId] was on its way: then it's discarded, as leaving
-  // discards an edit, and [made] is freed.
   bool _discardIfLeft(String editId, [_Result? made]) {
     if (mounted) {
       return false;
@@ -434,8 +359,6 @@ class _AiEditPageState extends ConsumerState<AiEditPage> {
     return true;
   }
 
-  // [made] in place of the photo; the result before it, if any, is thrown away (it was this
-  // edit's base, if refining).
   void _install(_Result made) {
     final previous = _result;
     setState(() {
@@ -451,7 +374,6 @@ class _AiEditPageState extends ConsumerState<AiEditPage> {
     }
   }
 
-  // The kept edit's picture, loaded again (it costs nothing).
   Future<void> _loadAgain() async {
     final kept = _unloaded;
     final kit = _kit;
@@ -473,7 +395,6 @@ class _AiEditPageState extends ConsumerState<AiEditPage> {
     }
   }
 
-  // The kept edit dropped instead: discarded, and back to writing the next edit.
   void _discardUnloaded() {
     final kept = _unloaded;
     if (kept == null || _phase != _Phase.idle) {
@@ -496,8 +417,6 @@ class _AiEditPageState extends ConsumerState<AiEditPage> {
     'refused': refused,
   };
 
-  // The refused result, as the person chose: the AI's whole picture, saved as it is. Not while
-  // the result it was made from is being saved.
   void _useWhole() {
     final kept = _refused;
     if (kept == null || _phase != _Phase.idle) {
@@ -507,8 +426,6 @@ class _AiEditPageState extends ConsumerState<AiEditPage> {
     _install(kept.result.whole());
   }
 
-  // Another try: the edit made again; or, when its paste failed at Save, the result put back and
-  // saved again (free: what failed there, e.g. memory for the full-size copy, may be there now).
   void _tryAgain() {
     final kept = _refused;
     if (kept == null || _phase != _Phase.idle) {
@@ -536,11 +453,8 @@ class _AiEditPageState extends ConsumerState<AiEditPage> {
     }
   }
 
-  // An edit thrown away on the service (which deletes unsaved ones after an hour anyway). As the
-  // web's discardOnServer.
   void _discardOnServer(String editId) => unawaited(_service.discard(editId).catchError((_) {}));
 
-  // Why a preset can't be picked now, if it can't (shown when it's tapped).
   String? _blocked(AiToolkit kit, AiTool tool) => switch (kit.blocked(tool, _picked, highlighted: _highlighted)) {
     AiBlock.needsHighlight => context.t.editor_ai_needs_highlight,
     AiBlock.wholeOnly => context.t.editor_ai_whole_only,
@@ -548,7 +462,6 @@ class _AiEditPageState extends ConsumerState<AiEditPage> {
     null => null,
   };
 
-  // A tap on a preset only picks or unpicks it: Generate makes the edit.
   void _pick(AiTool tool) {
     final kit = _kit;
     if (kit == null) {
@@ -561,7 +474,7 @@ class _AiEditPageState extends ConsumerState<AiEditPage> {
     }
     setState(() => _picked = kit.toggle(_picked, tool));
     if (_asking != null) {
-      _focus.requestFocus(); // Move: where to
+      _focus.requestFocus();
     }
   }
 
@@ -595,8 +508,6 @@ class _AiEditPageState extends ConsumerState<AiEditPage> {
       _phase = _Phase.saving;
       _progress = 0;
     });
-    // A highlighted area is pasted onto the full-size photo here first. If that fails, the result
-    // is kept (it was paid for), to use whole or save again; nothing is sent.
     final area = result.area;
     AdjustExport? copy;
     if (area != null) {
@@ -617,8 +528,6 @@ class _AiEditPageState extends ConsumerState<AiEditPage> {
               _result = null;
               _refused = _Refused(result, AiRefusal.failed, null);
             } else {
-              // An Edit more try is kept already, or the result isn't this one any more: everything
-              // stays as it is, with the error.
               _error = aiEditFailure(context, error, kit);
             }
             _phase = _Phase.idle;
@@ -637,7 +546,7 @@ class _AiEditPageState extends ConsumerState<AiEditPage> {
         return;
       }
       ImmichToast.show(context: context, msg: context.t.editor_copy_saved, toastType: ToastType.success);
-      setState(() => _result = null); // saved: nothing to discard on the way out
+      setState(() => _result = null);
       result.dispose();
       Navigator.of(context).pop(true);
     } catch (error, stack) {
@@ -665,12 +574,9 @@ class _AiEditPageState extends ConsumerState<AiEditPage> {
     _discardOnServer(result.editId);
   }
 
-  // Leaving asks first with these, or while an edit is being made (EditorScaffold).
   bool get _hasChanges =>
       _phase == _Phase.working || _result != null || _refused != null || _unloaded != null || _strokes.isNotEmpty;
 
-  // Small grey text (notes, the counter, edits left), from a context inside the editor's dark
-  // theme (EditorScaffold's tool and footer), so it's light on the dark panel.
   static TextStyle? _muted(BuildContext context) =>
       context.textTheme.bodySmall?.copyWith(color: context.colorScheme.onSurfaceVariant);
 
@@ -691,7 +597,6 @@ class _AiEditPageState extends ConsumerState<AiEditPage> {
       onSave: _save,
       hasChanges: _hasChanges,
       onDiscard: () {
-        // Leaving: the result is discarded in dispose.
         _strokes = const [];
       },
       photo: _buildPhoto(kit),
@@ -700,7 +605,6 @@ class _AiEditPageState extends ConsumerState<AiEditPage> {
           : _tooLarge
           ? _notice(context, aiTooLarge(context, kit!), danger: false)
           : _buildTool(context, kit, features),
-      // How many AI edits are left today: beside Generate while writing, here with a result.
       footer: (context) => !features.gemini || usage == null || _result == null || _refining
           ? const SizedBox.shrink()
           : Align(alignment: Alignment.centerLeft, child: _editsLeft(context, usage)),
@@ -720,10 +624,8 @@ class _AiEditPageState extends ConsumerState<AiEditPage> {
     final brushing = _composing && _features.geminiTools && !_wholePhoto;
     return LayoutBuilder(
       builder: (context, constraints) {
-        // The photo fitted into the space, as Adjust's preview is.
         final maxWidth = constraints.maxWidth * 0.9;
         final maxHeight = constraints.maxHeight * 0.95;
-        // The shape of what's shown (a refused result can have another).
         final scale = [maxWidth / shown.width, maxHeight / shown.height].reduce((a, b) => a < b ? a : b);
         final box = Size(shown.width * scale, shown.height * scale);
         Offset at(Offset local) =>
@@ -752,7 +654,6 @@ class _AiEditPageState extends ConsumerState<AiEditPage> {
                     onPanUpdate: (details) {
                       final last = _strokes.last;
                       final point = at(details.localPosition);
-                      // Only points a little apart, so a long stroke stays small.
                       if ((point - last.points.last).distance > 0.002) {
                         setState(
                           () => _strokes = [
@@ -822,7 +723,6 @@ class _AiEditPageState extends ConsumerState<AiEditPage> {
     );
   }
 
-  // [context] is inside the editor's dark theme (EditorScaffold).
   Widget _buildTool(BuildContext context, AiToolkit? kit, MementoFlags features) {
     final result = _result;
     final muted = _muted(context);
@@ -927,23 +827,19 @@ class _AiEditPageState extends ConsumerState<AiEditPage> {
           maxLines: 3,
           maxLength: limit,
           textInputAction: TextInputAction.send,
-          // The send key sends typed words; presets with no words are sent only by Generate.
           onSubmitted: (_) => _words.text.trim().isEmpty ? null : _generate(),
           decoration: InputDecoration(
             border: const OutlineInputBorder(),
             isDense: true,
-            // Brushing is mentioned only when the AI tools are on.
             hintText:
                 asking?.askHint(context) ??
                 (features.geminiTools ? context.t.editor_ai_describe_or_brush : context.t.editor_ai_describe),
-            counterText: '', // shown beside Generate instead
+            counterText: '',
           ),
         ),
         const SizedBox(height: 8),
         Row(
           children: [
-            // How much of the box's limit is used (as its own counter would show it) and how
-            // many AI edits are left today, on one line: "0/500 · 17 AI edits left today".
             Expanded(
               child: Row(
                 children: [
@@ -965,9 +861,6 @@ class _AiEditPageState extends ConsumerState<AiEditPage> {
     );
   }
 
-  // The panel's accordions (Fixes, Styles, Highlight): Material's ExpansionTile, as Immich's
-  // settings use it, its arrow in front, with no lines above and below it when open. [open] is
-  // where it was left this visit (closed when the page opens); [onChanged] keeps it.
   static Widget _accordion({
     required Key key,
     required bool open,
@@ -997,9 +890,6 @@ class _AiEditPageState extends ConsumerState<AiEditPage> {
     ),
   );
 
-  // A group's presets (Fixes or Styles), as an accordion: its header names the group and what's
-  // picked in it ("Fixes · Enhance, Unblur", cut with "…" if it's too long); opened, the presets
-  // in a row that scrolls sideways.
   Widget _buildGroup(BuildContext context, AiToolkit kit, AiGroup group) {
     final tools = [
       for (final tool in kit.tools)
@@ -1042,10 +932,6 @@ class _AiEditPageState extends ConsumerState<AiEditPage> {
     );
   }
 
-  // The brush, as an accordion: its header says "Highlight", with undo and clear (needed while
-  // brushing, open or closed), and under it why brushing is off while a picked preset changes
-  // the whole photo; opened, how it works and the brush size. Brushing on the photo works either
-  // way.
   Widget _buildHighlight(BuildContext context, TextStyle? muted) {
     final canUndo = _composing && _strokes.isNotEmpty;
     return _accordion(
@@ -1054,7 +940,6 @@ class _AiEditPageState extends ConsumerState<AiEditPage> {
       onChanged: (open) => _highlightOpen = open,
       title: Text(context.t.editor_ai_highlight, style: context.textTheme.titleSmall),
       subtitle: _wholePhoto ? Text(context.t.editor_ai_brush_whole_photo, style: muted) : null,
-      // A tap on undo or clear while they're off doesn't open or close it (as on the web).
       trailing: GestureDetector(
         onTap: () {},
         excludeFromSemantics: true,

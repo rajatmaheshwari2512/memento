@@ -1,5 +1,5 @@
 // SelfPhotos AI edit: its calls to Memento's extras service, through the shared client
-// (selfphotos/extras_client.dart). Not part of Immich. See SelfPhotos memento-extras/README.md.
+// (selfphotos/extras_client.dart).
 import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
@@ -7,11 +7,11 @@ import 'dart:typed_data';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/selfphotos/extras_client.dart';
 
-/// The AI page's service (a provider, so a test can stand in for Memento's extras service).
+/// The AI page's service.
 final aiEditServiceProvider = Provider<AiEditService>((ref) => const AiEditService());
 
-/// Your AI edits today (against your daily limit) and everyone's this month (against the
-/// server's monthly one), as the service counts them.
+/// Your AI edits today (against your daily limit) and everyone's this month (against the server's
+/// monthly one).
 class AiEditUsage {
   final int todayUsed;
   final int todayLimit;
@@ -42,16 +42,15 @@ class AiEditUsage {
     );
   }
 
-  /// How many more edits can be made today: your daily limit, or everyone's monthly one if
-  /// that's closer (as the web's editsLeft, ai-edit-api.ts).
+  /// How many more edits can be made today.
   int get editsLeft => max(0, min(todayLimit - todayUsed, monthLimit - monthUsed));
 }
 
 /// [AiEditException.code] when an edit's picture couldn't be loaded ([AiEditService.image]).
 const aiEditImageUnavailable = 'image_unavailable';
 
-/// The service's [AiEditException.code] for a photo too large for AI edits
-/// (ai_tools.dart tooLargeForAi).
+/// The service's [AiEditException.code] for a photo too large for AI edits (ai_tools.dart
+/// tooLargeForAi).
 const aiEditPhotoTooLarge = 'photo_too_large';
 
 class AiEditException implements Exception {
@@ -59,8 +58,6 @@ class AiEditException implements Exception {
   final String message;
   final AiEditUsage? usage;
 
-  /// Why, in a word: the service's reason when it gives one (e.g. [aiEditPhotoTooLarge]), or
-  /// [aiEditImageUnavailable].
   final String? code;
 
   /// [message] is the service's own words (plain, for people), not one made here.
@@ -78,8 +75,6 @@ class AiEditService {
   /// [_client]: Memento's extras service (a test can stand in for it, to see what's sent).
   const AiEditService([this._client = const ExtrasClient()]);
 
-  // The service's error, as AI edit's own exception, with its own words, its reason and today's
-  // usage when it sends them.
   static AiEditException _refusal(ExtrasException e) {
     final data = e.data;
     final answer = data is Map ? data : const {};
@@ -102,11 +97,7 @@ class AiEditService {
 
   Future<AiEditUsage?> usage() async => AiEditUsage.fromJson(await _send('GET', '/limits'));
 
-  /// Makes an edit. With [fromEditId], edits that earlier result instead of the original.
-  /// [tools]: the ids of the AI tools picked (ai-tools.json), whose instructions [prompt] combines
-  /// (none: only typed words). For an edit of a highlighted area
-  /// (ai_area.dart): [mark], the photo with that area tinted red, and for a first edit [photo],
-  /// the photo itself upright (JPEGs). The size is the service's, automatic by the photo.
+  /// Makes an edit.
   Future<({String editId, AiEditUsage? usage})> create(
     String assetId,
     String prompt, {
@@ -141,9 +132,7 @@ class AiEditService {
     }
   }
 
-  /// Saves the result next to the original, stacked on top of it. Returns the new photo's ID.
-  /// [whole]: an edit of a highlighted area saved as the AI made it, not pasted (the person
-  /// chose it).
+  /// Saves the result next to the original, stacked on top of it.
   Future<String> save(String editId, {bool whole = false}) async {
     final data = await _send(
       'POST',
@@ -156,8 +145,7 @@ class AiEditService {
     return data['assetId'] as String;
   }
 
-  /// An edit of a highlighted area: the original with that area of the result pasted on, at
-  /// full size (ai_area.dart pasteBack), saved like [save]. Returns the new photo's ID.
+  /// An edit of a highlighted area.
   Future<String> saveArea(String editId, Uint8List bytes, String mime) async {
     final Object? data;
     try {
@@ -171,13 +159,10 @@ class AiEditService {
     return data['assetId'] as String;
   }
 
-  /// How a highlighted edit's result was lined up with the photo (numbers only), for the
-  /// service's log, where the refusal threshold is tuned. Fire and forget.
   Future<void> reportAlignment(String editId, Map<String, Object> report) async {
     try {
       await _send('POST', '/edits/${Uri.encodeComponent(editId)}/alignment', body: report);
     } catch (_) {
-      // only for the log
     }
   }
 

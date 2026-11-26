@@ -1,7 +1,4 @@
-// SelfPhotos: Memento admin's shared pieces: the entry on the Settings page (one line in
-// Immich's settings.page.dart per layout), dialogs for a whole number and for a new
-// password, the error text for a failed action, and a small notice line. Data:
-// admin.service.dart.
+// SelfPhotos: Memento admin's shared pieces.
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
@@ -55,9 +52,7 @@ class MementoAdminTile extends ConsumerWidget {
   }
 }
 
-/// What went wrong with an admin action: Immich's own words when it gave any ("Email is not
-/// available"), its "can't reach the server" text for a dropped connection, or the message
-/// from Memento's service. Never ApiException's own text, which can carry a stack trace.
+/// What went wrong with an admin action.
 String adminError(BuildContext context, Object error) {
   if (error is ApiException) {
     return serverErrorMessage(error) ?? context.t.login_form_server_error;
@@ -65,9 +60,7 @@ String adminError(BuildContext context, Object error) {
   return error.toString();
 }
 
-/// Asks for a whole number from [min] to [max]. Pops with the number, or with -1 when
-/// [resetText] is given and chosen (e.g. "Everyone's default"). Like Immich's passkey name
-/// dialog: the dialog owns its text controller.
+/// Asks for a whole number from [min] to [max].
 class NumberDialog extends StatefulWidget {
   final String title;
   final int value;
@@ -137,12 +130,11 @@ String? wholeNumberError(String? text, int min, int max) {
   return value == null || value < min || value > max ? '$min to $max' : null;
 }
 
-/// Shows a new password once, to pass on to the person. It isn't stored or shown again, so
-/// the dialog can't be closed by accident (back button, tapping outside).
+/// Shows a new password once, to pass on to the person.
 class PasswordOnceDialog extends StatelessWidget {
   final String name;
   final String password;
-  final bool isAdmin; // Immich doesn't make admins choose their own at login
+  final bool isAdmin;
 
   const PasswordOnceDialog({super.key, required this.name, required this.password, required this.isAdmin});
 
@@ -185,10 +177,6 @@ class PasswordOnceDialog extends StatelessWidget {
 }
 
 /// A small line under a section when something couldn't be loaded.
-/// A settings switch (the app's SettingsSwitchListTile) saved as soon as it's flipped, for
-/// Memento admin's switches and the person's themed memories. It can't be flipped again while
-/// saving, flips back when [save] says it failed (save shows why), and follows [value] when
-/// the page loads again.
 class SavedSwitchTile extends HookWidget {
   final bool value;
   final String title;
@@ -222,7 +210,7 @@ class SavedSwitchTile extends HookWidget {
         saving.value = true;
         final saved = await save(wanted);
         if (!context.mounted) {
-          return; // the page was left while saving
+          return;
         }
         saving.value = false;
         if (!saved) {

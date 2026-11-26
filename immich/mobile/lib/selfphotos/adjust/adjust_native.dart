@@ -1,11 +1,9 @@
 // SelfPhotos Adjust: the Android side of saving a full-size copy
-// (android/.../selfphotos/AdjustImagePlugin.kt): reads the source in parts, upright and in
-// sRGB; gathers the rendered tiles; encodes the JPEG. Not part of Immich.
+// (android/.../selfphotos/AdjustImagePlugin.kt): reads the source in parts.
 import 'package:flutter/services.dart';
 import 'package:immich_mobile/selfphotos/adjust/adjust_geometry.dart';
 
-/// Why a save failed on the device: `too-large` (out of memory), `unreadable` (a format the
-/// phone can't read), or anything else.
+/// Why a save failed on the device.
 class AdjustNativeException implements Exception {
   final String code;
   final String? message;

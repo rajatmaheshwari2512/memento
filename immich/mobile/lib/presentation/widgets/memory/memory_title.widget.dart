@@ -4,7 +4,7 @@ import 'package:immich_mobile/domain/models/memory.model.dart';
 import 'package:immich_mobile/extensions/datetime_extensions.dart';
 import 'package:immich_mobile/extensions/object_extensions.dart';
 import 'package:immich_mobile/generated/translations.g.dart';
-import 'package:immich_mobile/selfphotos/memories/memory_labels.dart'; // SelfPhotos themed memories
+import 'package:immich_mobile/selfphotos/memories/memory_labels.dart';
 import 'package:intl/intl.dart';
 
 /// [asset] adds the age at that asset to birthday titles

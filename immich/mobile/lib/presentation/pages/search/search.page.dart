@@ -96,7 +96,7 @@ class SearchPage extends HookConsumerWidget {
       }
     }
 
-    // SelfPhotos Ask Photos: leaving Ask drops its question, so the filters search as usual again.
+    // SelfPhotos Ask Photos: leaving Ask drops its question.
     useEffect(() {
       if (textSearchType != TextSearchType.ask && (filter.value.ask?.isNotEmpty ?? false)) {
         unawaited(Future.microtask(() => search(filter.value.copyWith(ask: ''))));

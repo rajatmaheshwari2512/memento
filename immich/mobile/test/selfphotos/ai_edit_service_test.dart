@@ -1,12 +1,9 @@
-// SelfPhotos AI edit: what an edit sends to Memento's extras service (memento-extras
-// edits.controller.ts reads it), and what it makes of a refusal, with a stand-in for the service.
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:immich_mobile/selfphotos/ai_edit/ai_edit.service.dart';
 import 'package:immich_mobile/selfphotos/extras_client.dart';
 
-// Keeps each request and answers as the service does for a new edit.
 class _Recorder extends ExtrasClient {
   final requests = <({String method, String path, Map<String, Object?> body})>[];
 
@@ -19,7 +16,6 @@ class _Recorder extends ExtrasClient {
   }
 }
 
-// Refuses every request with [refusal], as the service (or whatever answered) does.
 class _Refusing extends ExtrasClient {
   final ExtrasException refusal;
 
@@ -35,7 +31,6 @@ class _Refusing extends ExtrasClient {
   Future<Uint8List> bytes(String path) async => throw refusal;
 }
 
-// What [action] failed with.
 Future<AiEditException> _refused(
   Future<Object?> Function(AiEditService service) action,
   ExtrasException refusal,

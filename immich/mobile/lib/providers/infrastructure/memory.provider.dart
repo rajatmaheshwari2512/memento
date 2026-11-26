@@ -5,7 +5,7 @@ import 'package:immich_mobile/domain/models/memory.model.dart';
 import 'package:immich_mobile/domain/services/memory.service.dart';
 import 'package:immich_mobile/providers/infrastructure/db.provider.dart';
 import 'package:immich_mobile/providers/user.provider.dart';
-import 'package:immich_mobile/selfphotos/memories/memory_labels.dart'; // SelfPhotos themed memories
+import 'package:immich_mobile/selfphotos/memories/memory_labels.dart';
 
 final memoryLaneProvider = FutureProvider.autoDispose<List<Memory>>((ref) {
   final (userId, enabled) = ref.watch(currentUserProvider.select((user) => (user?.id, user?.memoryEnabled ?? true)));

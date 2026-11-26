@@ -107,7 +107,6 @@ class _MobileLayout extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final List<Widget> settings = SettingSection.visible(ref)
         .expand<Widget>(
-          // SelfPhotos: a list of any widget, so the admin card can join it
           (setting) => setting == SettingSection.beta
               ? [
                   SettingsCard(

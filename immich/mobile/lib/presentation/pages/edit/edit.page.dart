@@ -12,7 +12,7 @@ import 'package:immich_mobile/extensions/build_context_extensions.dart';
 import 'package:immich_mobile/generated/translations.g.dart';
 import 'package:immich_mobile/presentation/pages/edit/editor.provider.dart';
 import 'package:immich_mobile/providers/theme.provider.dart';
-import 'package:immich_mobile/selfphotos/adjust/adjust_tabs.dart'; // SelfPhotos Adjust
+import 'package:immich_mobile/selfphotos/adjust/adjust_tabs.dart';
 import 'package:immich_mobile/theme/theme_data.dart';
 import 'package:immich_mobile/utils/editor.utils.dart';
 import 'package:immich_mobile/widgets/common/immich_toast.dart';

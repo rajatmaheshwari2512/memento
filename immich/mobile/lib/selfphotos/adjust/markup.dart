@@ -1,8 +1,4 @@
-// SelfPhotos Adjust's Markup for Android: what's drawn on the photo (pen, highlighter, text,
-// arrows, boxes and circles), kept as shapes in the picture's own 0–1 coordinates, and how it's
-// drawn: the same function paints the preview and each tile of the full-size copy, at the size
-// each is. Not part of Immich. The same as the web's markup.ts; the colours, sizes and shapes are
-// the web's own file (assets/selfphotos/adjust-markup.json links to it).
+// SelfPhotos Adjust's Markup for Android.
 import 'dart:convert';
 import 'dart:math';
 import 'dart:ui' as ui;
@@ -14,13 +10,13 @@ import 'package:immich_mobile/selfphotos/adjust/adjust_geometry.dart';
 class MarkupColour {
   final Color fill;
 
-  /// Text in this colour gets a thin outline in this one, so it reads on any photo.
+  /// Text in this colour gets a thin outline in this one.
   final Color outline;
 
   const MarkupColour(this.fill, this.outline);
 }
 
-/// A size: a line's width and a new text's size, as shares of the picture's longer side.
+/// A size: a line's width and a new text's size.
 class MarkupSize {
   final double width;
   final double text;
@@ -35,8 +31,8 @@ class MarkupConfig {
   final double highlighterOpacity;
   final double highlighterWidthScale;
 
-  /// Arrow heads: [arrowHeadLength] times the line's width long (at most [arrowMaxHeadShare] of
-  /// the arrow), each side [arrowHeadAngle] degrees from the line.
+  /// Arrow heads: [arrowHeadLength] times the line's width long (at most [arrowMaxHeadShare] of the
+  /// arrow), each side [arrowHeadAngle] degrees from the line.
   final double arrowHeadAngle;
   final double arrowHeadLength;
   final double arrowMaxHeadShare;
@@ -114,8 +110,7 @@ enum MarkupLineKind { pen, highlighter }
 
 enum MarkupShapeKind { arrow, box, circle }
 
-/// Something drawn on the photo. Places are 0–1 of the picture's width and height (top left is
-/// 0, 0); widths and text sizes are shares of its longer side.
+/// Something drawn on the photo.
 @immutable
 sealed class MarkupItem {
   final Color colour;
@@ -158,9 +153,7 @@ double markupPixels(double share, Size size) => share * max(size.width, size.hei
 
 Offset _pixel(Offset point, Size size) => Offset(point.dx * size.width, point.dy * size.height);
 
-/// An arrow from [from] to [to] (pixels), its line [width] pixels wide: where its line ends and
-/// the corners of its filled head. The line stops inside the head, so its round end doesn't show
-/// past the point.
+/// An arrow from [from] to [to] (pixels), its line [width] pixels wide.
 ({Offset lineEnd, List<Offset> head}) arrowGeometry(Offset from, Offset to, double width, MarkupConfig config) {
   final length = (to - from).distance;
   final unit = length > 0 ? (to - from) / length : const Offset(1, 0);
@@ -205,7 +198,6 @@ Rect markupTextBox(MarkupText item, Size size, MarkupConfig config) {
   return box;
 }
 
-// A freehand line through [points], smoothed: curves through the middles between them.
 Path _linePath(List<Offset> points) {
   final path = Path()..moveTo(points.first.dx, points.first.dy);
   for (var i = 1; i < points.length - 1; i++) {
@@ -216,7 +208,6 @@ Path _linePath(List<Offset> points) {
   return path;
 }
 
-/// Paints [items] on a picture of [size].
 void paintMarkup(Canvas canvas, List<MarkupItem> items, Size size, MarkupConfig config) {
   for (final item in items) {
     final stroke = Paint()
@@ -229,7 +220,6 @@ void paintMarkup(Canvas canvas, List<MarkupItem> items, Size size, MarkupConfig 
       case MarkupLine(:final kind, :final width, :final points):
         final pixels = markupPixels(width, size);
         final at = [for (final point in points) _pixel(point, size)];
-        // The whole line as one path: a see-through one isn't darker where it crosses itself.
         final colour = kind == MarkupLineKind.highlighter
             ? item.colour.withValues(alpha: config.highlighterOpacity)
             : item.colour;
@@ -268,7 +258,6 @@ void paintMarkup(Canvas canvas, List<MarkupItem> items, Size size, MarkupConfig 
         if (text.isEmpty) {
           continue;
         }
-        // The outline first, half of it under the letters.
         final outline = _textPainter(
           item,
           size,
@@ -289,8 +278,7 @@ void paintMarkup(Canvas canvas, List<MarkupItem> items, Size size, MarkupConfig 
   }
 }
 
-/// One tile of the full-size copy ([tile] of a picture of [output]) with the markup painted on
-/// it, as a new image the tile's size. The caller disposes both.
+/// One tile of the full-size copy ([tile] of a picture of [output]) with the markup painted on it.
 Future<ui.Image> markupTile(
   ui.Image image,
   AdjustRect tile,
@@ -306,8 +294,6 @@ Future<ui.Image> markupTile(
   return picture.toImage(tile.width, tile.height).whenComplete(picture.dispose);
 }
 
-/// Undo and redo for the markup: each change that can be undone keeps the items as they were
-/// before it. Items aren't changed in place, so keeping the lists costs little.
 @immutable
 class MarkupHistory {
   final List<MarkupItem> items;
@@ -319,8 +305,7 @@ class MarkupHistory {
   /// A change that can be undone.
   MarkupHistory commit(List<MarkupItem> next) => MarkupHistory(next, [...past, items]);
 
-  /// More of the last change (a line growing, text typed, a drag going on): undone with it. If
-  /// that brings the items back to how they were before it, the change is forgotten.
+  /// More of the last change (a line growing, text typed, a drag going on): undone with it.
   MarkupHistory amend(List<MarkupItem> next) {
     if (past.isNotEmpty && _same(past.last, next)) {
       return MarkupHistory(next, past.sublist(0, past.length - 1), future);

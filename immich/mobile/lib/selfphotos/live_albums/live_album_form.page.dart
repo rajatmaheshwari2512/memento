@@ -1,6 +1,4 @@
-// SelfPhotos live albums: create or edit one. Not part of Immich. People are chosen with
-// the app's own people picker, in the same bottom sheet the search screen uses
-// (FilterBottomSheetScaffold + PeoplePicker), so it looks and works the same.
+// SelfPhotos live albums: create or edit one.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -18,8 +16,8 @@ import 'package:immich_mobile/widgets/search/search_filter/people_picker.dart';
 import 'package:immich_mobile/widgets/search/search_filter/search_filter_utils.dart';
 
 class LiveAlbumFormPage extends ConsumerStatefulWidget {
-  final LiveAlbum? liveAlbum; // editing this one; otherwise a new one
-  final Set<String> taken; // albums that are already live albums
+  final LiveAlbum? liveAlbum;
+  final Set<String> taken;
 
   const LiveAlbumFormPage({super.key, this.liveAlbum, required this.taken});
 

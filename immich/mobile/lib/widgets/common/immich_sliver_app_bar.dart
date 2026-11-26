@@ -90,8 +90,7 @@ class _ImmichLogoWithText extends StatelessWidget {
   Widget build(BuildContext context) => AnimatedOpacity(
     opacity: IconTheme.of(context).opacity ?? 1,
     duration: kThemeChangeDuration,
-    // SelfPhotos: PNG instead of SVG, because the Memento logo's name is text, which
-    // flutter_svg doesn't render reliably.
+    // SelfPhotos: the Memento logo as a PNG.
     child: Image.asset(
       context.isDarkTheme ? 'assets/immich-logo-inline-dark.png' : 'assets/immich-logo-inline-light.png',
       height: 40,

@@ -1,16 +1,14 @@
 // SelfPhotos live albums: albums that fill themselves with photos of chosen people.
-// Calls to Memento's extras service (memento-extras) through the shared client. Not part
-// of Immich. See SelfPhotos FEATURES.md, "Live albums".
 import 'package:immich_mobile/selfphotos/extras_client.dart';
 
 class LiveAlbum {
   final String id;
   final String albumId;
   final String albumName;
-  final String match; // any: at least one of the people; all: all of them in the same photo
+  final String match;
   final List<String> include;
   final List<String> exclude;
-  final String? since; // YYYY-MM-DD
+  final String? since;
   final DateTime? lastRunAt;
   final int totalAdded;
   final String? pausedReason;
@@ -80,11 +78,11 @@ class LiveAlbumsService {
   Future<LiveAlbum> update(String id, LiveAlbumRules rules) async =>
       _one(await _client.send('PUT', '/live-albums/${Uri.encodeComponent(id)}', body: rules.toJson()));
 
-  /// Stops it adding photos. The album and its photos stay.
+  /// Stops it adding photos.
   Future<void> delete(String id) =>
       _client.send('DELETE', '/live-albums/${Uri.encodeComponent(id)}', body: const <String, Object>{});
 
-  /// Checks for new photos now. Returns how many were added.
+  /// Checks for new photos now.
   Future<int> check(String id) async {
     final data = await _client.send(
       'POST',

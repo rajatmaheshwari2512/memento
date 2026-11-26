@@ -1,6 +1,3 @@
-// SelfPhotos Adjust's Markup: the Android side's settings and maths, checked against the same
-// files as the web's (web/src/lib/ai-edit/adjust/markup.spec.ts), a text's box too; its undo
-// history and editing; and the full-size copy, drawn in tiles, being the picture painted in one go.
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -64,7 +61,6 @@ void main() {
     });
 
     test('give a text the same box, centred on its place, in GoogleSans Bold', () async {
-      // The app's font (the test font is another).
       final bold = File('fonts/GoogleSans/GoogleSans-Bold.ttf').readAsBytesSync();
       await (FontLoader('GoogleSans')..addFont(Future.value(ByteData.sublistView(bold)))).load();
       for (final entry in (parity['texts']! as List).cast<Map<String, Object?>>()) {
@@ -72,7 +68,6 @@ void main() {
         final item = MarkupText(Colors.white, config.sizes[entry['size']! as int].text, offset(entry['at']), text);
         final box = markupTextBox(item, size(entry['photo']), config);
         final expected = (entry['box']! as Map).cast<String, num>();
-        // Within the rounding of each app's text layout (markup-parity.json).
         expect(box.width, closeTo(expected['width']!, 0.1), reason: text);
         expect(box.left, closeTo(expected['x']!, 0.1), reason: text);
         expect(box.height, closeTo(expected['height']!, 1), reason: text);
@@ -126,7 +121,7 @@ void main() {
     test('drops a text left empty, with no undo step for it', () {
       final markup = editor()..addText(const Offset(0.5, 0.5));
       expect(markup.items, hasLength(1));
-      expect(markup.isEmpty, isTrue); // nothing to save yet
+      expect(markup.isEmpty, isTrue);
       markup.setText('Hi');
       expect(markup.isEmpty, isFalse);
       markup.setText(' ');
@@ -188,7 +183,7 @@ void main() {
         ..select(0)
         ..setText('');
       final before = markup.selection;
-      markup.select(1); // the emptied text goes, so the one picked is now first
+      markup.select(1);
       expect((markup.selected, markup.selectedText!.text), (0, 'B'));
       expect(markup.selection, greaterThan(before));
     });
@@ -210,10 +205,6 @@ void main() {
     });
   });
 
-  // The full-size save draws the markup on each tile: the tiles together must be the picture
-  // painted in one go, also where a line and a text cross from one tile into the next. The
-  // renderer smooths some edge pixels a little differently on a smaller canvas (even with nothing
-  // moved), so a few may differ a little; a missing or shifted piece would differ a lot.
   testWidgets('markup drawn tile by tile gives the one-pass picture', (tester) async {
     await tester.runAsync(() async {
       const output = AdjustSize(301, 203);
@@ -274,7 +265,7 @@ void main() {
         differ += difference > 2 ? 1 : 0;
         drawn += expected[i] != 0x80 || expected[i + 1] != 0x80 || expected[i + 2] != 0x80 ? 1 : 0;
       }
-      expect(drawn, greaterThan(5000)); // the markup is there
+      expect(drawn, greaterThan(5000));
       expect(worst, lessThanOrEqualTo(48));
       expect(differ, lessThan(drawn * 0.1));
     });

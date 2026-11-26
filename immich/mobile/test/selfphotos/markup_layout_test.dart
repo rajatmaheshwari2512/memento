@@ -1,13 +1,3 @@
-// SelfPhotos Adjust's Markup on a Pixel 9 (about 411×923 dp): the five tabs fit on one row, the
-// tools show, and a finger draws on the photo with each tool: a held finger draws too (it doesn't
-// show the original, as holding the photo does on the other tabs); a tap places a text, typed in
-// the field, then dragged to move it; leaving with markup asks first. Also: a short stroke stays a
-// stroke; while drawing only the markup repaints, and Undo with another finger ends the line; the
-// field shows the text picked, also when an emptied one before it goes; a pinch resizes a text
-// from outside it; and on a phone 360 wide the tabs still fit on one row. Pumps the real page,
-// opened as the app opens it, with the app's fonts and theme and a stand-in preview.
-//
-// With SELFPHOTOS_SCREENSHOTS set to a folder, a screenshot of each tool is saved there.
 import 'dart:io';
 import 'dart:math';
 import 'dart:ui' as ui;
@@ -38,22 +28,18 @@ import 'package:openapi/api.dart' show AssetMediaSize;
 import '../unit/factories/remote_asset_factory.dart';
 import '../unit/presentation/presentation_context.dart';
 
-// A Pixel 9: 1080×2424 pixels at 2.625, with its status bar and gesture bar.
 const _pixelRatio = 2.625;
 const _screen = Size(1080, 2424);
-// A phone 360 wide: 1080×2400 pixels at 3.
 const _narrowRatio = 3.0;
 const _narrowScreen = Size(1080, 2400);
 final _screenKey = GlobalKey();
 
-// The app's fonts (the test font draws boxes): its text font, and Flutter's icons.
 Future<void> _loadFonts() async {
   final sans = FontLoader('GoogleSans');
   for (final weight in ['Regular', 'Medium', 'SemiBold', 'Bold']) {
     sans.addFont(Future.value(ByteData.sublistView(File('fonts/GoogleSans/GoogleSans-$weight.ttf').readAsBytesSync())));
   }
   await sans.load();
-  // flutter_tester is in <flutter>/bin/cache/artifacts/engine/<platform>/.
   final icons = File(
     '${File(Platform.resolvedExecutable).parent.parent.parent.path}/material_fonts/MaterialIcons-Regular.otf',
   );
@@ -62,7 +48,6 @@ Future<void> _loadFonts() async {
   }
 }
 
-// A stand-in photo: sky, sun, grass and three boxes.
 Future<ui.Image> _photo() {
   const size = Size(400, 300);
   final recorder = ui.PictureRecorder();
@@ -90,9 +75,6 @@ void main() {
   setUp(() async => ctx = await PresentationContext.create());
   tearDown(() async => ctx.dispose());
 
-  // Adjust's page on its Markup tab, for a landscape photo, opened over an empty page as the app
-  // opens it over the viewer; loaded and idle.
-  // With its status bar and gesture bar, and the system font at [textScale].
   Future<void> pumpPage(
     WidgetTester tester,
     RemoteAsset asset, {
@@ -155,7 +137,6 @@ void main() {
         ),
       ),
     );
-    // The shader, the files and the preview load outside the test's clock.
     for (var i = 0; i < 100 && find.text('Pen').evaluate().isEmpty; i++) {
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
       await tester.pump();
@@ -184,7 +165,6 @@ void main() {
     return Offset(rect.left + rect.width * x, rect.top + rect.height * y);
   }
 
-  // A finger drawn through [points] (shares of the photo).
   Future<void> draw(WidgetTester tester, List<(double, double)> points, {Duration hold = Duration.zero}) async {
     final gesture = await tester.startGesture(at(tester, points.first.$1, points.first.$2));
     if (hold > Duration.zero) {
@@ -202,7 +182,6 @@ void main() {
   MarkupEditor editor(WidgetTester tester) => tester.widget<MarkupLayer>(find.byType(MarkupLayer)).editor;
   List<MarkupItem> items(WidgetTester tester) => editor(tester).items;
 
-  // A tool, or a shape's chip, by its name.
   Future<void> choose(WidgetTester tester, String label) async {
     final chip = find.widgetWithText(ChoiceChip, label);
     await tester.tap(chip.evaluate().isEmpty ? find.text(label).last : chip);
@@ -219,7 +198,6 @@ void main() {
     final t = tester.element(find.byType(AppBar)).t;
     final screen = _screen / _pixelRatio;
 
-    // The five tabs on one row, inside the screen; the tools all on screen.
     final tabs = [t.crop, t.editor_adjust, t.filters, t.editor_straighten, t.editor_markup];
     final rows = {for (final label in tabs) tester.getCenter(find.text(label).first).dy.round()};
     expect(rows, hasLength(1));
@@ -231,21 +209,18 @@ void main() {
     expect(photo(tester).height, greaterThan(200));
     await screenshot(tester, 'android-pixel9-0-empty');
 
-    // Pen: a loop round the sun.
     await draw(tester, [
       for (var i = 0; i <= 24; i++) (0.77 + 0.1 * cos(i / 24 * 6.6), 0.23 + 0.13 * sin(i / 24 * 6.6)),
     ]);
     expect(items(tester).single, isA<MarkupLine>());
     await screenshot(tester, 'android-pixel9-1-pen');
 
-    // Highlighter, in yellow, held still before moving: it still draws.
     await choose(tester, t.editor_markup_highlighter);
     await pick(tester, '${t.color} 3');
     await draw(tester, [(0.3, 0.45), (0.5, 0.45), (0.7, 0.45)], hold: const Duration(milliseconds: 700));
     expect((items(tester).last as MarkupLine).kind, MarkupLineKind.highlighter);
     await screenshot(tester, 'android-pixel9-2-highlighter');
 
-    // Shapes: an arrow, a box and a circle.
     await choose(tester, t.editor_markup_shapes);
     await pick(tester, '${t.color} 7');
     await draw(tester, [(0.15, 0.15), (0.2, 0.35), (0.28, 0.55)]);
@@ -264,7 +239,6 @@ void main() {
     expect(sizeLabel.bottom, lessThanOrEqualTo(screen.height - 80), reason: 'the tools fit without scrolling');
     await screenshot(tester, 'android-pixel9-3-shapes');
 
-    // Text: a tap places it, it's typed in the field, and dragged to move it.
     await choose(tester, t.editor_markup_text);
     await pick(tester, '${t.color} 7');
     await tester.tapAt(at(tester, 0.75, 0.62));
@@ -276,7 +250,6 @@ void main() {
     await draw(tester, [for (var i = 0; i <= 10; i++) (0.75 - i * 0.002, 0.62 + i * 0.008)]);
     expect((items(tester).last as MarkupText).at.dy, greaterThan(placed.at.dy + 0.05));
 
-    // Its corner handle makes it bigger.
     MarkupText text() => items(tester).last as MarkupText;
     final config = tester.widget<MarkupLayer>(find.byType(MarkupLayer)).editor.config!;
     final small = text();
@@ -292,7 +265,6 @@ void main() {
     expect(text().at, small.at);
     await screenshot(tester, 'android-pixel9-4-text');
 
-    // So does pinching it; lifting one finger and moving the other then does nothing.
     final before = text();
     final count = items(tester).length;
     final middle = at(tester, before.at.dx, before.at.dy);
@@ -317,7 +289,6 @@ void main() {
     expect(text().at, pinched.at);
     expect(text().fontSize, pinched.fontSize);
 
-    // Leaving asks first.
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
     expect(find.text(t.editor_discard_edits_title), findsOneWidget);
@@ -361,22 +332,19 @@ void main() {
 
     final gesture = await tester.startGesture(at(tester, 0.5, 0.5));
     await tester.pump();
-    expect(items(tester), hasLength(2)); // the line is there from the start (Undo works)
+    expect(items(tester), hasLength(2));
     final (notifiedAtDown, photoAtDown, markupAtDown) = (notified, photoPaints, markupPaints);
     for (var i = 1; i <= 24; i++) {
       await gesture.moveTo(at(tester, 0.5 + i * 0.01, 0.5 + i * 0.005));
       await tester.pump(const Duration(milliseconds: 16));
     }
-    debugOnProfilePaint = null; // (a test must leave it unset)
+    debugOnProfilePaint = null;
     expect(notified, notifiedAtDown);
     expect(photoPaints, photoAtDown);
     expect(markupPaints - markupAtDown, greaterThanOrEqualTo(24));
-    // The editor has the whole line so far (Save would take it), not only where it started.
     expect((items(tester).last as MarkupLine).points.length, greaterThan(20));
     await screenshot(tester, 'android-pixel9-5-drawing');
 
-    // Undo with another finger takes the line away; moving on draws nothing more, and the line
-    // before it isn't touched.
     final undo = await tester.startGesture(tester.getCenter(find.byTooltip(t.undo)), pointer: 9);
     await undo.up();
     await tester.pump();
@@ -389,7 +357,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(items(tester).single, same(first));
 
-    // The next stroke draws as usual, once in the editor when the finger lifts.
     await draw(tester, [(0.6, 0.2), (0.7, 0.2), (0.8, 0.2)]);
     expect((items(tester).last as MarkupLine).points.length, greaterThan(2));
   });
@@ -413,20 +380,19 @@ void main() {
 
     await tap(0.25, 0.3);
     await type('a');
-    await tap(0.5, 0.95); // stops editing it
+    await tap(0.5, 0.95);
     await tap(0.7, 0.6);
     await type('Bee');
     await tap(0.5, 0.95);
     await tap(0.25, 0.3);
     expect(field(), 'a');
-    await type(''); // emptied: it goes when another is picked
+    await type('');
     await tap(0.7, 0.6);
     expect(items(tester), hasLength(1));
     expect(field(), 'Bee');
     await type('Bees');
     expect((items(tester).single as MarkupText).text, 'Bees');
 
-    // Two fingers either side of it, both outside its box, pinching out.
     final before = items(tester).single as MarkupText;
     final config = editor(tester).config!;
     final box = markupTextBox(before, photo(tester).size, config).shift(photo(tester).topLeft);
@@ -482,8 +448,6 @@ void main() {
     editor(tester).addListener(() => notified++);
     final save = await tester.startGesture(tester.getCenter(find.byIcon(Icons.done_rounded)), pointer: 9);
     await save.up();
-    // Save starts (its spinner turns from now on, so the page never settles): the layer stops
-    // drawing, and once that frame is over the page hears of the moves the editor held back.
     await tester.pump();
     await tester.pump();
     expect(find.byIcon(Icons.done_rounded), findsNothing);
@@ -491,7 +455,6 @@ void main() {
     expect(line.points, hasLength(6));
     expect(notified, greaterThan(0));
 
-    // The finger goes on and lifts: the line Save took stays as it was.
     await gesture.moveTo(at(tester, 0.6, 0.6));
     await tester.pump(const Duration(milliseconds: 16));
     await gesture.up();
@@ -525,7 +488,6 @@ void main() {
       }
       await screenshot(tester, name);
 
-      // Still a tab each: Filters opens.
       await tester.tap(labels[2]);
       await tester.pumpAndSettle();
       expect(find.text(t.none), findsOneWidget);

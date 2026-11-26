@@ -1,9 +1,4 @@
-// SelfPhotos Adjust's Markup tab for Android: how the picked tool works, with undo, redo and
-// clear; the tools as Immich's column buttons (as Adjust's sliders are): pen, highlighter, text
-// and shapes, and for shapes, arrow, box or circle as chips (as Immich's search filters are), so
-// the tools fit without scrolling; the field for the text being edited; and the colour and size.
-// Drawing happens on the photo (markup_layer.dart). Not part of Immich. The web's is
-// MarkupTools.svelte.
+// SelfPhotos Adjust's Markup tab for Android.
 import 'package:flutter/material.dart';
 import 'package:immich_mobile/extensions/build_context_extensions.dart';
 import 'package:immich_mobile/generated/translations.g.dart';
@@ -52,12 +47,11 @@ class MarkupTools extends StatefulWidget {
 }
 
 class _MarkupToolsState extends State<MarkupTools> {
-  // The dots that show the sizes (logical pixels).
   static const _dots = [6.0, 10.0, 16.0];
 
   final _field = TextEditingController();
   final _focus = FocusNode();
-  int _selection = -1; // the editor's selection the field shows
+  int _selection = -1;
   int _newText = 0;
 
   MarkupEditor get _editor => widget.editor;
@@ -87,7 +81,6 @@ class _MarkupToolsState extends State<MarkupTools> {
     super.dispose();
   }
 
-  // The field shows the text being edited; a new text gets the cursor.
   void _follow() {
     if (_editor.selection != _selection) {
       _selection = _editor.selection;
@@ -254,7 +247,6 @@ class _MarkupToolsState extends State<MarkupTools> {
   }
 }
 
-// A round choice (a colour, a size), ringed in the primary colour when picked.
 class _Choice extends StatelessWidget {
   final String label;
   final bool selected;

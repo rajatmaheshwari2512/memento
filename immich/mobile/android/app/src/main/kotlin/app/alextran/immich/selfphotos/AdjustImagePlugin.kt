@@ -26,15 +26,6 @@ import java.util.concurrent.Executors
 import kotlin.math.roundToInt
 
 // SelfPhotos Adjust: the parts of saving a full-size copy that Flutter can't do well itself.
-// Not part of Immich. Dart (mobile/lib/selfphotos/adjust/adjust_native.dart) renders each
-// tile with the shared shader; this side
-//   - reads the source one part at a time (BitmapRegionDecoder), upright (EXIF orientation),
-//     in sRGB, so a 50 MP photo is never held whole (formats it can't read in parts are
-//     decoded whole instead);
-//   - gathers the rendered tiles into one output bitmap;
-//   - encodes it as JPEG (or PNG), which Flutter can't.
-// Pixels cross the channel as RGBA bytes with premultiplied alpha, as Flutter's rgba8888.
-// One save at a time; everything runs on one background thread.
 class AdjustImagePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
   private var channel: MethodChannel? = null
   private val worker = Executors.newSingleThreadExecutor()
@@ -87,7 +78,6 @@ class AdjustImagePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     argument<Int>("y")!! + argument<Int>("height")!!,
   )
 
-  // The source photo's upright size.
   private fun open(path: String): Map<String, Int> {
     release()
     val opened = AdjustSource(path)
@@ -111,7 +101,6 @@ class AdjustImagePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     output = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
   }
 
-  // A rendered tile, copied into its place as it is.
   private fun write(rect: Rect, pixels: ByteArray) {
     val target = output ?: error("No output")
     val tile = Bitmap.createBitmap(rect.width(), rect.height(), Bitmap.Config.ARGB_8888)
@@ -147,13 +136,11 @@ class AdjustImagePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
 
 private class UnreadableImageException(message: String) : Exception(message)
 
-// The source photo, read upright and in sRGB. Parts come from a BitmapRegionDecoder when the
-// format allows (JPEG, PNG, WebP, HEIF); otherwise the whole photo is decoded once.
 private class AdjustSource(path: String) {
   private val decoder: BitmapRegionDecoder?
   private var whole: Bitmap? = null
-  private val orientation: Matrix // raw pixels → upright, without moving
-  private val toRaw = Matrix() // upright position → raw position
+  private val orientation: Matrix
+  private val toRaw = Matrix()
   val width: Int
   val height: Int
 
@@ -179,7 +166,6 @@ private class AdjustSource(path: String) {
       width = bounds.width().roundToInt()
       height = bounds.height().roundToInt()
     } else {
-      // Decoded whole and upright.
       val decoded = decodeWhole(path, exif)
       whole = decoded
       orientation = Matrix()
@@ -188,12 +174,10 @@ private class AdjustSource(path: String) {
     }
   }
 
-  // The upright part `rect`, as a new ARGB_8888 bitmap of exactly its size (the caller
-  // recycles it).
+  // The upright part `rect`.
   fun read(rect: Rect): Bitmap {
     whole?.let { photo ->
       val part = Bitmap.createBitmap(photo, rect.left, rect.top, rect.width(), rect.height())
-      // For the whole photo, createBitmap hands back the photo itself: copy it instead.
       return if (part === photo) photo.copy(Bitmap.Config.ARGB_8888, false) else part
     }
     val raw = RectF(rect)
@@ -222,7 +206,6 @@ private class AdjustSource(path: String) {
     fun Bitmap.asArgb(): Bitmap =
       if (config == Bitmap.Config.ARGB_8888) this else copy(Bitmap.Config.ARGB_8888, false).also { recycle() }
 
-    // As Glide does (TransformationUtils.initializeMatrixForRotation).
     fun orientationMatrix(exif: Int) = Matrix().apply {
       when (exif) {
         ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> setScale(-1f, 1f)
@@ -235,8 +218,7 @@ private class AdjustSource(path: String) {
       }
     }
 
-    // Formats the region decoder can't read (e.g. AVIF). ImageDecoder turns the photo upright
-    // itself; the older BitmapFactory doesn't.
+    // Formats the region decoder can't read (e.g. AVIF).
     fun decodeWhole(path: String, exif: Int): Bitmap {
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
         return runCatching {

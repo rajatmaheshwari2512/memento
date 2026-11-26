@@ -1,5 +1,3 @@
-// SelfPhotos Adjust: the Android side's maths and settings, checked against the same values
-// and files as the web's (web/src/lib/ai-edit/adjust/*.spec.ts).
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -47,7 +45,6 @@ void main() {
     });
 
     test('gives the copy the same size as the web does', () {
-      // As saved on the local test server from the web: 4032×3024 at 8°, 8160×6120 at 3°.
       expect(outputSize(8, const AdjustSize(4032, 3024)), const AdjustSize(3429, 2572));
       expect(outputSize(3, const AdjustSize(8160, 6120)), const AdjustSize(7638, 5728));
     });
@@ -57,7 +54,6 @@ void main() {
     final settings = AutoSettings.parse(File('assets/selfphotos/adjust-auto.json').readAsStringSync());
     final parity = jsonDecode(File('$_webDir/adjust-auto-parity.json').readAsStringSync()) as Map<String, Object?>;
 
-    // One row of pixels from [red, green, blue, how many] runs.
     (Uint8List, int) picture(List runs) {
       final width = runs.fold<int>(0, (sum, run) => sum + ((run as List)[3] as int));
       final pixels = Uint8List(width * 4);
@@ -170,13 +166,11 @@ void main() {
     });
 
     test("keeps the photo's shape when a crop of it holds the marked area, else changes it only as needed", () {
-      // A building in the middle of the photo: in a portrait photo (the tools test's) and a landscape one.
       const building = [(0.32, 0.2), (0.68, 0.2), (0.82, 0.9), (0.18, 0.9)];
       for (final source in const [AdjustSize(300, 400), AdjustSize(4000, 3000)]) {
         final (sx, sy) = framing(0, source, building).scale;
         expect(sx, closeTo(sy, 1e-9), reason: '$source');
       }
-      // A wall seen from the side, portrait: no 3:4 crop holds it, so a little wider (under 2%).
       const source = AdjustSize(3000, 4000);
       final (sx, sy) = framing(0, source, const [(0.05, 0.1), (0.95, 0.0), (0.95, 1.0), (0.05, 0.9)]).scale;
       expect(sx / sy, greaterThan(1 + 1e-6));
@@ -294,8 +288,6 @@ void main() {
   });
 
   group('the shared shader', () {
-    // Flutter's build doesn't notice a change in a file the shader includes: the shader's own file
-    // names it by its hash, so updating that line (and so the file) makes Flutter rebuild it.
     test("the shader's own file names the shared file's hash, so a build doesn't ship the old shader", () {
       final wrapper = File('shaders/selfphotos_adjust.frag').readAsStringSync();
       final hash = sha256.convert(File('$_webDir/adjust-core.glsl').readAsBytesSync()).toString();

@@ -1,11 +1,4 @@
-// SelfPhotos themed memories: the person's own switches (themed memories; collages and recap
-// videos), on a page of its own opened from Settings (one line per layout in Immich's
-// settings.page.dart). Built like the app's own settings pages (SavedSwitchTile, each change
-// saved at once). Not part of Immich.
-//
-// Shown while an admin has themed memories switched on, or while this person's are on: with
-// them switched off for everyone, the person can still turn theirs off (and their key goes),
-// but not on. The collages switch shows while collages are switched on.
+// SelfPhotos themed memories.
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/generated/translations.g.dart';
@@ -22,8 +15,6 @@ final _settingsProvider = FutureProvider.autoDispose<MemorySettings>((ref) => co
 void _open(BuildContext context) =>
     Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const MemoriesSettingsPage()));
 
-/// Whether to offer the page: themed memories switched on, or this person's on (to turn off).
-/// When the service can't be reached, no.
 bool _offered(WidgetRef ref) =>
     ref.watch(mementoFeaturesProvider).themedMemories || (ref.watch(_settingsProvider).valueOrNull?.enabled ?? false);
 
@@ -61,7 +52,7 @@ class MementoMemoriesTile extends ConsumerWidget {
 class MemoriesSettingsPage extends ConsumerWidget {
   const MemoriesSettingsPage({super.key});
 
-  /// Saves a change; on failure says why. The settings load again either way.
+  /// Saves a change; on failure says why.
   Future<bool> _change(BuildContext context, WidgetRef ref, {bool? enabled, bool? creations}) async {
     try {
       await const MemoriesService().change(enabled: enabled, creations: creations);
@@ -95,7 +86,6 @@ class MemoriesSettingsPage extends ConsumerWidget {
               value: data.enabled,
               title: context.t.themed_memories,
               subtitle: context.t.themed_memories_enable_description,
-              // Switched off for everyone: theirs can only be turned off.
               enabled: adminOn || data.enabled,
               save: (on) => _change(context, ref, enabled: on),
             ),

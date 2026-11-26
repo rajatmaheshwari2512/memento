@@ -1,7 +1,4 @@
 // SelfPhotos Adjust: straighten's and perspective's crop, and the tiles of a full-size render.
-// Not part of Immich. The same maths as the web's adjust-geometry.ts (and the shader's
-// sourcePosition); web/src/lib/ai-edit/adjust/adjust-geometry-parity.json holds values both are
-// checked against.
 import 'dart:math';
 
 class AdjustSize {
@@ -35,15 +32,13 @@ class AdjustRect {
 typedef AdjustPoint = (double, double);
 
 /// Perspective: four points the person drags onto lines that should be straight (a building's
-/// edges), clockwise from the top left, as shares of the photo's width and height (0..1).
+/// edges), clockwise from the top left.
 typedef Quad = List<AdjustPoint>;
 
 /// A 3×3 matrix, row by row, for positions (x, y, 1).
 typedef Matrix3 = List<double>;
 
-/// Turning a w×h photo by [degrees] leaves empty corners. The largest centred rectangle of
-/// the same shape that fits inside the turned photo is this share of its width and height:
-/// 1 / (cos + max(w/h, h/w)·sin). 1 at 0°; for a square at 45°, 0.7071.
+/// Turning a w×h photo by [degrees] leaves empty corners.
 double cropScale(double degrees, AdjustSize source) {
   final radians = degrees.abs() * pi / 180;
   final ratio = max(source.width / source.height, source.height / source.width);
@@ -95,15 +90,12 @@ double _distance(AdjustPoint a, AdjustPoint b) {
 
 double _sign(double value) => value > 0 ? 1 : (value < 0 ? -1 : 0);
 
-/// The four corners' rectangle once straightened: its sides as long as theirs, on average (pixels).
 (double, double) _markedSize(Quad quad, AdjustSize source) {
   final [p0, p1, p2, p3] = [for (final (x, y) in quad) (x * source.width, y * source.height)];
   return ((_distance(p0, p1) + _distance(p3, p2)) / 2, (_distance(p0, p3) + _distance(p1, p2)) / 2);
 }
 
-/// Perspective's warp, the other way round: from a position in the straightened picture (the
-/// four corners' rectangle, [_markedSize], its top left at 0, 0) to the photo (pixels). The unit
-/// square to the corners (Heckbert's formula), after scaling the rectangle down to it.
+/// Perspective's warp, the other way round.
 Matrix3 perspectiveMatrix(Quad quad, AdjustSize source) {
   final [p0, p1, p2, p3] = [for (final (x, y) in quad) (x * source.width, y * source.height)];
   final (width, height) = _markedSize(quad, source);
@@ -129,16 +121,11 @@ Matrix3 perspectiveMatrix(Quad quad, AdjustSize source) {
   ];
 }
 
-/// How sharply each corner must turn (the cross product of its two sides, in shares of the
-/// photo): keeps the corners a real four-sided shape, not a sliver or a bow tie.
 const _minTurn = 0.01;
 
-/// How far the warp may stretch one side of the photo against the other: 10 times.
 const _minDepth = 0.1;
 
-/// Whether the corners make a warp the photo survives: inside the photo, in order and turning
-/// the same way (a convex shape of some size), and with the whole photo still in front after the
-/// warp (none of it stretched to infinity), so its corners can be cropped to a rectangle.
+/// Whether the corners make a warp the photo survives.
 bool isValidPerspective(Quad quad) {
   if (quad.length != 4 || quad.any((p) => !(p.$1 >= 0 && p.$1 <= 1 && p.$2 >= 0 && p.$2 <= 1))) {
     return false;
@@ -162,9 +149,7 @@ bool isPhotoCorners(Quad quad) {
 
 const Matrix3 identityMatrix = [1, 0, 0, 0, 1, 0, 0, 0, 1];
 
-/// Where each output pixel comes from: the crop's width and height (each a share of the source's),
-/// its centre and turn, and perspective's warp to the photo (none without it). The shader's
-/// uCropScale, uCropCentre, uRotation and uPerspective rows.
+/// Where each output pixel comes from.
 class AdjustFraming {
   final (double, double) scale;
   final AdjustPoint centre;
@@ -174,9 +159,7 @@ class AdjustFraming {
   const AdjustFraming(this.scale, this.centre, this.rotation, this.toPhoto);
 }
 
-/// Without perspective, straighten's centred crop, the photo's own shape. With it, a rectangle
-/// that keeps everything inside the four corners and has no empty corners, in the photo's own
-/// shape where one can, else in the shape closest to it ([_perspectiveCrop]).
+/// Without perspective, straighten's centred crop, the photo's own shape.
 AdjustFraming framing(double degrees, AdjustSize source, [Quad? perspective]) {
   final scale = cropScale(degrees, source);
   final plain = AdjustFraming((scale, scale), (source.width / 2, source.height / 2), rotation(degrees), null);
@@ -188,8 +171,6 @@ AdjustFraming framing(double degrees, AdjustSize source, [Quad? perspective]) {
   return AdjustFraming(crop, centre, plain.rotation, toPhoto);
 }
 
-/// A rectangle in the crop's own frame (the straightened picture, turned with the angle): its top
-/// left, width and height. A condition on one: a·(x, y, width, height) ≤ limit, as [...a, limit].
 typedef _Box = List<double>;
 typedef _Condition = List<double>;
 
@@ -198,7 +179,6 @@ double _det3(List<double> c0, List<double> c1, List<double> c2) =>
     c1[0] * (c0[1] * c2[2] - c0[2] * c2[1]) +
     c2[0] * (c0[1] * c1[2] - c0[2] * c1[1]);
 
-/// Of four rows of four.
 double _det4(List<List<double>> rows) {
   var sum = 0.0;
   for (var j = 0; j < 4; j++) {
@@ -214,13 +194,6 @@ double _det4(List<List<double>> rows) {
   return sum;
 }
 
-/// Perspective's crop: its width and height (shares of the source's) and its centre in the
-/// straightened picture. In the crop's frame the photo, warped, is a four-sided shape, and the four
-/// corners' rectangle ([marked], straightened) is inside it. The crop is a rectangle inside the
-/// shape (no empty corners) and around the marked rectangle (nothing of it cut off): the largest of
-/// those with the photo's own shape; if none has it, the largest of those closest to it. Turned
-/// with the angle, the marked rectangle may reach past the photo's edges (when corners are on
-/// them): then the crop goes around as much of it as fits, kept centred.
 ((double, double), AdjustPoint) _perspectiveCrop(
   Matrix3 toPhoto,
   double degrees,
@@ -229,15 +202,11 @@ double _det4(List<List<double>> rows) {
 ) {
   final (conditions, fallback) = _cropConditions(toPhoto, degrees, source, marked);
   final [x, y, width, height] = _bestCrop(conditions, fallback, source);
-  // Its centre turned back, into the straightened picture.
   final (c, s) = rotation(degrees);
   return ((width / source.width, height / source.height), (c * x + s * y, -s * x + c * y));
 }
 
-/// What a crop box must keep to, in the crop's frame: for each side of the warped photo (its
-/// outward direction n, of length 1), the box's corner farthest along n stays inside it; and the
-/// box goes around the marked rectangle's bounds, shrunk about their centre (by `fit`, at most 1)
-/// until they're inside the photo. The second: those bounds, a box that keeps to all of it.
+/// What a crop box must keep to, in the crop's frame.
 (List<_Condition>, _Box) _cropConditions(Matrix3 toPhoto, double degrees, AdjustSize source, (double, double) marked) {
   final fromPhoto = invert(toPhoto);
   final (c, s) = rotation(degrees);
@@ -316,8 +285,7 @@ List<_Box> _cropCorners(List<_Condition> conditions, double tolerance) {
   return found;
 }
 
-/// The boxes of one shape (width ratio·height) that could be the tallest: where three conditions
-/// meet, with the width written as ratio·height, keeping to every condition.
+/// The boxes of one shape (width ratio·height) that could be the tallest.
 List<_Box> _cropsOfShape(List<_Condition> conditions, double ratio, double tolerance) {
   final keeps = _keepsTo(conditions, tolerance);
   final found = <_Box>[];
@@ -348,11 +316,6 @@ List<_Box> _cropsOfShape(List<_Condition> conditions, double ratio, double toler
   return found;
 }
 
-/// The winner. What's allowed is convex, so the shapes it allows run from the narrowest of its
-/// corners to the widest, every one between them included: the photo's own shape if it's between,
-/// else the nearer end (there, only corners have that shape). Of that shape, the tallest (so the
-/// largest); of those (the same box, able to slide), the one in the middle. Returns its centre,
-/// width and height.
 _Box _bestCrop(List<_Condition> conditions, _Box fallback, AdjustSize source) {
   final tolerance = 1e-9 * max(source.width, source.height);
   final corners = _cropCorners(conditions, tolerance);
@@ -378,14 +341,13 @@ _Box _bestCrop(List<_Condition> conditions, _Box fallback, AdjustSize source) {
 }
 
 /// The saved photo's size: the crop at the source's own resolution, never more pixels than the
-/// source (perspective's crop may be another shape, so it may be longer on one side).
+/// source.
 AdjustSize outputSize(double degrees, AdjustSize source, [Quad? perspective]) {
   final (sx, sy) = framing(degrees, source, perspective).scale;
   final shrink = min(1.0, 1 / sqrt(sx * sy));
   return AdjustSize(max(1, (source.width * sx * shrink).round()), max(1, (source.height * sy * shrink).round()));
 }
 
-/// Where an output position (pixels) is in the source (pixels).
 AdjustPoint _sourcePosition(double x, double y, AdjustSize output, AdjustSize source, AdjustFraming view) {
   final (c, s) = view.rotation;
   final (sx, sy) = view.scale;
@@ -406,9 +368,6 @@ List<AdjustRect> tiles(AdjustSize output, int size) => [
       AdjustRect(x, y, min(size, output.width - x), min(size, output.height - y)),
 ];
 
-/// The part of the source a tile shows: the box around its turned (and warped) corners, plus
-/// [pad] pixels for smooth sampling, inside the source, on whole pixels. Perspective keeps
-/// straight lines straight, so the corners are enough.
 AdjustRect _partOf(AdjustRect tile, AdjustSize output, AdjustSize source, AdjustFraming view, int pad) {
   final corners = [
     _sourcePosition(tile.x.toDouble(), tile.y.toDouble(), output, source, view),

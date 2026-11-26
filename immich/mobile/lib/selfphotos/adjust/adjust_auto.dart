@@ -1,8 +1,5 @@
-// SelfPhotos Adjust's Auto: one tap sets the light and colour sliders from the photo itself,
-// from its histogram and average colour. No AI and nothing sent anywhere. Not part of Immich.
-// The same as the web's adjust-auto.ts (which explains each step); both read the web's
-// adjust-auto.json (assets/selfphotos/adjust-auto.json links to it) and are checked against
-// web/src/lib/ai-edit/adjust/adjust-auto-parity.json.
+// SelfPhotos Adjust's Auto: one tap sets the light and colour sliders from the photo itself, from
+// its histogram and average colour.
 import 'dart:convert';
 import 'dart:math';
 import 'dart:ui' as ui;
@@ -48,7 +45,7 @@ class AutoSettings {
 Future<AutoSettings> loadAutoSettings() async =>
     AutoSettings.parse(await rootBundle.loadString('assets/selfphotos/adjust-auto.json'));
 
-/// What Auto sees of a photo. Tones 0..1 (sRGB).
+/// What Auto sees of a photo.
 class PhotoStats {
   /// The tones the darkest 0.5%, half, and all but the brightest 0.5% of the photo are at or below.
   final double low;
@@ -59,7 +56,7 @@ class PhotoStats {
   final double darkClipped;
   final double brightClipped;
 
-  /// The greyish midtones' average colour, as light (linear red, green, blue), and their share.
+  /// The greyish midtones' average colour.
   final (double, double, double) balance;
   final double greyish;
 
@@ -83,8 +80,7 @@ double _toSrgb(double v) => v <= 0.0031308 ? v * 12.92 : 1.055 * pow(v, 1 / 2.4)
 final _linear = [for (var v = 0; v < 256; v++) _toLinear(v / 255)];
 double _log2(double v) => log(v) / ln2;
 
-/// Looks at the photo (RGBA, unpremultiplied, rows top first): every `step`-th pixel of every
-/// `step`-th row, so at most about `samples` of them.
+/// Looks at the photo (RGBA, unpremultiplied, rows top first).
 PhotoStats measurePhoto(Uint8List pixels, int width, int height, AutoSettings settings) {
   final step = max(1, sqrt(width * height / settings['samples']).floor());
   final histogram = List.filled(256, 0);
@@ -105,7 +101,6 @@ PhotoStats measurePhoto(Uint8List pixels, int width, int height, AutoSettings se
       final r = pixels[i];
       final g = pixels[i + 1];
       final b = pixels[i + 2];
-      // How bright it looks, 0..255, in whole numbers so both apps agree exactly.
       final luma = (2126 * r + 7152 * g + 722 * b + 5000) ~/ 10000;
       histogram[luma]++;
       count++;
@@ -156,7 +151,6 @@ PhotoStats measurePhoto(Uint8List pixels, int width, int height, AutoSettings se
   );
 }
 
-/// To the slider's steps (1/100), halves away from zero, and never -0.
 double _toStep(double value) => value.sign * (value.abs() * 100).round() / 100 + 0;
 
 /// The sliders for a photo with these stats.
@@ -168,7 +162,6 @@ Map<AdjustSlider, double> autoValues(PhotoStats stats, AutoSettings settings) {
   final gain = pow(2, 2 * exposure);
   double exposed(double tone) => _toSrgb(min(1.0, _toLinear(tone) * gain));
 
-  // The shader's contrast curve below the middle is 0.5·(2v)^k, k = 1 + 1.5·contrast.
   final low = exposed(stats.low);
   final black = settings['contrast.black'];
   final contrast = low > black && low < 0.5
@@ -176,8 +169,6 @@ Map<AdjustSlider, double> autoValues(PhotoStats stats, AutoSettings settings) {
       : 0.0;
   final k = 1 + 1.5 * contrast;
 
-  // Brightness raises tones to a power. The middle tone, after exposure and contrast, if it's
-  // outside the range, part of the way to it; aimed at the tone contrast then turns into it.
   double contrasted(double tone) => tone < 0.5 ? 0.5 * pow(2 * tone, k) : 1 - 0.5 * pow(2 * (1 - tone), k);
   double uncontrasted(double tone) => tone < 0.5 ? 0.5 * pow(2 * tone, 1 / k) : 1 - 0.5 * pow(2 * (1 - tone), 1 / k);
   final middle = exposed(stats.median).clamp(0.01, 0.99);
@@ -234,7 +225,7 @@ Map<AdjustSlider, double> autoValues(PhotoStats stats, AutoSettings settings) {
 Map<AdjustSlider, double> autoAdjust(Uint8List pixels, int width, int height, AutoSettings settings) =>
     autoValues(measurePhoto(pixels, width, height, settings), settings);
 
-/// Auto for a picture Flutter holds (Immich's preview, as loaded for the editor).
+/// Auto for a picture Flutter holds.
 Future<Map<AdjustSlider, double>> autoAdjustImage(ui.Image image, AutoSettings settings) async {
   final pixels = (await image.toByteData(format: ui.ImageByteFormat.rawStraightRgba))!;
   return autoAdjust(pixels.buffer.asUint8List(), image.width, image.height, settings);

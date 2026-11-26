@@ -1,8 +1,4 @@
-// SelfPhotos: Memento admin, adding a person: name, email and storage limit. They're added
-// as a normal user (admin rights are given afterwards, on their page, with a confirmation):
-// Immich only makes non-admins choose their own password at first login. The password is
-// made here and shown once to pass on. Built from Immich's own form (ImmichForm,
-// ImmichTextInput, ImmichEmailInput). Data: admin.service.dart.
+// SelfPhotos: Memento admin, adding a person: name, email and storage limit.
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -25,7 +21,7 @@ class _AdminAddUserPageState extends ConsumerState<AdminAddUserPage> {
   final _name = TextEditingController();
   final _email = TextEditingController();
   final _quota = TextEditingController();
-  bool _saving = false; // leaving now would lose the password: the back button waits
+  bool _saving = false;
 
   @override
   void dispose() {

@@ -1,8 +1,5 @@
 // SelfPhotos Ask Photos: a question in plain English → matching photos, answered by Memento's
-// extras service (POST /extras/ask) through the shared client. The search page offers it as
-// one more search type ("Ask"); AskSearchService hands such searches here and everything else
-// to Immich's own SearchService, so the results show in Immich's grid. Not part of Immich.
-// See SelfPhotos FEATURES.md, section 4.
+// extras service (POST /extras/ask) through the shared client.
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/domain/models/search_result.model.dart';
 import 'package:immich_mobile/domain/services/search.service.dart';
@@ -13,17 +10,17 @@ import 'package:immich_mobile/selfphotos/extras_client.dart';
 import 'package:logging/logging.dart';
 import 'package:openapi/api.dart' as api;
 
-/// How a question was read, for the chips above its results, plus hints (how to make "me"
-/// work) and the message when it couldn't be answered (Ask switched off, too long, …).
+/// How a question was read, for the chips above its results, plus hints (how to make "me" work)
+/// and the message when it couldn't be answered (Ask switched off, too long, …).
 class AskUnderstood {
-  final String question; // the question these belong to
-  final String text; // the words left for the search model; '' when none
+  final String question;
+  final String text;
   final List<String> people;
   final String? dates;
-  final String? place; // a place in the asker's photos, e.g. Goa
-  final String? type; // IMAGE or VIDEO
+  final String? place;
+  final String? type;
   final bool favorite;
-  final String? order; // newest or oldest
+  final String? order;
   final List<String> hints;
 
   const AskUnderstood({
@@ -103,7 +100,7 @@ class AskService {
         },
       );
       if (question != _question) {
-        return null; // a newer question was asked meanwhile
+        return null;
       }
       if (body is Map && body['assets'] is List) {
         if (page == 1 && body['understood'] is Map) {
@@ -122,7 +119,6 @@ class AskService {
     }
 
     if (question == _question) {
-      // Shown with the question's chips; no more pages are tried.
       _cursor = null;
       final current = understood.state;
       understood.state = current?.question == question

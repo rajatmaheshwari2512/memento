@@ -53,8 +53,7 @@ class GradientBorderPainter extends CustomPainter {
   final double animation;
   final double strokeWidth;
   final double opacity = 0.7;
-  // SelfPhotos: neutral greys to match the black-and-white Memento mark (readable on light
-  // and dark backgrounds), instead of Immich's five colours.
+  // SelfPhotos: neutral greys to match the black-and-white Memento mark, instead of Immich's five colours.
   final colors = [
     const Color(0xFF9E9E9E),
     const Color(0xFF616161),

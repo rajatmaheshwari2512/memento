@@ -1,6 +1,4 @@
-// SelfPhotos: Memento admin, one person: storage and its limit, photos, AI edits and their
-// own daily limit, logged-in devices, and what an admin can do (admin rights, a new
-// password, remove or restore). One action at a time. Data: admin.service.dart.
+// SelfPhotos: Memento admin, one person.
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/extensions/build_context_extensions.dart';
@@ -25,7 +23,7 @@ class AdminUserPage extends ConsumerStatefulWidget {
 }
 
 class _AdminUserPageState extends ConsumerState<AdminUserPage> {
-  bool _busy = false; // an action is running: the others wait, so nothing runs twice
+  bool _busy = false;
 
   String get _userId => widget.userId;
   AdminService get _service => ref.read(adminServiceProvider);
@@ -172,9 +170,7 @@ class _AdminUserPageState extends ConsumerState<AdminUserPage> {
     final ai = person.aiEdits;
     final stats = ref.watch(adminStatisticsProvider(_userId)).valueOrNull;
     final days = ref.watch(adminDeleteDelayProvider).valueOrNull;
-    // Immich refuses these for your own account anyway.
     final isMe = ref.watch(currentUserProvider)?.id == _userId;
-    // Only a removed person whose deletion hasn't started can come back.
     final restorable = person.removed && user.status == UserStatus.deleted;
     return Scaffold(
       appBar: AppBar(

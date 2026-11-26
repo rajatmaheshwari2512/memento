@@ -1,6 +1,4 @@
-// SelfPhotos live albums: the list, opened from Library → Live albums. Not part of Immich.
-// Built from the app's own pieces (theme, ConfirmDialog, ImmichToast, face thumbnails) so
-// it looks like the rest of Memento.
+// SelfPhotos live albums: the list, opened from Library → Live albums.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -35,7 +33,6 @@ class _LiveAlbumsPageState extends ConsumerState<LiveAlbumsPage> {
   void initState() {
     super.initState();
     unawaited(_reload());
-    // Saving fills the album in the background; keep the counts fresh while open.
     _refresh = Timer.periodic(const Duration(seconds: 15), (_) => unawaited(_reload()));
   }
 

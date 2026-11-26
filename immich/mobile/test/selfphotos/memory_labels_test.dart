@@ -1,5 +1,3 @@
-// SelfPhotos themed memories: Memento's titles where Immich writes "N years ago", loaded in the
-// background and never in the way (lib/selfphotos/memories/memory_labels.dart).
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/domain/models/memory.model.dart';
@@ -43,19 +41,15 @@ void main() {
     expect(getMemoryTitle(t, _memory('immich-own')), isNot('Spotlight: Mom'));
     expect(changes, 1);
 
-    // Asked at most once a minute: the providers that load memories call it on every load.
     await container.read(memoryLabelsProvider.notifier).refresh();
     expect(asked, 1);
 
-    // A new notifier (an app restart) asks again; the service down keeps the last titles and
-    // tells no one (the memories don't load again for nothing).
     answer = Future.error(Exception('connection refused'));
     final restarted = ProviderContainer(overrides: [memoryLabelsSourceProvider.overrideWithValue(() => answer)]);
     addTearDown(restarted.dispose);
     await restarted.read(memoryLabelsProvider.notifier).refresh();
     expect(getMemoryTitle(t, _memory('made-by-memento')), 'Spotlight: Mom');
 
-    // Switched off (the source answers nothing): Immich's own title again.
     final off = ProviderContainer(overrides: [memoryLabelsSourceProvider.overrideWithValue(() async => {})]);
     addTearDown(off.dispose);
     await off.read(memoryLabelsProvider.notifier).refresh();

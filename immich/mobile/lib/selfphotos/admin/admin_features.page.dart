@@ -1,8 +1,4 @@
-// SelfPhotos: Memento admin, Memento's switches and limits: the same list as the web's
-// Administration → Settings → Memento Features, described by Memento's service
-// (GET /admin/settings), so a new switch shows up here without an app update. Built from the
-// app's own settings pieces (SavedSwitchTile, around SettingsSwitchListTile; SettingListTile;
-// SettingGroupTitle).
+// SelfPhotos: Memento admin, Memento's switches and limits.
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/selfphotos/admin/admin.service.dart';
@@ -44,7 +40,7 @@ class AdminFeaturesPage extends ConsumerWidget {
   }
 }
 
-/// Saves a change; on failure says why. The page loads again either way (AdminService).
+/// Saves a change; on failure says why.
 Future<bool> _save(BuildContext context, WidgetRef ref, String key, Object value) async {
   try {
     await ref.read(adminServiceProvider).changeSetting(key, value);

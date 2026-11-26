@@ -1,11 +1,3 @@
-// SelfPhotos Adjust's Auto and Perspective on a Pixel 9 (about 411×923 dp). Auto is first in the
-// Adjust tab's slider row and sets the sliders from the photo; again sets them again. Perspective
-// is a mode of the Straighten tab: the photo shows whole with four corners that a finger drags
-// (a magnifier shows the spot under it) and the result shows back in Straighten; Reset puts the
-// corners back. Pumps the real page, opened as the app opens it, with the app's fonts and theme
-// and a stand-in preview: a dull photo of a building that leans back.
-//
-// With SELFPHOTOS_SCREENSHOTS set to a folder, screenshots of each step are saved there.
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -31,12 +23,8 @@ import 'pixel9.dart';
 
 final _screenKey = GlobalKey();
 
-// Where the building's corners are in the stand-in photo (shares of it): it leans back, narrower
-// at the top.
 const _building = [(0.32, 0.2), (0.68, 0.2), (0.82, 0.9), (0.18, 0.9)];
 
-// A stand-in photo, portrait, dull and a little dark and blue: a pale sky, a grey building that
-// leans back with rows of windows, and the ground.
 Future<ui.Image> _photo() {
   const size = Size(300, 400);
   Offset at((double, double) p) => Offset(p.$1 * size.width, p.$2 * size.height);
@@ -60,7 +48,6 @@ Future<ui.Image> _photo() {
     final top = 0.24 + row * 0.072;
     final bottom = top + 0.04;
     for (final (from, to) in [(0.12, 0.3), (0.41, 0.59), (0.7, 0.88)]) {
-      // Across the building at that height.
       (double, double) on(double share, double y) {
         final t = (y - 0.2) / 0.7;
         final left = 0.32 + (0.18 - 0.32) * t;
@@ -85,8 +72,6 @@ void main() {
   setUp(() async => ctx = await PresentationContext.create());
   tearDown(() async => ctx.dispose());
 
-  // Adjust's page on [tab], opened over an empty page as the app opens it over the viewer; loaded
-  // and idle.
   Future<void> pumpPage(WidgetTester tester, RemoteAsset asset, AdjustTab tab) async {
     usePixel9(tester);
     preview = (await tester.runAsync(_photo))!;
@@ -118,7 +103,6 @@ void main() {
         ),
       ),
     );
-    // The shader, the files and the preview load outside the test's clock.
     for (var i = 0; i < 100 && find.byType(CustomPaint).evaluate().length < 3; i++) {
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
       await tester.pump();
@@ -130,7 +114,6 @@ void main() {
   Future<void> screenshot(WidgetTester tester, String name, {bool settle = true}) =>
       saveScreenshot(tester, find.byKey(_screenKey), name, settle: settle);
 
-  // The slider shown, by its name: its value.
   double slider(WidgetTester tester, String label) =>
       tester.widget<LabelledSlider>(find.widgetWithText(LabelledSlider, label)).value;
 
@@ -141,7 +124,6 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  // A tap that runs code outside the test's clock (Auto reads the photo's pixels).
   Future<void> tapAndWait(WidgetTester tester, Finder finder) async {
     await tester.ensureVisible(finder);
     await tester.pumpAndSettle();
@@ -173,7 +155,6 @@ void main() {
     expect(slider(tester, 'Contrast'), closeTo(expected[AdjustSlider.contrast]! * 100, 1e-9));
     await screenshot(tester, 'android-pixel9-2-auto-after');
 
-    // Moved by hand, then Auto again: back to the photo's own values; tint isn't Auto's.
     await tap(tester, choice('Tint'));
     await tester.drag(find.byType(Slider), const Offset(60, 0));
     await tester.pumpAndSettle();
@@ -197,12 +178,11 @@ void main() {
 
     await tap(tester, choice('Perspective'));
     expect(find.byType(PerspectiveCorners), findsOneWidget);
-    expect(find.byType(LabelledSlider), findsNothing); // the angle is Straighten's
+    expect(find.byType(LabelledSlider), findsNothing);
     final photo = tester.widget<PerspectiveCorners>(find.byType(PerspectiveCorners)).photo;
     final origin = tester.getTopLeft(find.byType(PerspectiveCorners));
     Offset onScreen((double, double) p) => origin + photo.topLeft + Offset(p.$1 * photo.width, p.$2 * photo.height);
 
-    // Each corner of the photo onto the building's.
     const corners = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)];
     for (var i = 0; i < 4; i++) {
       final gesture = await tester.startGesture(onScreen(corners[i]));
@@ -211,7 +191,6 @@ void main() {
         await tester.pump(const Duration(milliseconds: 16));
       }
       if (i == 3) {
-        // The finger still down: the magnifier shows.
         expect(find.byType(RawMagnifier), findsOneWidget);
         await screenshot(tester, 'android-pixel9-3-perspective-corners', settle: false);
       }
@@ -229,9 +208,6 @@ void main() {
     expect(find.byType(PerspectiveCorners), findsNothing);
     await screenshot(tester, 'android-pixel9-4-perspective-result');
 
-    // The result: the photo's box takes the crop's shape (the photo's own 3:4 here, which holds the
-    // building, in the middle of it), and in it the building stands straight, whole, where the
-    // maths says.
     final source = AdjustSize(preview.width, preview.height);
     final crop = outputSize(0, source, placed);
     final box = tester.getRect(find.byType(MarkupLayer));
@@ -246,8 +222,6 @@ void main() {
     }
     final shot = await capture(tester, find.byKey(_screenKey));
     final pixels = (await tester.runAsync(() => shot.toByteData(format: ui.ImageByteFormat.rawRgba)))!;
-    // The sky is bluish, the building and its windows grey: where it starts and ends across the box
-    // at a height (a share of the box), as shares of the box's width.
     (double, double) across(double y) {
       final row = ((box.top + box.height * y) * pixel9Ratio).round();
       int? left;
@@ -284,28 +258,24 @@ void main() {
     Offset onScreen((double, double) p) => origin + photo.topLeft + Offset(p.$1 * photo.width, p.$2 * photo.height);
     const hint = "Corners can't get that close or cross.";
 
-    // The top left corner dragged across to the bottom right: refused all the way.
     final gesture = await tester.startGesture(onScreen((0, 0)));
     for (var step = 1; step <= 10; step++) {
       await gesture.moveTo(Offset.lerp(onScreen((0, 0)), onScreen((0.95, 0.95)), step / 10)!);
       await tester.pump(const Duration(milliseconds: 16));
     }
     expect(find.text(hint), findsOneWidget);
-    await tester.pump(const Duration(milliseconds: 400)); // faded in
+    await tester.pump(const Duration(milliseconds: 400));
     await screenshot(tester, 'android-pixel9-5-perspective-hint', settle: false);
     await gesture.up();
     await tester.pump(const Duration(milliseconds: 100));
-    // The corner went as far as it could, not across.
     final corners = tester.widget<PerspectiveCorners>(find.byType(PerspectiveCorners)).corners!;
     expect(corners[0].$1, lessThan(0.9));
-    // Gone after a moment.
     await tester.pump(const Duration(seconds: 3));
     await tester.pumpAndSettle();
     expect(find.text(hint), findsNothing);
   });
 }
 
-// Where [corner] (a share of the photo) shows in perspective's crop (shares of it).
 (double, double) _inCrop((double, double) corner, AdjustSize source, Quad perspective) {
   final view = framing(0, source, perspective);
   final (x, y) = project(invert(view.toPhoto!), (corner.$1 * source.width, corner.$2 * source.height));

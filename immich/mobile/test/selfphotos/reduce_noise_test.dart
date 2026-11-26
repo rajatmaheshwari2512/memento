@@ -1,14 +1,9 @@
-// SelfPhotos Reduce noise: what the app asks Memento's extras service (memento-extras
-// videos.controller.ts answers it), and how it follows a job to the end, with a stand-in for the
-// service.
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:immich_mobile/selfphotos/extras_client.dart';
 import 'package:immich_mobile/selfphotos/reduce_noise/reduce_noise.service.dart';
 
-// Answers each request with the next of [answers] (an answer, or an error to throw), and keeps
-// what was asked.
 class _Service extends ExtrasClient {
   final List<Object> answers;
   final requests = <String>[];
@@ -118,7 +113,6 @@ void main() {
     expect(asked, greaterThan(1));
     await Future<void>.delayed(const Duration(milliseconds: 30));
     expect(service.requests.length, asked, reason: 'no longer asked about');
-    // Followed no more: a new tap starts it again.
     service.answers.insert(0, {'jobId': 'j7', 'state': 'done', 'assetId': 'copy-7'});
     expect(await follower.run('v7', onStarted: () {}), isA<ReduceNoiseDone>());
   });

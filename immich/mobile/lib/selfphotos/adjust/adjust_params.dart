@@ -1,7 +1,5 @@
-// SelfPhotos Adjust: what the sliders and filters set, and how they become the shader's
-// values (web/src/lib/ai-edit/adjust/adjust-core.glsl). Not part of Immich. The same as the
-// web's adjust-params.ts; the filters are the web's own file
-// (assets/selfphotos/adjust-filters.json links to it).
+// SelfPhotos Adjust: what the sliders and filters set, and how they become the shader's values
+// (web/src/lib/ai-edit/adjust/adjust-core.glsl).
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -9,7 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:immich_mobile/generated/translations.g.dart';
 import 'package:immich_mobile/selfphotos/adjust/adjust_geometry.dart';
 
-/// The sliders, in the order they're shown. Each is -1..1 (shown as -100..100), 0 = unchanged.
+/// The sliders, in the order they're shown.
 enum AdjustSlider {
   exposure(Icons.exposure),
   brightness(Icons.brightness_6_outlined),
@@ -43,8 +41,8 @@ const maxAngle = 45.0;
 
 typedef Rgb = (double, double, double);
 
-/// A filter: some sliders, plus two settings only filters use (fade, and colours pushed into
-/// the shadows and highlights).
+/// A filter: some sliders, plus two settings only filters use (fade, and colours pushed into the
+/// shadows and highlights).
 class AdjustFilter {
   final String id;
   final Map<AdjustSlider, double> sliders;
@@ -102,8 +100,7 @@ List<AdjustFilter> parseAdjustFilters(String json) => [
 Future<List<AdjustFilter>> loadAdjustFilters() async =>
     parseAdjustFilters(await rootBundle.loadString('assets/selfphotos/adjust-filters.json'));
 
-/// Everything the editor holds. [filter] is a filter id or null; [strength] 0..1;
-/// [perspective] the four corners (adjust_geometry.dart), or null for none.
+/// Everything the editor holds.
 @immutable
 class AdjustState {
   final Map<AdjustSlider, double> sliders;
@@ -149,7 +146,6 @@ class AdjustState {
   bool get isUnchanged => filter == null && angle == 0 && perspective == null && sliders.values.every((v) => v == 0);
 }
 
-/// The values the shader takes (adjust-core.glsl's uniforms without the u prefix).
 class ShaderValues {
   final Map<AdjustSlider, double> sliders;
   final double fade;
@@ -159,7 +155,7 @@ class ShaderValues {
   const ShaderValues(this.sliders, this.fade, this.toneShadows, this.toneHighlights);
 }
 
-/// The sliders, plus the filter at its strength. Each ends up -1..1 (fade 0..1).
+/// The sliders, plus the filter at its strength.
 ShaderValues shaderValues(AdjustState state, List<AdjustFilter> filters) {
   final filter = filters.where((f) => f.id == state.filter).firstOrNull;
   final strength = filter == null ? 0.0 : state.strength.clamp(0.0, 1.0);

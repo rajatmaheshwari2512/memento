@@ -1,6 +1,5 @@
 // SelfPhotos Adjust: an Edit button for the photos Immich's own Edit doesn't open (motion
-// photos). It looks like Immich's (same icon and name) and opens Adjust directly. For other
-// photos Adjust is a tab inside Immich's crop screen (selfphotos/adjust/adjust_tabs.dart).
+// photos).
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -20,7 +19,6 @@ class AdjustAction extends AssetActionBuilder {
       return null;
     }
     final asset = ref.watch(ownPhotoProvider(source));
-    // Immich's own Edit is shown for editable photos (see EditAssetAction).
     if (asset == null || asset.isEditable) {
       return null;
     }

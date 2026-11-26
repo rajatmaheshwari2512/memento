@@ -1,21 +1,4 @@
-// SelfPhotos AI tools: highlighting an area, and pasting just that area back. The same steps
-// and numbers as the web's ai-area.ts (see it for why). Not part of Immich.
-//
-//   1. The brush's strokes mark the area. The AI gets the photo, plus a small copy with that
-//      area tinted red (markedCopy), and "change only the highlighted area".
-//   2. Only that area of its result is pasted onto the original, with a soft edge: on the
-//      preview to show it (pasteOnto), and at full size to save it (pasteBack, through the
-//      same tile-by-tile steps as Adjust's copy, so a 50 MP photo is never whole in Flutter).
-// LATER (phase 2, FEATURES.md "Cutting Gemini's cost"; not built): the AI gets the whole photo at
-// 4K (~₹12). Phase 2 sends only a crop of about twice the highlighted area at 2K (~₹4–5.5); the
-// paste here would then place the result over that crop instead of over the whole photo.
-//
-// Strokes are kept in the photo's proportions (x and y from 0 to 1, the radius as a share of
-// the longer side). The result is lined up with the photo first (alignFor, ai_align.dart). If
-// the AI changed the photo's shape, or its result can't be lined up closely enough, nothing is
-// pasted (ShapeChangedException): it would sit crooked on the original. The result was paid for,
-// so it's kept, to use whole or try again; also when anything else goes wrong lining it up or
-// pasting it (refusalOf), on the preview or at full size at Save.
+// SelfPhotos AI tools: highlighting an area, and pasting just that area back.
 import 'dart:io';
 import 'dart:isolate';
 import 'dart:math';
@@ -33,40 +16,29 @@ import 'package:immich_mobile/selfphotos/ai_edit/ai_tools.dart';
 import 'package:path/path.dart' as p;
 
 class AiStroke {
-  final List<Offset> points; // 0–1 across and down
-  final double radius; // a share of the longer side
+  final List<Offset> points;
+  final double radius;
 
   const AiStroke(this.points, this.radius);
 }
 
-/// The AI's result can't be pasted: another shape (portrait for landscape, or a crop), or
-/// ([alignment]) it couldn't be lined up closely enough. The person can still use the whole
-/// result, or try again.
+/// The AI's result can't be pasted.
 class ShapeChangedException implements Exception {
   final AiAlignment? alignment;
 
   const ShapeChangedException([this.alignment]);
 }
 
-/// Why a paid highlighted edit's result is kept unpasted, to use whole or try again: [shape] for
-/// the normal refusal (ShapeChangedException), [failed] for anything else that went wrong lining
-/// it up or pasting it (it was paid for, so it's never thrown away). Each has its own note.
 enum AiRefusal { shape, failed }
 
 /// As the web's refusalOf (ai-area.ts).
 AiRefusal refusalOf(Object error) => error is ShapeChangedException ? AiRefusal.shape : AiRefusal.failed;
 
-/// The photo can't be read here at full size ([isFullSize]), only Immich's preview of it: a
-/// highlighted edit's copy couldn't be saved (the service refuses one that isn't full size), so the
-/// edit isn't made (said before anything is paid for), nor its copy pasted.
 class NeedsOriginalException implements Exception {
   const NeedsOriginalException();
 }
 
-/// For a first highlighted edit: the photo upright, as the paste starts from it (Adjust's
-/// full-size reading), at most [AiAreaSettings.photoLongSide], as a JPEG for the AI, and that
-/// picture (for the mark, so the two match; the caller disposes it). [service] and [native] read
-/// the photo (a test can stand in for them).
+/// For a first highlighted edit.
 Future<({Uint8List jpeg, ui.Image image})> uprightPhoto(
   RemoteAsset asset,
   AiAreaSettings area, {
@@ -168,8 +140,7 @@ Future<ui.Image> _draw(AdjustSize size, void Function(Canvas canvas) draw) {
   return picture.toImage(size.width, size.height).whenComplete(picture.dispose);
 }
 
-/// The copy the AI gets with the photo: [image] (what the user brushed on), small, with the
-/// highlighted area tinted red, as a JPEG (encoded on the Android side, as Adjust's copies are).
+/// The copy the AI gets with the photo.
 Future<Uint8List> markedCopy(
   ui.Image image,
   List<AiStroke> strokes,
@@ -185,7 +156,6 @@ Future<Uint8List> markedCopy(
       bounds,
       Paint()..filterQuality = FilterQuality.medium,
     );
-    // Drawn solid on a layer first, so overlapping strokes aren't darker.
     canvas.saveLayer(bounds, Paint()..color = Color.fromRGBO(0, 0, 0, area.tintAlpha));
     paintStrokes(canvas, strokes, bounds.size, area.tintColor);
     canvas.restore();
@@ -205,7 +175,7 @@ Future<Uint8List> markedCopy(
   }
 }
 
-/// Softens a mask's edges: three box blurs, about a Gaussian's, as the web does.
+/// Softens a mask's edges: three box blurs, about a Gaussian's.
 Float32List feather(Float32List alpha, int width, int height, int radius) {
   var soft = alpha;
   for (var n = 0; n < 3; n++) {
@@ -214,8 +184,8 @@ Float32List feather(Float32List alpha, int width, int height, int radius) {
   return soft;
 }
 
-/// The highlighted area: white with soft edges on transparent, small (it's stretched to any
-/// size), and the part of the photo it covers (0–1), or null when it covers nothing.
+/// The highlighted area: white with soft edges on transparent, small (it's stretched to any size),
+/// and the part of the photo it covers (0–1), or null when it covers nothing.
 class AiMask {
   final ui.Image image;
   final Rect? bounds;
@@ -244,7 +214,6 @@ Future<AiMask> areaMask(List<AiStroke> strokes, AdjustSize shape, AiAreaSettings
   for (var y = 0; y < size.height; y++) {
     for (var x = 0; x < size.width; x++) {
       final value = soft[y * size.width + x].round().clamp(0, 255);
-      // White, premultiplied: only the alpha matters where it's used.
       out.setAll((y * size.width + x) * 4, [value, value, value, value]);
       if (value > 0) {
         (x0, y0, x1, y1) = (min(x0, x), min(y0, y), max(x1, x), max(y1, y));
@@ -283,9 +252,6 @@ Future<Grey> _valuesOf(ui.Image image, AdjustSize size, double Function(Uint8Lis
 Future<Grey> _greyOf(ui.Image image, AdjustSize size) =>
     _valuesOf(image, size, (rgba, i) => 0.299 * rgba[i] + 0.587 * rgba[i + 1] + 0.114 * rgba[i + 2]);
 
-/// How to line [result] up with [base] (the photo as shown) before pasting the highlighted area,
-/// measured once and used for the preview and the full-size copy alike. Throws
-/// ShapeChangedException when the result has another shape or can't be lined up closely enough.
 Future<AiAlignment> alignFor(ui.Image base, ui.Image result, List<AiStroke> strokes, AiAreaSettings area) async {
   final shape = AdjustSize(base.width, base.height);
   if (!sameShape(AdjustSize(result.width, result.height), shape, area.shapeTolerance)) {
@@ -297,7 +263,6 @@ Future<AiAlignment> alignFor(ui.Image base, ui.Image result, List<AiStroke> stro
   final mask = await areaMask(strokes, size, area);
   final changed = await _valuesOf(mask.image, size, (rgba, i) => rgba[i + 3].toDouble());
   mask.dispose();
-  // A fraction of a second of matching: off the screen's thread.
   final alignment = await Isolate.run(() => estimateAlignment(photo, edited, changed));
   if (alignment != null && alignment.error > area.maxMisalignment) {
     throw ShapeChangedException(alignment);
@@ -343,8 +308,6 @@ Future<ui.Image> _pasteTile(
   });
 }
 
-/// The highlighted area of [result] pasted onto [base] (the preview), at base's size, lined up
-/// by [alignment] (alignFor), to show.
 Future<ui.Image> pasteOnto(
   ui.Image base,
   ui.Image result,
@@ -364,11 +327,7 @@ Future<ui.Image> pasteOnto(
   }
 }
 
-/// The copy saved for an edit of a highlighted area: the original at full size, read as
-/// Adjust reads it, with that area of [result] pasted on, lined up as on the preview. Only from the
-/// photo at full size ([isFullSize]): from anything smaller (NeedsOriginalException), nothing is
-/// pasted or sent. Tiles outside the area are copied as they are, without going through Flutter.
-/// [service] and [native] read the photo (a test can stand in for them).
+/// The copy saved for an edit of a highlighted area.
 Future<AdjustExport> pasteBack(
   RemoteAsset asset,
   ui.Image result,
@@ -418,7 +377,7 @@ Future<AdjustExport> pasteBack(
           part.dispose();
         }
         try {
-          final bytes = await pasted.toByteData(); // RGBA, premultiplied, as the native side takes it
+          final bytes = await pasted.toByteData();
           await native.write(tile, bytes!.buffer.asUint8List());
         } finally {
           pasted.dispose();

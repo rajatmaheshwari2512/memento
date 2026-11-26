@@ -1,10 +1,5 @@
 // SelfPhotos Adjust: Perspective's four corners, on the photo shown whole and unwarped (the same
-// as the web's AdjustPerspective.svelte). Each is dragged onto a line that should be straight,
-// such as a building's edge; outside them is dimmed, and a magnifier above the finger shows the
-// spot under it. The photo is then warped so the four make a rectangle (adjust_geometry.dart),
-// which shows when the Straighten mode is chosen again. A move that would bring corners too close,
-// cross them over, or stretch the photo too far, is refused, and a brief message says so (once a
-// drag). Not part of Immich.
+// as the web's AdjustPerspective.svelte).
 import 'package:flutter/material.dart';
 import 'package:immich_mobile/extensions/build_context_extensions.dart';
 import 'package:immich_mobile/generated/translations.g.dart';
@@ -12,8 +7,7 @@ import 'package:immich_mobile/selfphotos/adjust/adjust_geometry.dart';
 import 'package:immich_mobile/widgets/common/immich_toast.dart';
 
 class PerspectiveCorners extends StatefulWidget {
-  /// Where the photo is, inside this widget (which may be larger, so a corner on the photo's edge
-  /// can be grabbed from outside it too).
+  /// Where the photo is, inside this widget.
   final Rect photo;
 
   /// The corners, or null for the photo's own.
@@ -38,11 +32,9 @@ class PerspectiveCorners extends StatefulWidget {
 }
 
 class _PerspectiveCornersState extends State<PerspectiveCorners> {
-  // The corner being dragged, how far the finger is from its exact spot, and where the finger is.
   int? _dragging;
   Offset _offset = Offset.zero;
   Offset? _finger;
-  // This drag has said a move was refused.
   bool _hinted = false;
 
   Quad get _corners => widget.corners ?? photoCorners();
@@ -113,7 +105,6 @@ class _PerspectiveCornersState extends State<PerspectiveCorners> {
               colour: context.primaryColor,
             ),
           ),
-          // Above the finger (below it near the top), showing the spot under it twice as large.
           if (finger != null && dragging != null)
             () {
               final spot = _onScreen(_corners[dragging]);
@@ -184,7 +175,6 @@ class _CornersPainter extends CustomPainter {
     );
     for (final (index, corner) in corners.indexed) {
       if (index == dragging) {
-        // A ring, so the photo under it shows (in the magnifier too).
         for (final (width, ring) in [(4.5, Colors.black87), (2.0, Colors.white)]) {
           canvas.drawCircle(
             corner,

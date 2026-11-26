@@ -1,6 +1,4 @@
-// SelfPhotos Ask Photos on the search page (lib/presentation/pages/search/search.page.dart):
-// the "Ask" search type in its menu, and the chips for how a question was read. Built from
-// the page's own pieces (the menu item's look, SearchFilterChip). Not part of Immich.
+// SelfPhotos Ask Photos on the search page (lib/presentation/pages/search/search.page.dart).
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/extensions/build_context_extensions.dart';
@@ -12,8 +10,7 @@ import 'package:immich_mobile/widgets/search/search_filter/search_filter_chip.da
 const askSearchIcon = Icons.auto_awesome_outlined;
 const askSearchHint = 'Ask anything, e.g. "Mom and me at the beach last December"';
 
-/// The "Ask" entry of the search-type menu, like the entries next to it. Only when an admin
-/// has Ask Photos on (Administration → Settings → Memento Features).
+/// The "Ask" entry of the search-type menu, like the entries next to it.
 class AskSearchTypeItem extends ConsumerWidget {
   final bool selected;
   final VoidCallback onPressed;
@@ -43,8 +40,7 @@ class AskSearchTypeItem extends ConsumerWidget {
   }
 }
 
-/// In place of the filter chips' row: the row itself, or in Ask mode, chips for how the
-/// current question was read (the question sets people, dates and kinds itself) and any hints.
+/// In place of the filter chips' row.
 class AskOrFilterRow extends ConsumerWidget {
   final bool ask;
   final String? question;
@@ -54,7 +50,6 @@ class AskOrFilterRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Keeps the flags loaded while the search page is open, so the menu's Ask item is ready.
     ref.watch(mementoFlagsProvider);
     if (!ask) {
       return SliverToBoxAdapter(child: child);

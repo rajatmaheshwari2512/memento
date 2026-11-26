@@ -1,6 +1,3 @@
-// SelfPhotos Adjust: Flutter runs the shared shader and must give the pixels the web's WebGL
-// gives (web/src/lib/ai-edit/adjust/adjust-parity.json, made by the web's tests), within 2
-// of 255. Runs on flutter test's software renderer; a phone's GPU is checked by hand.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -18,7 +15,6 @@ import 'package:immich_mobile/selfphotos/adjust/adjust_shader.dart';
 
 import '../unit/factories/remote_asset_factory.dart';
 
-// The photo as the phone reads it, stubbed: one download, opened by [_Native].
 class _Source extends AdjustService {
   const _Source();
 
@@ -29,8 +25,6 @@ class _Source extends AdjustService {
   Future<void> download(String url, File file) => file.writeAsBytes(const [0]);
 }
 
-// The Android side, stubbed: [pixels] (RGBA, opaque) is the photo; the tiles written are gathered
-// in [output].
 class _Native extends AdjustNative {
   final AdjustSize source;
   final Uint8List pixels;
@@ -135,8 +129,6 @@ void main() {
     });
   });
 
-  // The full-size save draws tiles, each from just its part of the source (as the Android
-  // side reads it): the tiles together must be the one-pass picture.
   testWidgets('tiles from parts of the source give the one-pass picture', (tester) async {
     await tester.runAsync(() async {
       const source = AdjustSize(61, 43);
@@ -200,10 +192,6 @@ void main() {
     });
   });
 
-  // The full-size save with perspective and straighten: the exporter's tiles, each from the part
-  // of the photo the Android side reads, make the one-pass picture, at the size outputSize gives.
-  // Small tiles, shrunk further to keep their parts of the photo within a small limit, in several
-  // rows and columns, those on the right and bottom edges cut short.
   testWidgets('the full-size save warps for perspective, with straighten and the sliders', (tester) async {
     await tester.runAsync(() async {
       const source = AdjustSize(1301, 903);

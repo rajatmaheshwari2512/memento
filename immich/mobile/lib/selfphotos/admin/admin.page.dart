@@ -1,7 +1,5 @@
-// SelfPhotos: Memento admin, the list of people (Settings → Memento admin, admins only), and
-// the way to add one.
-// Built from the app's own pieces (SettingGroupTitle, SettingListTile, UserCircleAvatar,
-// Immich's own labels). Data: admin.service.dart.
+// SelfPhotos: Memento admin, the list of people (Settings → Memento admin, admins only), and the
+// way to add one.
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/extensions/build_context_extensions.dart';

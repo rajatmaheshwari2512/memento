@@ -1,7 +1,5 @@
 // SelfPhotos editor: the editor's tabs, shown in both Immich's crop screen (Crop chosen) and
-// Adjust's pages (Adjust, Filters, Straighten, Markup), so they read as one editor: Immich's own
-// column buttons, the chosen one in the primary colour. Adjust's tabs show only when Adjust is on.
-// AI Edit isn't a tab: it has its own button (ai_edit.action.dart). Not part of Immich.
+// Adjust's pages (Adjust, Filters, Straighten, Markup).
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/constants/enums.dart';
@@ -35,8 +33,7 @@ enum AdjustTab {
   bool get isAdjust => this != crop;
 }
 
-/// Opens Adjust's page on [tab]. Its Crop tab closes it (Immich's crop screen is underneath
-/// when [fromCropScreen]). Returns whether a copy was saved.
+/// Opens Adjust's page on [tab].
 Future<bool> openEditor(
   NavigatorState navigator,
   RemoteAsset asset,
@@ -53,7 +50,7 @@ Future<bool> openEditor(
 
 class AdjustTabs extends StatelessWidget {
   final AdjustTab active;
-  final bool showCrop; // Immich's crop screen opens for this photo
+  final bool showCrop;
   final bool showAdjust;
   final bool enabled;
   final ValueChanged<AdjustTab> onSelect;
@@ -69,8 +66,6 @@ class AdjustTabs extends StatelessWidget {
 
   bool _shown(AdjustTab tab) => tab == AdjustTab.crop ? showCrop : showAdjust;
 
-  // Spread evenly, as Immich's own; where all five are wider than the room (a phone 360 wide, or
-  // a larger font), they're made a little smaller together, so they stay on one row.
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
@@ -102,8 +97,6 @@ class AdjustTabs extends StatelessWidget {
   }
 }
 
-/// Immich's own column button (an icon over its name, as in the viewer's bottom bar), the
-/// chosen one in the primary colour.
 class AdjustChoice extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -129,11 +122,8 @@ class AdjustChoice extends StatelessWidget {
   }
 }
 
-/// [AdjustChoice]s in a row that scrolls sideways (Adjust's sliders, AI Edit's presets), each
-/// with [gap] on either side. With [lineUp] (AI Edit's presets) they line up: each as wide as the
-/// widest a column button gets (its name at most 90 wide, plus its padding), so short and long
-/// names take the same room, and all at the top, so a name on two lines doesn't push its icon
-/// down out of line with the others. Adjust's sliders keep their own widths.
+/// [AdjustChoice]s in a row that scrolls sideways (Adjust's sliders, AI Edit's presets), each with
+/// [gap] on either side.
 class AdjustChoiceRow extends StatelessWidget {
   final double gap;
   final List<AdjustChoice> choices;
@@ -162,10 +152,7 @@ class AdjustChoiceRow extends StatelessWidget {
   }
 }
 
-/// Adjust's tabs inside Immich's crop screen (edit.page.dart), with Crop chosen. Adjust's page
-/// opens on top of it, and its Crop tab comes back here; after saving a copy, both close.
-/// The crop screen only opens from the photo viewer (EditAssetAction(source: .viewer) is its
-/// one entry), so the photo is the viewer's.
+/// Adjust's tabs inside Immich's crop screen (edit.page.dart), with Crop chosen.
 class AdjustEntryTabs extends ConsumerWidget {
   const AdjustEntryTabs({super.key});
 

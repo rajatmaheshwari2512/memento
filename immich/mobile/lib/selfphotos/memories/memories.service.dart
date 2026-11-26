@@ -1,11 +1,7 @@
-// SelfPhotos themed memories: calls to Memento's extras service (memento-extras) through the
-// shared client. Memento makes memories of its own (Spotlight on a person, Best of last month,
-// trips, big days, a weekly card) as normal Immich memories, keeps a short title for each,
-// and lets each person turn them (and weekly collages and recap videos) on or off.
+// SelfPhotos themed memories.
 import 'package:immich_mobile/selfphotos/extras_client.dart';
 
-/// The person's own choices. [pausedReason]: why Memento stopped making them (e.g. its key
-/// was deleted in Immich), or null.
+/// The person's own choices.
 class MemorySettings {
   final bool enabled;
   final bool creations;
@@ -41,8 +37,7 @@ class MemoriesService {
 
   Future<MemorySettings> settings() async => MemorySettings.fromJson(await _client.send('GET', '/memories/settings'));
 
-  /// Turning [enabled] on makes a key in the person's name in Immich (so memories can be made
-  /// at night); the app's login is a session, which that needs.
+  /// Turning [enabled] on makes a key in the person's name in Immich.
   Future<MemorySettings> change({bool? enabled, bool? creations}) async => MemorySettings.fromJson(
     await _client.send('PUT', '/memories/settings', body: {'enabled': ?enabled, 'creations': ?creations}),
   );

@@ -1,10 +1,4 @@
-// SelfPhotos Adjust for Android: light and colour sliders, filters, straighten and markup, saved
-// as a copy stacked on the original (the same save as AI Edit). Not part of Immich.
-//
-// Laid out like Immich's crop screen (presentation/pages/edit/edit.page.dart): dark theme,
-// black app bar with close, title and a done button, the photo on black, and a rounded panel
-// with the tools and Reset. The live preview is Immich's preview drawn through the shared
-// shader at screen size; Save renders the photo at full size (adjust_export.dart).
+// SelfPhotos Adjust for Android.
 import 'dart:async';
 import 'dart:ui' as ui;
 
@@ -34,7 +28,7 @@ class AdjustPage extends ConsumerStatefulWidget {
   final RemoteAsset asset;
   final AdjustTab tab;
 
-  /// Opened from Immich's crop screen, which is still underneath: the Crop tab goes back.
+  /// Opened from Immich's crop screen.
   final bool fromCropScreen;
 
   const AdjustPage({super.key, required this.asset, this.tab = AdjustTab.adjust, this.fromCropScreen = false});
@@ -59,9 +53,7 @@ class _AdjustPageState extends ConsumerState<AdjustPage> {
   double _progress = 0;
   bool _comparing = false;
   AutoSettings? _autoSettings;
-  // Straighten's Perspective mode: the photo shown whole, unwarped, with its four corners.
   bool _perspectiveMode = false;
-  // What's drawn on the photo (the Markup tab), on top of everything else.
   final _markup = MarkupEditor();
 
   bool get _busy => _saving || _shader == null || !ref.read(mementoFeaturesProvider).adjust;
@@ -111,7 +103,6 @@ class _AdjustPageState extends ConsumerState<AdjustPage> {
     }
   }
 
-  // Each filter on the photo, small, drawn once.
   Future<void> _makeThumbnails(AdjustShader shader, ui.Image preview) async {
     final longest = (72 * MediaQuery.devicePixelRatioOf(context)).round();
     final scale = longest / (preview.width > preview.height ? preview.width : preview.height);
@@ -135,7 +126,6 @@ class _AdjustPageState extends ConsumerState<AdjustPage> {
 
   bool get _placingCorners => _tab == AdjustTab.straighten && _perspectiveMode;
 
-  // Auto: the light and colour sliders from the photo itself (adjust_auto.dart).
   Future<void> _auto() async {
     final preview = _preview;
     if (preview == null || _busy) {
@@ -149,12 +139,11 @@ class _AdjustPageState extends ConsumerState<AdjustPage> {
   }
 
   Future<void> _selectTab(AdjustTab tab) async {
-    _markup.select(null); // a text left empty goes
+    _markup.select(null);
     if (tab.isAdjust) {
       setState(() => _tab = tab);
       return;
     }
-    // Crop: back to Immich's crop screen, underneath.
     if (_unchanged || (await confirmEditorDiscard(context) ?? false)) {
       if (mounted) {
         _state = const AdjustState();
@@ -199,7 +188,7 @@ class _AdjustPageState extends ConsumerState<AdjustPage> {
           msg: context.t.editor_copy_from_preview(width: copy.size.width, height: copy.size.height),
         );
       }
-      _state = const AdjustState(); // saved: nothing to ask about on the way out
+      _state = const AdjustState();
       _markup.reset();
       Navigator.of(context).pop(true);
     } catch (error) {
@@ -276,9 +265,6 @@ class _AdjustPageState extends ConsumerState<AdjustPage> {
     final shown = _comparing ? const AdjustState() : (placing ? _state.withAngle(0).withPerspective(null) : _state);
     return LayoutBuilder(
       builder: (context, constraints) {
-        // The picture fitted into the space (as the crop screen does), keeping its shape: the
-        // photo's (straightening keeps it), or perspective's crop's, which may be another (so
-        // Markup's layer, in this box, follows it).
         final maxWidth = constraints.maxWidth * 0.9;
         final maxHeight = constraints.maxHeight * 0.95;
         final view = framing(shown.angle, AdjustSize(preview.width, preview.height), shown.perspective);
@@ -286,7 +272,6 @@ class _AdjustPageState extends ConsumerState<AdjustPage> {
             ? Size(preview.width.toDouble(), preview.height.toDouble())
             : Size(preview.width * view.scale.$1, preview.height * view.scale.$2);
         final scale = [maxWidth / picture.width, maxHeight / picture.height].reduce((a, b) => a < b ? a : b);
-        // Holding the photo shows it as it was, except on the Markup tab, where a finger draws.
         final drawing = _tab == AdjustTab.markup;
         final photo = Center(
           child: GestureDetector(
@@ -318,7 +303,6 @@ class _AdjustPageState extends ConsumerState<AdjustPage> {
         if (!placing) {
           return photo;
         }
-        // The corners take every touch around the photo (no holding to compare here).
         final area = constraints.biggest;
         return Stack(
           children: [
@@ -341,7 +325,6 @@ class _AdjustPageState extends ConsumerState<AdjustPage> {
     );
   }
 
-  // [context] is inside the editor's dark theme (EditorScaffold).
   Widget _buildTool(BuildContext context) => switch (_tab) {
     AdjustTab.adjust || AdjustTab.crop => _buildSliders(),
     AdjustTab.filters => _buildFilters(),
@@ -349,7 +332,6 @@ class _AdjustPageState extends ConsumerState<AdjustPage> {
     AdjustTab.markup => MarkupTools(editor: _markup, enabled: !_busy),
   };
 
-  // One slider at a time, chosen from a row of Immich's column buttons.
   Widget _buildSliders() {
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -418,9 +400,6 @@ class _AdjustPageState extends ConsumerState<AdjustPage> {
     );
   }
 
-  // Two modes, chosen from a row of Immich's column buttons below, as the sliders are: Straighten
-  // (the angle slider) and Perspective (the four corners on the photo; the result shows back in
-  // Straighten).
   Widget _buildStraighten(BuildContext context) {
     final description = _perspectiveMode
         ? context.t.editor_perspective_description
@@ -471,7 +450,6 @@ class LabelledSlider extends StatelessWidget {
   final double value;
   final double min;
   final double max;
-  // How the value is shown: needed unless [hideLabel].
   final String Function(double value)? format;
   final ValueChanged<double>? onChanged;
 
@@ -581,7 +559,6 @@ class _AdjustPainter extends CustomPainter {
       old.values != values || old.degrees != degrees || old.perspective != perspective || old.image != image;
 }
 
-// Thirds, for straightening.
 class _GridPainter extends CustomPainter {
   const _GridPainter();
 

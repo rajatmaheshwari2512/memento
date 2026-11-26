@@ -1,6 +1,5 @@
 // SelfPhotos Reduce noise: the "Reduce noise" button in the video viewer's bottom bar, for one of
-// your own videos (not trashed or locked). It starts the cleaning on the server and the person
-// keeps browsing; the messages follow them (selfphotos/reduce_noise/reduce_noise.service.dart).
+// your own videos (not trashed or locked).
 import 'dart:async';
 
 import 'package:collection/collection.dart';
@@ -13,9 +12,7 @@ import 'package:immich_mobile/presentation/actions/action.dart';
 import 'package:immich_mobile/selfphotos/extras_client.dart';
 import 'package:immich_mobile/selfphotos/reduce_noise/reduce_noise.service.dart';
 
-/// The one video Reduce noise works on: open in the viewer (or the only one selected), yours,
-/// a video, on the server, not trashed or locked. Null otherwise. (AI Edit's ownPhotoProvider,
-/// for videos.)
+/// The one video Reduce noise works on.
 final ownVideoProvider = Provider.family.autoDispose<RemoteAsset?, ActionSource>((ref, source) {
   if (ref.watch(assetsActionProvider(source)).length != 1) {
     return null;
@@ -31,7 +28,6 @@ class ReduceNoiseAction extends AssetActionBuilder {
 
   @override
   ActionItem? create(BuildContext context, WidgetRef ref) {
-    // Hidden when an admin has switched it off. Shown until the check answers.
     if (!ref.watch(mementoFeaturesProvider).reduceNoise) {
       return null;
     }

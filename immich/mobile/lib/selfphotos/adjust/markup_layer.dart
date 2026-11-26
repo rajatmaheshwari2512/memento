@@ -1,15 +1,4 @@
-// SelfPhotos Adjust's Markup for Android: the markup on the photo, painted by the same code as
-// the saved copy (markup.dart paintMarkup) at the size it's shown. On the Markup tab ([active]) a
-// finger draws with the picked tool, as AI Edit's brush does: the layer takes the touches, and
-// nothing under it scrolls or zooms. The pen, highlighter and shapes follow the first finger from
-// where it touches down (others are ignored). The Text tool places a text with a tap; a text is
-// dragged to move it, and resized by its corner handle or by pinching. Not part of Immich. The
-// web's is MarkupLayer.svelte.
-//
-// While a finger moves, only this layer repaints: each move goes into the editor at once (Save and
-// Undo see it, as before), but the page hears of it only when the finger lifts (MarkupEditor.hold),
-// so it isn't rebuilt, nor the photo repainted, on every move. If Undo, Clear or Reset (another
-// finger) took away what's being drawn or dragged, the gesture stops.
+// SelfPhotos Adjust's Markup for Android.
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:immich_mobile/selfphotos/adjust/markup.dart';
@@ -29,14 +18,12 @@ class MarkupLayer extends StatefulWidget {
 
 sealed class _Drag {}
 
-// A line, in the editor since the finger touched down, as it is now.
 class _Line extends _Drag {
   MarkupLine line;
 
   _Line(this.line);
 }
 
-// A shape, in the editor (as it is now) once the finger has moved a little.
 class _Shape extends _Drag {
   final Offset start;
   MarkupShape? shape;
@@ -44,7 +31,6 @@ class _Shape extends _Drag {
   _Shape(this.start);
 }
 
-// A text dragged: [item] as it was, at [index]; [shown] what the drag has made of it so far.
 sealed class _TextDrag extends _Drag {
   final int index;
   final MarkupText item;
@@ -60,38 +46,27 @@ class _Move extends _TextDrag {
   _Move(super.index, super.item, this.start);
 }
 
-// Resizing a text with its corner handle, by the finger's distance from its middle ([distance] at
-// the start).
 class _Resize extends _TextDrag {
   final double distance;
 
   _Resize(super.index, super.item, this.distance);
 }
 
-// Resizing a text by pinching it, by the pinch's scale.
 class _Pinch extends _TextDrag {
   _Pinch(super.index, super.item);
 }
 
 class _MarkupLayerState extends State<MarkupLayer> {
-  // Room around a text that still picks it, and the handle's size (logical pixels).
   static const _textPadding = 8.0;
   static const _handle = 24.0;
 
   _Drag? _drag;
-  // Goes up with each move the editor holds back from the page: this layer repaints.
   final _moves = ValueNotifier(0);
-  // The finger drawing with the pen, highlighter or shapes, until it lifts.
   int? _pointer;
-  // Where a finger went down on the Text tool: a move starts there, not where the drag is
-  // recognised. Used once: a gesture that goes on after a finger of a pinch is lifted does nothing.
   Offset? _down;
 
   MarkupEditor get _editor => widget.editor;
 
-  // The tab left (or Save started) mid-gesture: what was drawn stays, and the next touch draws
-  // anew. The page hears of what the gesture did once this frame is built (it can't be told while
-  // it builds: it listens to the editor).
   @override
   void didUpdateWidget(MarkupLayer old) {
     super.didUpdateWidget(old);
@@ -119,7 +94,6 @@ class _MarkupLayerState extends State<MarkupLayer> {
       return const SizedBox.shrink();
     }
     final changes = Listenable.merge([_editor, _moves]);
-    // Its own layer: what changes here as a finger moves doesn't repaint the photo under it.
     return RepaintBoundary(
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -184,14 +158,11 @@ class _MarkupLayerState extends State<MarkupLayer> {
     );
   }
 
-  // The text being edited, with room around it, while the tab is open.
   Rect? _selectionBox(Size size, MarkupConfig config) {
     final item = widget.active ? _editor.selectedText : null;
     return item == null ? null : _boxOf(item, size, config);
   }
 
-  // A change a drag makes: its first is heard at once (Undo lights up), the rest when the
-  // finger lifts.
   void _change(bool first, VoidCallback change) {
     if (first) {
       change();
@@ -201,13 +172,11 @@ class _MarkupLayerState extends State<MarkupLayer> {
     }
   }
 
-  // The item a drag changes is still there, as the drag left it.
   bool _there(int index, MarkupItem? item) {
     final items = _editor.items;
     return item != null && index >= 0 && index < items.length && identical(items[index], item);
   }
 
-  // A text's box on screen, with room around it; an empty text still shows where it is.
   Rect _boxOf(MarkupText item, Size size, MarkupConfig config) {
     final box = markupTextBox(item, size, config);
     final width = box.width > box.height / 2 ? box.width : box.height / 2;
@@ -217,7 +186,6 @@ class _MarkupLayerState extends State<MarkupLayer> {
   Offset _point(Offset local, Size size) =>
       Offset((local.dx / size.width).clamp(0.0, 1.0), (local.dy / size.height).clamp(0.0, 1.0));
 
-  // The topmost text under [local], if any.
   int? _textAt(Offset local, Size size, MarkupConfig config) {
     final items = _editor.items;
     for (var index = items.length - 1; index >= 0; index--) {
@@ -241,8 +209,6 @@ class _MarkupLayerState extends State<MarkupLayer> {
     );
   }
 
-  // The pen, highlighter and shapes: the first finger draws from where it touches down (a tap
-  // with the pen or highlighter is a dot). On the Text tool, the gestures below take over.
   void _pointerDown(PointerDownEvent event, Size size, MarkupConfig config) {
     if (_editor.tool == MarkupTool.text) {
       _down = event.localPosition;
@@ -286,7 +252,6 @@ class _MarkupLayerState extends State<MarkupLayer> {
           _change(false, () => _editor.amend([..._editor.items]..[last] = next));
           drag.shape = next;
         } else if ((point - start).distance > config.minStep * 5) {
-          // A tap draws nothing; a shape starts once the finger has moved a little.
           _editor.commit([..._editor.items, next]);
           drag.shape = next;
         }
@@ -302,14 +267,11 @@ class _MarkupLayerState extends State<MarkupLayer> {
     }
   }
 
-  // The drag is over: the page hears of what it did.
   void _finish() {
     _drag = null;
     _editor.release();
   }
 
-  // A tap on the Text tool: picks a text, or places a new one (or stops editing, if one is being
-  // edited).
   void _tap(Offset local, Size size, MarkupConfig config) {
     final hit = _textAt(local, size, config);
     if (hit != null) {
@@ -331,7 +293,6 @@ class _MarkupLayerState extends State<MarkupLayer> {
     final local = down ?? details.localFocalPoint;
     final selected = _editor.selectedText;
     final index = _editor.selected;
-    // Two fingers: pinching resizes the text being edited.
     if (details.pointerCount > 1) {
       if (selected != null && index != null) {
         _drag = _Pinch(index, selected);
@@ -435,7 +396,6 @@ class _MarkupPainter extends CustomPainter {
     }
   }
 
-  // The editor and the drag repaint it themselves (repaint).
   @override
   bool shouldRepaint(_MarkupPainter old) => old.config != config || old.active != active;
 }

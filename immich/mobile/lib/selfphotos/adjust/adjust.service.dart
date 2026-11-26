@@ -1,11 +1,4 @@
-// SelfPhotos Adjust: the photo going in and the copy going out. Not part of Immich.
-//
-// What the copy starts from is decided as on the web (adjust-export.ts): the photo as Immich
-// shows it, at the largest size the phone can read:
-//   1. the original, with Immich's own crop/rotate applied if it has any;
-//   2. otherwise Immich's full-size JPEG of it (if the server makes those), else its preview.
-// The copy is saved through Memento's extras service, like AI Edit's results: uploaded,
-// given the original's date and place, and stacked on top of it.
+// SelfPhotos Adjust: the photo going in and the copy going out.
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
@@ -37,7 +30,6 @@ class AdjustService {
 
   Future<void> download(String url, File file) => _client.download(url, file);
 
-  /// Immich's screen-sized preview, for editing live, loaded (and cached) as the viewer does.
   Future<ui.Image> preview(RemoteAsset asset) {
     final provider = RemoteImageProvider(url: getThumbnailUrlForRemoteId(asset.id, type: AssetMediaSize.preview));
     final stream = provider.resolve(ImageConfiguration.empty);
@@ -62,7 +54,7 @@ class AdjustService {
     return completer.future;
   }
 
-  /// Saves the adjusted photo next to the original. Returns the copy's ID.
+  /// Saves the adjusted photo next to the original.
   Future<String> save(String assetId, Uint8List bytes, String mime) async {
     final data = await _client.upload('/adjust/${Uri.encodeComponent(assetId)}/save', bytes, mime);
     if (data is! Map || data['assetId'] is! String) {

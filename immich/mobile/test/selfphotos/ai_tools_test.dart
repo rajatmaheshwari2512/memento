@@ -1,5 +1,3 @@
-// SelfPhotos AI tools: the Android side's list and paste-back maths, checked against the same
-// file and numbers as the web's (web/src/lib/ai-edit/ai/*.spec.ts).
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -19,20 +17,16 @@ import 'package:immich_mobile/selfphotos/ai_edit/ai_tools.dart';
 
 import '../unit/factories/remote_asset_factory.dart';
 
-// The file the app bundles (assets/selfphotos/ai-tools.json links to it).
 final _kit = AiToolkit.parse(File('../web/src/lib/ai-edit/ai/ai-tools.json').readAsStringSync());
 
-// memento-extras refuses longer instructions (MAX_PROMPT_CHARS) and other tool names.
 const _maxPromptChars = 1500;
 final _toolName = RegExp(r'^[a-z][a-z0-9-]{0,39}$');
 
-// The header before several items (the web's test, ai-tools.spec.ts, has the same).
 const _header =
     'Make all of these changes to the photo in one edit. Where an item says to keep something the same, that means apart from the other changes in this list:';
 
 AiTool _tool(String id) => _kit.tools.firstWhere((t) => t.id == id);
 List<String> _ids(List<AiTool> tools) => [for (final t in tools) t.id];
-// The selection after tapping these tools in turn (toggle applies every rule, the cap too).
 List<AiTool> _tapAll(Iterable<AiTool> taps) => taps.fold(const [], _kit.toggle);
 List<AiTool> _pick(List<String> taps) => _tapAll(taps.map(_tool));
 
@@ -44,9 +38,6 @@ Future<ui.Image> _image(int width, int height, List<int> rgba) {
   return imageFromPixels(pixels, width, height);
 }
 
-// The photo's picture as the phone reads it, stubbed: always 600×400, whatever the photo's size as
-// Immich shows it. [_Native] stands in for the Android side: [_Native.outputs] are the sizes of
-// the copies made, and each is "encoded" as [_Native.encoded].
 class _Source extends AdjustService {
   const _Source();
 
@@ -123,7 +114,6 @@ void main() {
     });
 
     test('the longest edit that can be picked fits in what the service accepts', () {
-      // Every pick the rules allow (any three taps), with the longest words (Move's are shorter).
       var longest = 0;
       for (final first in _kit.tools) {
         for (final second in _kit.tools) {
@@ -134,12 +124,11 @@ void main() {
           }
         }
       }
-      expect(longest, greaterThan(1000)); // three instructions and the words
+      expect(longest, greaterThan(1000));
       expect(longest, lessThanOrEqualTo(_maxPromptChars));
     });
   });
 
-  // As the web's (ai-tools.spec.ts 'picking several tools'), with the same cases.
   group('picking several', () {
     test('toggles: several fixes, one style (another swaps it), a style with fixes', () {
       expect(_ids(_pick(['sky', 'enhance'])), ['enhance', 'sky']);
@@ -177,7 +166,6 @@ void main() {
       expect(_kit.blocked(_tool('move'), fixes, highlighted: false), AiBlock.needsHighlight);
       expect(_kit.blocked(_tool('move'), withStyle, highlighted: true), isNull);
       expect(_ids(_kit.toggle(withStyle, _tool('move'))), ['move']);
-      // No style selected to swap: a style waits like any other.
       expect(_kit.blocked(_tool('watercolour'), fixes, highlighted: false), AiBlock.upTo);
       expect(_ids(_kit.toggle(fixes, _tool('watercolour'))), ['enhance', 'unblur', 'sky']);
     });
@@ -185,7 +173,6 @@ void main() {
     test("keeps today's highlight rules: Move needs one, whole-photo tools need none", () {
       expect(_kit.blocked(_tool('move'), const [], highlighted: false), AiBlock.needsHighlight);
       expect(_kit.blocked(_tool('move'), const [], highlighted: true), isNull);
-      // Picked, then the highlight cleared: Move can still be unselected.
       expect(_kit.blocked(_tool('move'), _pick(['move']), highlighted: false), isNull);
       expect(_kit.blocked(_tool('watercolour'), const [], highlighted: true), AiBlock.wholeOnly);
       expect(_kit.blocked(_tool('reframe'), const [], highlighted: true), AiBlock.wholeOnly);
@@ -255,7 +242,6 @@ void main() {
     String name(AiTool tool) => tool.id.toUpperCase();
 
     test("names the tools in order, then the words, joined with ' + '", () {
-      // Picked Watercolour, then Enhance: in ai-tools.json's order, as toggle keeps them.
       expect(combinedLabel(_pick(['watercolour', 'enhance']), ' warmer ', name), 'ENHANCE + WATERCOLOUR + warmer');
       expect(combinedLabel([_tool('unblur')], '', name), 'UNBLUR');
       expect(combinedLabel(const [], 'make it warmer', name), 'make it warmer');
@@ -310,7 +296,6 @@ void main() {
   });
 
   group('alignment', () {
-    // A smooth texture that doesn't repeat within the search, as on the web (ai-align.spec.ts).
     Future<ui.Image> photo() {
       const width = 1024;
       const height = 768;
@@ -329,7 +314,6 @@ void main() {
       return imageFromPixels(pixels, width, height);
     }
 
-    // [base] as the AI might return it: 1000×750, with the photo's (x, y) at (scale·x + offset).
     Future<ui.Image> drifted(ui.Image base, double scale, Offset offset) {
       const size = Size(1000, 750);
       final recorder = ui.PictureRecorder();
@@ -355,7 +339,6 @@ void main() {
         expect(alignment.offsetX, closeTo(-0.001, 0.001));
         expect(alignment.offsetY, closeTo(0.004, 0.001));
         expect(alignment.error * 1024, lessThan(0.5));
-        // Highlighted parts far apart (two corners) still leave patches between them.
         final corners = [
           const AiStroke([Offset(0.1, 0.1)], 0.05),
           const AiStroke([Offset(0.9, 0.9)], 0.05),
@@ -377,31 +360,28 @@ void main() {
 
   group('feather', () {
     test('softens an edge symmetrically and keeps the inside and far outside as they were', () {
-      // A 40 px wide mask, solid on the left half.
       const width = 40;
       final alpha = Float32List.fromList([for (var x = 0; x < width; x++) x < 20 ? 255.0 : 0.0]);
       final soft = feather(alpha, width, 1, 2);
       expect(soft[0], closeTo(255, 0.01));
       expect(soft[width - 1], closeTo(0, 0.01));
-      expect(soft[19] + soft[20], closeTo(255, 0.5)); // half way at the edge
+      expect(soft[19] + soft[20], closeTo(255, 0.5));
       expect(soft[19], greaterThan(soft[20]));
-      expect(soft[20], greaterThan(0)); // softened, not the hard edge
-      // Three passes of radius 2 reach 6 px from the edge, no further.
+      expect(soft[20], greaterThan(0));
       expect(soft[20 - 7], closeTo(255, 0.01));
       expect(soft[20 + 6], closeTo(0, 0.01));
     });
   });
 
-  // The web's test (ai-tools.spec.ts) checks the same sizes, from the same file.
   group('which photos AI edits take', () {
     test('refuses a photo over 100 megapixels or 12,000 px on its longer side, by its size as shown', () {
       expect((_kit.maxMegapixels, _kit.maxLongSide), (100, 12000));
-      expect(_kit.tooLargeForAi(10000, 10000), isFalse); // exactly 100 megapixels
+      expect(_kit.tooLargeForAi(10000, 10000), isFalse);
       expect(_kit.tooLargeForAi(10000, 10001), isTrue);
-      expect(_kit.tooLargeForAi(12000, 8000), isFalse); // exactly 12,000 px
-      expect(_kit.tooLargeForAi(8000, 12001), isTrue); // a narrow panorama, either way round
+      expect(_kit.tooLargeForAi(12000, 8000), isFalse);
+      expect(_kit.tooLargeForAi(8000, 12001), isTrue);
       expect(_kit.tooLargeForAi(12001, 100), isTrue);
-      expect(_kit.tooLargeForAi(4080, 3072), isFalse); // a phone's photo
+      expect(_kit.tooLargeForAi(4080, 3072), isFalse);
     });
 
     test("takes a photo whose size Immich doesn't know (the service checks it too)", () {
@@ -415,18 +395,17 @@ void main() {
     test('takes the photo itself, and a picture down to 90% on each side, never larger', () {
       expect((fullSizeMinShare, fullSizeAspectTolerance), (0.9, 0.01));
       expect(full(6000, 4000), isTrue);
-      expect(full(5760, 3840), isTrue); // a RAW photo's full-size JPEG
-      expect(full(5400, 3600), isTrue); // exactly 90%
+      expect(full(5760, 3840), isTrue);
+      expect(full(5400, 3600), isTrue);
       expect(full(5399, 3600), isFalse);
       expect(full(6001, 4000), isFalse);
-      expect(full(1440, 960), isFalse); // Immich's preview
+      expect(full(1440, 960), isFalse);
     });
 
     test('wants the same shape within 1%, upright as Immich shows it', () {
-      expect(full(6000, 3970), isTrue); // 0.76% off
-      expect(full(6000, 3960), isFalse); // 1.01% off
-      expect(full(4000, 6000), isFalse); // turned
-      // A nearly square photo, its picture turned: the same shape within 1%, but turned.
+      expect(full(6000, 3970), isTrue);
+      expect(full(6000, 3960), isFalse);
+      expect(full(4000, 6000), isFalse);
       expect(isFullSize(const AdjustSize(1000, 998), 1000, 1005), isFalse);
       expect(isFullSize(const AdjustSize(998, 1000), 1000, 1005), isTrue);
     });
@@ -436,7 +415,6 @@ void main() {
     });
   });
 
-  // The web's test (ai-area.spec.ts) checks the same.
   group('the full-size picture a highlighted edit needs', () {
     RemoteAsset photo(int width, int height) => RemoteAssetFactory.create().copyWith(width: width, height: height);
     final strokes = [
@@ -464,7 +442,7 @@ void main() {
           uprightPhoto(photo(6000, 4000), _kit.area, service: const _Source(), native: android),
           throwsA(isA<NeedsOriginalException>()),
         );
-        expect(android.outputs, hasLength(1)); // nothing made from the smaller picture
+        expect(android.outputs, hasLength(1));
       });
     });
 
@@ -485,7 +463,7 @@ void main() {
         expect((await paste(photo(600, 400))).size, const AdjustSize(600, 400));
 
         await expectLater(paste(photo(6000, 4000)), throwsA(isA<NeedsOriginalException>()));
-        expect(android.outputs, hasLength(1)); // nothing made from the smaller picture
+        expect(android.outputs, hasLength(1));
       });
     });
   });

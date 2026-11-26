@@ -3,11 +3,11 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/domain/services/timeline.service.dart';
 import 'package:immich_mobile/extensions/build_context_extensions.dart';
 import 'package:immich_mobile/presentation/actions/action.dart';
-import 'package:immich_mobile/presentation/actions/adjust.action.dart'; // SelfPhotos Adjust
-import 'package:immich_mobile/presentation/actions/ai_edit.action.dart'; // SelfPhotos AI edit
+import 'package:immich_mobile/presentation/actions/adjust.action.dart';
+import 'package:immich_mobile/presentation/actions/ai_edit.action.dart';
 import 'package:immich_mobile/presentation/actions/delete.action.dart';
 import 'package:immich_mobile/presentation/actions/edit_asset.action.dart';
-import 'package:immich_mobile/presentation/actions/reduce_noise.action.dart'; // SelfPhotos Reduce noise
+import 'package:immich_mobile/presentation/actions/reduce_noise.action.dart';
 import 'package:immich_mobile/presentation/actions/restore.action.dart';
 import 'package:immich_mobile/presentation/actions/share.action.dart';
 import 'package:immich_mobile/presentation/actions/upload.action.dart';
