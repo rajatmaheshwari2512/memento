@@ -50,10 +50,10 @@ class AdjustImagePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         val value: Any? = when (call.method) {
           "open" -> open(call.argument<String>("path")!!)
           "read" -> read(call.rect())
-          "createOutput" -> createOutput(call.argument<Int>("width")!!, call.argument<Int>("height")!!)
-          "write" -> write(call.rect(), call.argument<ByteArray>("pixels")!!)
+          "createOutput" -> { createOutput(call.argument<Int>("width")!!, call.argument<Int>("height")!!); null }
+          "write" -> { write(call.rect(), call.argument<ByteArray>("pixels")!!); null }
           "encode" -> encode(call.argument<String>("path")!!, call.argument<Boolean>("png")!!, call.argument<Int>("quality")!!)
-          "close" -> release()
+          "close" -> { release(); null }
           else -> {
             main.post { result.notImplemented() }
             return@execute
