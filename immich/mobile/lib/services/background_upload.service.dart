@@ -22,6 +22,7 @@ import 'package:immich_mobile/providers/infrastructure/db.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/storage.provider.dart';
 import 'package:immich_mobile/repositories/asset_media.repository.dart';
 import 'package:immich_mobile/repositories/upload.repository.dart';
+import 'package:immich_mobile/selfphotos/storage_saver/storage_saver.service.dart';
 import 'package:immich_mobile/services/api.service.dart';
 import 'package:immich_mobile/utils/debug_print.dart';
 import 'package:logging/logging.dart';
@@ -39,6 +40,7 @@ final backgroundUploadServiceProvider = Provider((ref) {
     db.backupRepository,
     ref.watch(assetMediaRepositoryProvider),
     ref.watch(assetServiceProvider),
+    const StorageSaverService(),
   );
 
   ref.onDispose(service.dispose);
@@ -93,6 +95,7 @@ class BackgroundUploadService {
     this._backupRepository,
     this._assetMediaRepository,
     this._assetService,
+    this._storageSaverService,
   ) {
     _uploadRepository.onUploadStatus = _onUploadCallback;
     _uploadRepository.onTaskProgress = _onTaskProgressCallback;
@@ -104,6 +107,7 @@ class BackgroundUploadService {
   final BackupRepository _backupRepository;
   final AssetMediaRepository _assetMediaRepository;
   final AssetService _assetService;
+  final StorageSaverService _storageSaverService;
   final Logger _logger = Logger('BackgroundUploadService');
 
   final StreamController<TaskStatusUpdate> _taskStatusController = StreamController<TaskStatusUpdate>.broadcast();
@@ -152,7 +156,12 @@ class BackgroundUploadService {
     await _storageRepository.clearCache();
     shouldAbortQueuingTasks = false;
 
-    final candidates = await _backupRepository.getCandidates(userId);
+    var candidates = await _backupRepository.getCandidates(userId);
+    if (candidates.isNotEmpty && await shrinksBackups()) {
+      final all = candidates.length;
+      candidates = candidates.where((asset) => !_canShrink(asset)).toList();
+      _logger.info("Left ${all - candidates.length} candidates for Storage saver to shrink in a foreground upload");
+    }
     if (candidates.isEmpty) {
       _logger.info("No new backup candidates found, finishing background upload");
       return;
@@ -176,6 +185,19 @@ class BackgroundUploadService {
       await enqueueTasks(tasks);
     }
   }
+
+  /// Whether backups upload Storage saver copies, which these uploads can't make; true when it can't be read.
+  Future<bool> shrinksBackups() async {
+    try {
+      return await _storageSaverService.backupQuality() != BackupQuality.original;
+    } catch (error) {
+      _logger.warning("Couldn't read the Storage saver quality, leaving photos and videos for later: $error");
+      return true;
+    }
+  }
+
+  bool _canShrink(LocalAsset asset) =>
+      (asset.type == AssetType.image || asset.type == AssetType.video) && !asset.isMotionPhoto;
 
   /// Cancel all ongoing background uploads and reset the upload queue
   ///
