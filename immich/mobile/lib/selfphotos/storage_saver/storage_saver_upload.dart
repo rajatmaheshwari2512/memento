@@ -14,6 +14,8 @@ import 'package:path/path.dart' as p;
 
 final _logger = Logger('StorageSaverUpload');
 
+const _folderPrefix = 'selfphotos-saver-';
+
 /// The quality one backup run uploads at; [id] tells its shrinks apart from other runs'.
 class StorageSaverRun {
   final BackupQuality quality;
@@ -35,6 +37,7 @@ class StorageSaverRun {
     if (!CurrentPlatform.isAndroid) {
       return original;
     }
+    unawaited(deleteStaleFolders());
     try {
       final quality = await service.backupQuality();
       if (cancelToken?.isCompleted ?? false) {
@@ -51,6 +54,23 @@ class StorageSaverRun {
       return original;
     }
   }
+}
+
+/// Deletes the temporary folders of shrinks that were cut short (the app was killed), once they're [maxAge] old.
+/// [root] is where they are; ignores errors.
+Future<void> deleteStaleFolders({Directory? root, Duration maxAge = const Duration(hours: 24)}) async {
+  try {
+    final cutoff = DateTime.now().subtract(maxAge);
+    await for (final entity in (root ?? Directory.systemTemp).list()) {
+      if (entity is Directory && p.basename(entity.path).startsWith(_folderPrefix)) {
+        try {
+          if ((await entity.stat()).modified.isBefore(cutoff)) {
+            await entity.delete(recursive: true);
+          }
+        } catch (_) {}
+      }
+    }
+  } catch (_) {}
 }
 
 /// A shrunk copy ready to upload.
@@ -97,7 +117,7 @@ class StorageSaverUpload {
     }
     try {
       final originalChecksum = asset.checksum ?? await _checksum(file);
-      final folder = _folder = await Directory.systemTemp.createTemp('selfphotos-saver-');
+      final folder = _folder = await Directory.systemTemp.createTemp(_folderPrefix);
       final output = File(p.join(folder.path, asset.type == AssetType.video ? 'copy.mp4' : 'copy.jpg'));
       final result = await _native.shrink(
         file.path,

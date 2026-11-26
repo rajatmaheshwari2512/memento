@@ -459,4 +459,24 @@ void main() {
       expect(errors, isEmpty);
     });
   });
+
+  group('deleteStaleFolders', () {
+    test('deletes the Storage saver folders older than a day and keeps the newer ones', () async {
+      final root = Directory.systemTemp.createTempSync('stale-test-');
+      addTearDown(() => root.deleteSync(recursive: true));
+      final old = Directory('${root.path}/selfphotos-saver-old')..createSync();
+      File('${old.path}/copy.mp4').writeAsStringSync('copy');
+      final fresh = Directory('${root.path}/selfphotos-saver-new')..createSync();
+      final other = Directory('${root.path}/other-old')..createSync();
+      for (final folder in [old, other]) {
+        await Process.run('touch', ['-t', '202001010000', folder.path]);
+      }
+
+      await deleteStaleFolders(root: root);
+
+      expect(old.existsSync(), isFalse);
+      expect(fresh.existsSync(), isTrue);
+      expect(other.existsSync(), isTrue);
+    });
+  });
 }
