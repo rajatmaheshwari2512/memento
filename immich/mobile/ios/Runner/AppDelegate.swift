@@ -22,7 +22,7 @@ import native_video_player
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     let messenger = engineBridge.applicationRegistrar.messenger()
     AppDelegate.registerPlugins(with: engineBridge.pluginRegistry, messenger: messenger)
-    AdjustImagePlugin.register(with: engineBridge.pluginRegistry.registrar(forPlugin: AdjustImagePlugin.name)!)
+    AdjustImagePlugin.register(with: engineBridge.pluginRegistry.registrar(forPlugin: AdjustImagePlugin.name)!) // SelfPhotos Adjust: full-size copies
     PasskeyHostApiSetup.setUp(binaryMessenger: messenger, api: PasskeyHostApiImpl())
   }
 
