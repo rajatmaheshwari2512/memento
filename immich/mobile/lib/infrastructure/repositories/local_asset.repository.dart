@@ -290,9 +290,10 @@ class LocalAssetRepository extends DatabaseAccessor<Drift> with $LocalAssetRepos
     );
   }
 
-  Future<void> unlinkStorageSaverCopies() async {
-    await _db.customUpdate(
-      '''
+  /// Restores the phone's hash of linked items whose copy is no longer on the server. With [checksums], only the
+  /// items linked to a copy with one of those checksums.
+  Future<void> unlinkStorageSaverCopies({Iterable<String>? checksums}) async {
+    const sql = '''
       UPDATE local_asset_entity
       SET checksum = device_checksum,
         device_checksum = NULL
@@ -304,10 +305,30 @@ class LocalAssetRepository extends DatabaseAccessor<Drift> with $LocalAssetRepos
             ON remote_asset_entity.owner_id = auth_user_entity.id
           WHERE remote_asset_entity.checksum = local_asset_entity.checksum
         )
-      ''',
-      updates: {_db.localAssetEntity},
-      updateKind: UpdateKind.update,
-    );
+      ''';
+    if (checksums == null) {
+      await _db.customUpdate(sql, updates: {_db.localAssetEntity}, updateKind: UpdateKind.update);
+      return;
+    }
+    for (final slice in checksums.toSet().slices(kDriftMaxChunk)) {
+      await _db.customUpdate(
+        '$sql AND local_asset_entity.checksum IN (${List.filled(slice.length, '?').join(',')})',
+        variables: [for (final checksum in slice) Variable.withString(checksum)],
+        updates: {_db.localAssetEntity},
+        updateKind: UpdateKind.update,
+      );
+    }
+  }
+
+  Future<List<String>> getRemoteChecksums(Iterable<String> remoteIds) async {
+    final checksums = <String>[];
+    for (final slice in remoteIds.toSet().slices(kDriftMaxChunk)) {
+      final query = _db.remoteAssetEntity.selectOnly()
+        ..addColumns([_db.remoteAssetEntity.checksum])
+        ..where(_db.remoteAssetEntity.id.isIn(slice));
+      checksums.addAll(await query.map((row) => row.read(_db.remoteAssetEntity.checksum)!).get());
+    }
+    return checksums;
   }
 
   /// Links [id] to the Storage saver copy just uploaded for it, before the copy arrives in a sync.

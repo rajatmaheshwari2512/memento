@@ -230,8 +230,11 @@ class SyncStreamService {
         if (CurrentPlatform.isAndroid && Store.get(StoreKey.manageLocalMediaAndroid, false)) {
           await _syncAssetDeletion(remoteSyncAssets.map((e) => e.assetId).toList());
         }
+        final deletedChecksums = await _localAssetRepository.getRemoteChecksums(
+          remoteSyncAssets.map((e) => e.assetId).toList(),
+        );
         await _syncStreamRepository.deleteAssetsV1(remoteSyncAssets);
-        return _localAssetRepository.unlinkStorageSaverCopies();
+        return _localAssetRepository.unlinkStorageSaverCopies(checksums: deletedChecksums);
       case SyncEntityType.assetExifV1:
         return _syncStreamRepository.updateAssetsExifV1(data.cast());
       case SyncEntityType.assetEditV1:

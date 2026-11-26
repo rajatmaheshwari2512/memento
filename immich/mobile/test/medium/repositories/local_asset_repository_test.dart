@@ -759,6 +759,35 @@ void main() {
       expect(await row(local.id), (checksum: 'original', deviceChecksum: null));
     });
 
+    test('unlink of deleted copies leaves a fresh link whose copy has not synced down yet', () async {
+      final fresh = await ctx.newLocalAsset(checksum: 'original');
+      await sut.linkStorageSaverCopy(fresh.id, originalChecksum: 'original', copyChecksum: 'fresh-copy');
+      final other = await ctx.newRemoteAsset(ownerId: userId, checksum: 'unrelated');
+      final checksums = await sut.getRemoteChecksums([other.id]);
+      await ctx.db.managers.remoteAssetEntity.filter((row) => row.id.equals(other.id)).delete();
+
+      await sut.unlinkStorageSaverCopies(checksums: checksums);
+
+      expect(checksums, ['unrelated']);
+      expect(await row(fresh.id), (checksum: 'fresh-copy', deviceChecksum: 'original'));
+    });
+
+    test('unlink of deleted copies unlinks the original of the deleted copy only', () async {
+      final local = await ctx.newLocalAsset(checksum: 'original');
+      final fresh = await ctx.newLocalAsset(checksum: 'original-2');
+      await sut.linkStorageSaverCopy(fresh.id, originalChecksum: 'original-2', copyChecksum: 'fresh-copy');
+      final copy = await ctx.newRemoteAsset(ownerId: userId, checksum: 'copy');
+      await ctx.newRemoteAssetStorageSaver(assetId: copy.id, originalChecksum: 'original');
+      await sut.linkStorageSaverCopies();
+      final checksums = await sut.getRemoteChecksums([copy.id]);
+      await deleteRemote('copy');
+
+      await sut.unlinkStorageSaverCopies(checksums: checksums);
+
+      expect(await row(local.id), (checksum: 'original', deviceChecksum: null));
+      expect(await row(fresh.id), (checksum: 'fresh-copy', deviceChecksum: 'original-2'));
+    });
+
     test('re-links to a second copy after the first is deleted', () async {
       final local = await ctx.newLocalAsset(checksum: 'original');
       await newCopy(checksum: 'first', createdAt: DateTime(2022));

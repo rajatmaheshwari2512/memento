@@ -111,9 +111,9 @@ void main() {
     when(() => mockSyncApiRepo.deleteSyncAck(any())).thenAnswer((_) async => {});
 
     when(() => mockApi.serverInfoApi).thenReturn(mockServerApi);
-    when(
-      () => mockServerApi.getServerVersion(),
-    ).thenAnswer((_) async => ServerVersionResponseDto(major: 1, minor: 132, patch_: 0, prerelease: null, featureLevel: 1));
+    when(() => mockServerApi.getServerVersion()).thenAnswer(
+      (_) async => ServerVersionResponseDto(major: 1, minor: 132, patch_: 0, prerelease: null, featureLevel: 1),
+    );
 
     when(() => mockSyncStreamRepo.updateUsersV1(any())).thenAnswer(successHandler);
     when(() => mockSyncStreamRepo.deleteUsersV1(any())).thenAnswer(successHandler);
@@ -161,7 +161,10 @@ void main() {
     );
 
     when(() => mockLocalAssetRepo.getAssetsFromBackupAlbums(any())).thenAnswer((_) async => {});
-    when(() => mockLocalAssetRepo.unlinkStorageSaverCopies()).thenAnswer((_) async {});
+    when(
+      () => mockLocalAssetRepo.unlinkStorageSaverCopies(checksums: any(named: 'checksums')),
+    ).thenAnswer((_) async {});
+    when(() => mockLocalAssetRepo.getRemoteChecksums(any())).thenAnswer((_) async => ['copy-checksum']);
     when(() => mockLocalAssetRepo.linkStorageSaverCopies()).thenAnswer((_) async {});
     when(() => mockTrashedLocalAssetRepo.trashLocalAsset(any())).thenAnswer((_) async {});
     when(() => mockTrashedLocalAssetRepo.getToRestore()).thenAnswer((_) async => []);
@@ -567,9 +570,9 @@ void main() {
   group('SyncStreamService - Sync Migration', () {
     test('ensure that <2.5.0 migrations run', () async {
       await Store.put(StoreKey.syncMigrationStatus, "[]");
-      when(
-        () => mockServerApi.getServerVersion(),
-      ).thenAnswer((_) async => ServerVersionResponseDto(major: 2, minor: 4, patch_: 1, prerelease: null, featureLevel: 1));
+      when(() => mockServerApi.getServerVersion()).thenAnswer(
+        (_) async => ServerVersionResponseDto(major: 2, minor: 4, patch_: 1, prerelease: null, featureLevel: 1),
+      );
 
       await sut.sync();
 
@@ -595,9 +598,9 @@ void main() {
     });
     test('ensure that >=2.5.0 migrations run', () async {
       await Store.put(StoreKey.syncMigrationStatus, "[]");
-      when(
-        () => mockServerApi.getServerVersion(),
-      ).thenAnswer((_) async => ServerVersionResponseDto(major: 2, minor: 5, patch_: 0, prerelease: null, featureLevel: 1));
+      when(() => mockServerApi.getServerVersion()).thenAnswer(
+        (_) async => ServerVersionResponseDto(major: 2, minor: 5, patch_: 0, prerelease: null, featureLevel: 1),
+      );
       await sut.sync();
 
       verifyInOrder([
@@ -625,9 +628,9 @@ void main() {
         '["${SyncMigrationTask.v20260128_CopyExifWidthHeightToAsset.name}"]',
       );
 
-      when(
-        () => mockServerApi.getServerVersion(),
-      ).thenAnswer((_) async => ServerVersionResponseDto(major: 2, minor: 4, patch_: 1, prerelease: null, featureLevel: 1));
+      when(() => mockServerApi.getServerVersion()).thenAnswer(
+        (_) async => ServerVersionResponseDto(major: 2, minor: 4, patch_: 1, prerelease: null, featureLevel: 1),
+      );
 
       await sut.sync();
 
@@ -651,12 +654,13 @@ void main() {
       verifyNever(() => mockLocalAssetRepo.unlinkStorageSaverCopies());
     });
 
-    test('unlinks Storage saver copies after remote assets are permanently deleted', () async {
+    test('unlinks only the items of the copies that were permanently deleted', () async {
       await simulateEvents([SyncStreamStub.assetDeleteV1]);
 
       verifyInOrder([
+        () => mockLocalAssetRepo.getRemoteChecksums(['remote-asset']),
         () => mockSyncStreamRepo.deleteAssetsV1(any()),
-        () => mockLocalAssetRepo.unlinkStorageSaverCopies(),
+        () => mockLocalAssetRepo.unlinkStorageSaverCopies(checksums: ['copy-checksum']),
       ]);
     });
 
