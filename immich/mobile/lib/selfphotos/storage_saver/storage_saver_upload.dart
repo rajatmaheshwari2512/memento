@@ -64,7 +64,7 @@ Future<void> deleteStaleFolders({Directory? root, Duration maxAge = const Durati
     await for (final entity in (root ?? Directory.systemTemp).list()) {
       if (entity is Directory && p.basename(entity.path).startsWith(_folderPrefix)) {
         try {
-          if ((await entity.stat()).modified.isBefore(cutoff)) {
+          if (entity.statSync().modified.isBefore(cutoff)) {
             await entity.delete(recursive: true);
           }
         } catch (_) {}
