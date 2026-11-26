@@ -330,9 +330,10 @@ same key, or the phone refuses the update.
 
 ## Releases
 
-Pushing a tag like `v1.2.0` to GitHub makes a release: GitHub Actions
-(`.github/workflows/release.yml`) builds everything, for ARM64 and x86-64 servers, and puts it on
-the repo's Releases page; the app takes longest. Each fork builds its own, into its own packages.
+Every push to `main` runs GitHub Actions (`.github/workflows/release.yml`). When the commits since
+the last release include a feature or a fix, it makes a new release: it builds everything, for ARM64
+and x86-64 servers, and puts it on the repo's Releases page; the app takes longest. Other pushes stop
+after a few seconds. Each fork builds its own, into its own packages.
 
 - **The Android app**, `memento-<version>.apk`, signed with your key (the secrets below).
 - **The website**, `memento-website-<version>.tar.gz`.
@@ -340,11 +341,18 @@ the repo's Releases page; the app takes longest. Each fork builds its own, into 
   with Memento's website in it), `memento-extras`, `memento-reader` (with Ask's model) and
   `memento-creations`. There's no `latest`: a server always runs a version you chose.
 
-**Making one:** `git tag v1.2.0 && git push origin v1.2.0`. A tag is built once: the workflow
-refuses a tag whose release is published, because servers may already run its images. To change a
-release, cut a new tag (`v1.2.1`). If a run fails before its release is published, run it again
-from the tag: `gh workflow run release.yml --ref v1.2.0 -f tag=v1.2.0`. If only the app fails, the
-release is published without it, and says so.
+**The commit messages decide the version** ([Conventional Commits](https://www.conventionalcommits.org)):
+
+| Commit message starts with | Release |
+|---|---|
+| `fix:` or `perf:` | 1.0.0 → 1.0.1 |
+| `feat:` | 1.0.0 → 1.1.0 |
+| `feat!:`, or a `BREAKING CHANGE:` line in the message | 1.0.0 → 2.0.0 |
+| `docs:`, `chore:`, `refactor:`, `test:`, `ci:`, `build:`, `style:` | none |
+
+A scope is optional: `fix(web): …`. The release notes list the features and fixes. The first
+release is v1.0.0. If a run fails, use **Re-run failed jobs** on its page in Actions; if only the
+app fails, the release is published without it, and says so.
 
 **MANUAL, once, after the first release: make the four packages public.** A server pulls them
 without logging in, and GitHub may make new packages private: github.com/<owner>?tab=packages → each
@@ -364,13 +372,12 @@ gh secret set ANDROID_KEYSTORE_ALIAS --env release      # it asks: selfphotos, o
 (The second line's file is `ANDROID_KEYSTORE_PATH`, if you set one.) The app from a release must be
 signed with the same key as the app on the phones, or they refuse the update.
 
-**Optional, once: only `v*` tags may use the key.** Then a run from a branch never gets it (a manual
-run must start from the tag, as above):
+**Optional, once: only `main` may use the key.** Then a run from another branch never gets it:
 
 ```
 gh api -X PUT 'repos/{owner}/{repo}/environments/release' \
   -F 'deployment_branch_policy[protected_branches]=false' -F 'deployment_branch_policy[custom_branch_policies]=true' > /dev/null
-gh api -X POST 'repos/{owner}/{repo}/environments/release/deployment-branch-policies' -f name='v*' -f type=tag
+gh api -X POST 'repos/{owner}/{repo}/environments/release/deployment-branch-policies' -f name=main -f type=branch
 ```
 
 **Optional, once: release tags can't be moved or deleted**, so a version always means the same code:
@@ -749,6 +756,5 @@ edit, switch change or error, never the prompts), `journalctl -u deep-archive-ba
   underneath it were tested on an Oracle Ampere server.
 - **Running setup from a Linux computer.**
 - **A full restore** ("Restore everything" above).
-- **Releases**, until the first tag runs on GitHub: the workflow, the Android app built on Linux,
-  and a server running a release (`./memento prod update`) were checked on a computer, not end to
-  end.
+- **Releases:** the images and the website were built by a real release run. The Android app built
+  on Linux, and a server running a release (`./memento prod update`), weren't checked end to end.

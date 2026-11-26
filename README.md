@@ -81,7 +81,7 @@ The apps say "Memento" in place of "Immich", with their own logo.
 | `infra/` | Terraform: creates the server, DNS and backup bucket (optional). |
 | `apps/` | Builds the website and the Android app; the logo. |
 | `scripts/` | `privacy-check.sh`, run before pushing; `check-release.py`, used by `./memento prod update`. |
-| `.github/workflows/` | `release.yml`: builds a release when a tag is pushed. |
+| `.github/workflows/` | `release.yml`: builds a release when a push to main has a feature or fix. |
 | `docs/` | The guides: `setup-dev.md` (dev), `setup-prod.md` (a server), `upgrades.md`. |
 
 ## Try it on your computer

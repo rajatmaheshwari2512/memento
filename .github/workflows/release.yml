@@ -1,90 +1,95 @@
-# Builds a Memento release when a tag like v1.2.0 is pushed, or by hand (Actions → Release → Run
-# workflow, with a tag that's already pushed). Each fork builds its own, into its own packages.
+# Builds a Memento release from each push to main that has a feat or fix since the last release,
+# or by hand (Actions → Release → Run workflow, on main). Other pushes stop after the first job.
+# The version comes from the commit messages (Conventional Commits): fix: or perf: → 1.0.1,
+# feat: → 1.1.0, feat!: or a BREAKING CHANGE: footer → 2.0.0. Each fork builds its own, into its own packages.
 #
-#   Images, for linux/amd64 and linux/arm64, at ghcr.io/<owner>/<name>:<tag>:
+#   Images, for linux/amd64 and linux/arm64, at ghcr.io/<owner>/<name>:<version>:
 #     memento-server     Immich's server image with Memento's website in it
 #     memento-extras     Memento's service
 #     memento-reader     Ask's reader, with its model
 #     memento-creations  the creations container
-#   A GitHub Release for the tag: the website (.tar.gz), the Android app (.apk) and SHA256SUMS.
+#   A GitHub Release and tag v<version>: notes from the commits, the website (.tar.gz), the
+#   Android app (.apk) and SHA256SUMS.
 #
-# Servers never follow it by themselves: ./memento prod update <tag> (docs/upgrades.md).
-# A tag is built once: a tag whose release is published is refused. The app is signed with the "release" environment's ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD and ANDROID_KEYSTORE_ALIAS; without them the release has no app.
+# Servers never follow it by themselves: ./memento prod update <version> (docs/upgrades.md).
+# The app is signed with the "release" environment's ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD and ANDROID_KEYSTORE_ALIAS; without them the release has no app.
 name: Release
 
 on:
   push:
-    tags: ['v*']
+    branches: [main]
   workflow_dispatch:
-    inputs:
-      tag:
-        description: The tag to release, like v1.2.0 (already pushed)
-        required: true
-        type: string
 
 permissions: {}
 
 concurrency:
-  group: release-${{ inputs.tag || github.ref_name }}
+  group: release
   cancel-in-progress: false
-
-env:
-  TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
   prepare:
-    name: Read the release
+    name: Work out the version
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 10
     permissions:
       contents: read
     outputs:
-      version: ${{ steps.read.outputs.version }}
+      version: ${{ steps.next.outputs.version }}
+      changes: ${{ steps.next.outputs.changes }}
       images: ${{ steps.read.outputs.images }}
       immich: ${{ steps.read.outputs.immich }}
       commit: ${{ steps.read.outputs.commit }}
-      prerelease: ${{ steps.read.outputs.prerelease }}
     steps:
-      - name: Check the tag
-        run: |
-          if ! [[ $TAG =~ ^v[0-9][0-9A-Za-z._-]*$ ]]; then
-            echo "::error::\"$TAG\" isn't a release tag like v1.2.0."
-            exit 1
-          fi
-
-      - name: Check the tag isn't released yet
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          if gh release view "$TAG" > /dev/null 2>&1; then
-            echo "::error::$TAG is released already, and servers may run its images. Cut a new tag (like v1.2.1) instead."
-            exit 1
-          fi
-
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: refs/tags/${{ env.TAG }}
+          fetch-depth: 0
           persist-credentials: false
+
+      - name: Work out the next version (go-semantic-release)
+        id: next
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          bin="$RUNNER_TEMP/semantic-release"
+          curl -fsSL -o "$bin" https://github.com/go-semantic-release/semantic-release/releases/download/v2.31.0/semantic-release_v2.31.0_linux_amd64
+          echo "b8f518b1aeb1d1742f4e6e91a179b707cea4309a64fe3854f465bf724f04f6d3  $bin" | sha256sum -c -
+          chmod +x "$bin"
+          "$bin" --no-ci --dry --allow-no-changes --version-file --changelog "$RUNNER_TEMP/changes.md" \
+            --plugin-resolver github --ci-condition default@1.11.0 \
+            --provider git@1.13.0 --provider-opt default_branch=main \
+            --commit-analyzer default@1.15.0 --changelog-generator default@1.15.0
+          if [ ! -f .version-unreleased ]; then
+            echo "version=" >> "$GITHUB_OUTPUT"
+            echo "### No release: no feat or fix since the last one" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          end="CHANGES_$(openssl rand -hex 8)"
+          {
+            echo "version=v$(cat .version-unreleased)"
+            echo "changes<<$end"
+            awk '/^#### /{keep = ($0 ~ /^#### (Breaking Changes|Feature|Bug Fixes|Reverts|Performance Improvements)$/)} keep' "$RUNNER_TEMP/changes.md"
+            echo "$end"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Read the versions
         id: read
+        if: steps.next.outputs.version != ''
         env:
           OWNER: ${{ github.repository_owner }}
         run: |
           immich=$(sed -n 's/^immich_version: *//p' host/roles/immich/defaults/main.yml)
           [ -n "$immich" ] || { echo "::error::No immich_version in host/roles/immich/defaults/main.yml"; exit 1; }
           {
-            echo "version=$TAG"
             echo "images=ghcr.io/${OWNER,,}"
             echo "immich=$immich"
             echo "commit=$(git rev-parse HEAD)"
-            if [[ $TAG == *-* ]]; then echo "prerelease=true"; else echo "prerelease=false"; fi
           } >> "$GITHUB_OUTPUT"
 
   website:
     name: Website
     needs: prepare
+    if: needs.prepare.outputs.version != ''
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
@@ -92,7 +97,6 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: refs/tags/${{ env.TAG }}
           persist-credentials: false
 
       - name: Build the website (apps/web/build.sh)
@@ -115,6 +119,7 @@ jobs:
   images:
     name: Image ${{ matrix.name }}
     needs: prepare
+    if: needs.prepare.outputs.version != ''
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     permissions:
@@ -135,7 +140,6 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: refs/tags/${{ env.TAG }}
           persist-credentials: false
 
       - name: Download Ask's reader model
@@ -187,7 +191,6 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: refs/tags/${{ env.TAG }}
           persist-credentials: false
 
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -231,6 +234,7 @@ jobs:
   android:
     name: Android app
     needs: prepare
+    if: needs.prepare.outputs.version != ''
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     environment: release
@@ -264,7 +268,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: steps.signing.outputs.ready == 'true'
         with:
-          ref: refs/tags/${{ env.TAG }}
           persist-credentials: false
 
       - name: Make room on the disk
@@ -339,7 +342,6 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: refs/tags/${{ env.TAG }}
           persist-credentials: false
           sparse-checkout: scripts/check-release.py
           sparse-checkout-cone-mode: false
@@ -372,7 +374,7 @@ jobs:
           VERSION: ${{ needs.prepare.outputs.version }}
           IMAGES: ${{ needs.prepare.outputs.images }}
           IMMICH: ${{ needs.prepare.outputs.immich }}
-          PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
+          CHANGES: ${{ needs.prepare.outputs.changes }}
           APP: ${{ needs.android.result }}
           APP_SIGNED: ${{ needs.android.outputs.built }}
         run: |
@@ -398,13 +400,13 @@ jobs:
             echo
             echo "To run this release on your server: \`./memento prod update $VERSION\` (docs/upgrades.md)."
             echo "\`memento-website-$VERSION.tar.gz\` is the website on its own, the same files as in memento-server."
+            echo
+            printf '%s\n' "$CHANGES"
           } > "$RUNNER_TEMP/notes.md"
           if gh release view "$VERSION" > /dev/null 2>&1; then
             gh release upload "$VERSION" ./* --clobber
           else
-            flags=(--verify-tag --title "Memento $VERSION" --notes "$(cat "$RUNNER_TEMP/notes.md")" --generate-notes)
-            if [ "$PRERELEASE" = true ]; then flags+=(--prerelease); fi
-            gh release create "$VERSION" "${flags[@]}" ./*
+            gh release create "$VERSION" --target "$GITHUB_SHA" --title "Memento $VERSION" --notes-file "$RUNNER_TEMP/notes.md" ./*
           fi
           {
             echo "### Memento $VERSION"
