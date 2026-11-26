@@ -7,18 +7,10 @@
     v: "{{ backup_rclone_version }}"
     arch: "{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}"
 
-- name: Check the backup settings are filled in
+- name: Check there are folders to back up
   ansible.builtin.assert:
-    that:
-      - backup_bucket | length > 0
-      - backup_access_key_id | length > 0
-      - backup_secret_access_key | length > 0
-      - backup_jobs | length > 0
-      - backup_crypt_password_obscured | length > 0
-      - backup_crypt_password2_obscured | length > 0
-    fail_msg: >-
-      Fill in BACKUP_* in .env (see .env.example)
-      (BACKUPS).
+    that: backup_jobs | length > 0
+    fail_msg: backup_jobs is empty.
     quiet: true
 
 - name: Create the backup folder (root only)

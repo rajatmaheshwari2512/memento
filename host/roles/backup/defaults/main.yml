@@ -1,5 +1,5 @@
 # Set from .env in group_vars/all/main.yml. All three empty: no backups (a warning). Only some:
-# the role stops with an error.
+# ./memento prod check stops.
 backup_bucket: ""
 backup_access_key_id: ""
 backup_secret_access_key: ""

@@ -4,19 +4,6 @@
 # memento-extras.env  settings + Gemini key (root-only)
 # docker-compose.yml  one container, joined to Immich's network
 
-- name: Check the Gemini key is filled in
-  ansible.builtin.assert:
-    that: memento_extras_gemini_api_key | length > 0
-    fail_msg: Fill in GEMINI_API_KEY in .env.
-    quiet: true
-
-- name: Check the live albums secret is filled in
-  ansible.builtin.assert:
-    that:
-      - memento_extras_secret | length >= 44
-    fail_msg: Fill in MEMENTO_SECRET in .env (openssl rand -base64 32).
-    quiet: true
-
 - name: Create the service's folders
   ansible.builtin.file:
     path: "{{ item }}"

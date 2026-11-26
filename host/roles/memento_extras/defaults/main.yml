@@ -19,7 +19,7 @@ memento_extras_creations_image_ref: >-
   {{ memento_extras_images ~ '/memento-creations:' ~ memento_extras_release if memento_extras_release else 'memento-creations:local' }}
 memento_extras_image_note: "{{ 'Memento ' ~ memento_extras_release ~ ', pulled' if memento_extras_release else 'built on this VM by Ansible' }}"
 
-# Set from .env in group_vars/all/main.yml. Empty = the role stops with an error.
+# Set from .env in group_vars/all/main.yml. Empty: ./memento prod check stops.
 memento_extras_gemini_api_key: ""
 # Encrypts the per-user keys live albums keep (32+ random bytes, base64). From .env (MEMENTO_SECRET).
 memento_extras_secret: ""

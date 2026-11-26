@@ -3,14 +3,6 @@
 #   docker-compose.override.yml  our changes on top (Compose merges the two)
 #   .env                         settings + DB password (root-only)
 
-- name: Check the database password is set and allowed
-  ansible.builtin.assert:
-    that:
-      - immich_db_password | length >= 16
-      - immich_db_password is match('^[A-Za-z0-9]+$')
-    fail_msg: IMMICH_DB_PASSWORD in .env must be 16+ letters/digits only.
-    quiet: true
-
 - name: Create Immich's folders
   ansible.builtin.file:
     path: "{{ item }}"
