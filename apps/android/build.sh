@@ -25,13 +25,7 @@ here="$(cd "$(dirname "$0")" && pwd)"
 repo="$(cd "$here/../.." && pwd)"
 src="$repo/immich"
 env_file="${MEMENTO_ENV_FILE:-$repo/.env}"
-
-# env_value NAME: NAME's value in the settings file, or nothing.
-env_value() {
-  [ -f "$env_file" ] || return 0
-  sed -n "s/^[[:space:]]*$1=//p" "$env_file" | tail -n 1 |
-    sed -e 's/[[:space:]]#.*$//' -e 's/[[:space:]]*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"
-}
+. "$repo/apps/mobile-build.sh"
 keystore="$(env_value ANDROID_KEYSTORE_PATH)"
 keystore="${keystore:-$HOME/.config/memento/android/memento.jks}"
 case "$keystore" in "~"/*) keystore="$HOME/${keystore#"~/"}" ;; /*) ;; *) keystore="$repo/$keystore" ;; esac
@@ -60,47 +54,19 @@ if [ -z "$password" ]; then
   exit 1
 fi
 
-export MISE_AUTO_INSTALL=false MISE_TASK_RUN_AUTO_INSTALL=false MISE_EXEC_AUTO_INSTALL=false
-export MISE_EXPERIMENTAL=1
-export MISE_YES=1
 export ANDROID_HOME="${ANDROID_HOME:-$(brew --prefix)/share/android-commandlinetools}"
 export ANDROID_SDK_ROOT="$ANDROID_HOME"
 
-saved="$(mktemp -d)"
-mkdir -p "$saved/mobile" "$saved/native" "$saved/i18n"
-cp mise.lock "$saved/mise.lock"
-cp mobile/mise.lock "$saved/mobile/mise.lock"
-cp native/mise.lock "$saved/native/mise.lock"
-cp -R i18n/. "$saved/i18n/"
+save_build_inputs
 restore() {
   rm -f "$src/mobile/android/key.jks"
-  cp "$saved/mise.lock" "$src/mise.lock"
-  cp "$saved/mobile/mise.lock" "$src/mobile/mise.lock"
-  cp "$saved/native/mise.lock" "$src/native/mise.lock"
-  rm -rf "$src/i18n" && mkdir "$src/i18n" && cp -R "$saved/i18n/." "$src/i18n/" && rm -rf "$saved"
+  restore_build_inputs
 }
 trap restore EXIT
 cp "$keystore" mobile/android/key.jks
 export ALIAS="$key_alias" ANDROID_KEY_PASSWORD="$password" ANDROID_STORE_PASSWORD="$password"
 
-# Memento branding for the UI texts (all languages), only for this build.
-python3 -I "$here/../brand/rebrand-i18n.py" "$src"
-
-echo "== Generating the API client"
-mise run //:open-api-dart
-
-echo "== Installing Flutter packages"
-cd "$src/mobile"
-mise exec -- flutter pub get --enforce-lockfile
-mise run //mobile:install:build-runner-patch
-
-echo "== Generating code"
-mise run //mobile:codegen:drift:migration
-mise run //mobile:codegen:dart
-mise run //mobile:codegen:native
-mise run //mobile:codegen:pigeon
-mise run //mobile:i18n:loader
-mise run //mobile:i18n:keys
+generate_code
 
 echo "== Making sure Gradle itself is downloaded"
 # Fetches Gradle with curl into the folder the launcher looks in.
