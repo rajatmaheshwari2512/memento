@@ -9,10 +9,7 @@
 #   A GitHub Release for the tag: the website (.tar.gz), the Android app (.apk) and SHA256SUMS.
 #
 # Servers never follow it by themselves: ./memento prod update <tag> (docs/upgrades.md).
-# A tag is built once: a tag whose release is published is refused (cut a new one).
-# The app is signed with three secrets of the "release" environment (docs/setup-prod.md,
-# "Releases"): ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD and ANDROID_KEYSTORE_ALIAS.
-# Without them, or if the app's build fails, the release has no app and says so.
+# A tag is built once: a tag whose release is published is refused. The app is signed with the "release" environment's ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD and ANDROID_KEYSTORE_ALIAS; without them the release has no app.
 name: Release
 
 on:
