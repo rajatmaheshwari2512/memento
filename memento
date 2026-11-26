@@ -38,10 +38,10 @@ reader_revision=$(sed -n 's/^memento_extras_reader_revision: *//p' "$extras_defa
 reader_files=$(sed -n '/^memento_extras_reader_sha256:/,/^[^ ]/s/^  \([A-Za-z0-9._-]*\): *\([0-9a-f]\{64\}\) *$/\1:\2/p' \
   "$extras_defaults" 2>/dev/null || true)
 reader_download="$root/.local/reader-model/$reader_revision"
-owner_reader_copy="$root/.local/train-intent/reader-model"
+immich_src="$root/immich"
 compose_names="COMPOSE_PROJECT_NAME COMPOSE_FILE COMPOSE_PROFILES COMPOSE_ENV_FILES COMPOSE_PATH_SEPARATOR
 IMMICH_VERSION UPLOAD_LOCATION DB_DATA_LOCATION DB_PASSWORD DB_USERNAME DB_DATABASE_NAME DEV_WEB_DIST
-MEMENTO_ENV_FILE MEMENTO_DATA MEMENTO_WORK MEMENTO_MUSIC IMMICH_SRC DEV_UID DEV_GID DEV_SESSION_FILE DEV_WEB_UPSTREAM"
+MEMENTO_ENV_FILE MEMENTO_DATA MEMENTO_WORK MEMENTO_MUSIC DEV_UID DEV_GID DEV_SESSION_FILE DEV_WEB_UPSTREAM"
 
 say() { printf '%s\n' "$*"; }
 fail() {
@@ -75,8 +75,6 @@ path_setting() {
 }
 
 load_settings() {
-  immich_src=$(path_setting IMMICH_SRC)
-  [ -n "$immich_src" ] || immich_src="$root/immich"
   immich_version=$(sed -n 's/^immich_version: *//p' "$root/host/roles/immich/defaults/main.yml" 2>/dev/null || true)
   [ -n "$immich_version" ] || fail "Can't find immich_version in host/roles/immich/defaults/main.yml."
   web=$(setting DEV_WEB container)
@@ -151,7 +149,7 @@ need_setup() {
 
 need_immich_src() {
   [ -f "$immich_src/docker/docker-compose.yml" ] ||
-    fail "Immich's source (with Memento's website and app) isn't in $immich_src/. It comes with the repo as immich/; if you set IMMICH_SRC, point it at a copy of that folder."
+    fail "Immich's source (with Memento's website and app) isn't in $immich_src/. It comes with the repo as immich/."
 }
 
 clean_compose() {
@@ -281,7 +279,6 @@ MEMENTO_DATA=$dev/memento/data
 MEMENTO_WORK=$dev/memento/work
 MEMENTO_MUSIC=$music
 IMMICH_VERSION=$immich_version
-IMMICH_SRC=$immich_src
 DEV_UID=$(id -u)
 DEV_GID=$(id -g)
 DEV_SESSION_FILE=$dev/seed/session.env
@@ -328,7 +325,7 @@ download_reader() {
   done
 }
 
-# Sets reader_dir: READER_MODEL_DIR, else the owner's copy, else the download; empty if none.
+# Sets reader_dir: READER_MODEL_DIR, else the download; empty if none.
 find_reader() {
   local dir file
   reader_dir=""
@@ -338,8 +335,6 @@ find_reader() {
       [ -f "$dir/$file" ] || fail "READER_MODEL_DIR ($dir) needs config.json, tokenizer.json and model.onnx."
     done
     reader_dir=$dir
-  elif [ -f "$owner_reader_copy/model.onnx" ]; then
-    reader_dir=$owner_reader_copy
   elif download_reader; then
     reader_dir=$reader_download
   fi

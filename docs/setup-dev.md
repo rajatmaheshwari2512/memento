@@ -74,7 +74,6 @@ than `.env`: `MEMENTO_ENV_FILE=/path/to/file ./memento dev up`.
 | `DEV_GEMINI_API_KEY` | AI Edit uses the real Gemini. **Every edit costs money.** `up` says so. Empty: the free fake. |
 | `DEV_NIGHT_RULES=1` | Prod's night rules: no collages, recaps or Reduce noise from 00:30 to 07:00. Empty: any hour. |
 | `DEV_TZ` | The time zone, like `Europe/London`. Empty: your computer's. |
-| `IMMICH_SRC` | Immich's source folder, in the repo or anywhere (absolute). Empty: `immich`. |
 | `READER_MODEL_DIR` | Ask's reader model (see below). |
 | `MUSIC_DIR` | Music for recap videos (see below). |
 
@@ -86,7 +85,7 @@ them in Administration → Settings → Memento features.
 
 ### The website (`DEV_WEB`)
 
-- `container` (the default): the website from `IMMICH_SRC`, in Docker. Save a file and the page
+- `container` (the default): the website from `immich/`, in Docker. Save a file and the page
   updates. The first start installs its packages, which takes a minute or two.
 - `dist`: a built website (`apps/web/build.sh`), served by Immich the way prod serves it.
 
@@ -95,8 +94,6 @@ them in Administration → Settings → Memento features.
 Ask uses a small trained model to pick people, dates and places out of a question.
 
 - If `READER_MODEL_DIR` is set, dev uses that folder (`config.json`, `tokenizer.json`, `model.onnx`).
-- If not, it uses `.local/train-intent/reader-model` when that folder exists (a model trained on
-  this computer).
 - Otherwise it downloads the model from Hugging Face (`mahesraj/memento-ask-reader`, a fixed
   version, about 210 MB) and checks each file's fingerprint (sha256). A file that doesn't match is
   deleted. The download is kept in `.local/reader-model/`, so `reset` doesn't download it again.

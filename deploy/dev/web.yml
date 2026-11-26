@@ -1,10 +1,10 @@
-# DEV_WEB=container: the website dev server from Immich's source (IMMICH_SRC), in Immich's web dev
+# DEV_WEB=container: the website dev server from Immich's source (immich/), in Immich's web dev
 # image (./memento dev up).
 services:
   immich-web:
     image: memento-web-dev:local
     build:
-      context: ${IMMICH_SRC:?}
+      context: ./immich
       dockerfile: server/Dockerfile.dev
       target: dev
     container_name: memento_dev_web
@@ -20,7 +20,7 @@ services:
       IMMICH_SERVER_URL: http://immich-server:2283/
       MISE_LOCKFILE: "false"
     volumes:
-      - ${IMMICH_SRC:?}:/usr/src/app:ro
+      - ./immich:/usr/src/app:ro
       - web-buildcache:/buildcache
       - web-root-modules:/usr/src/app/node_modules
       - web-modules:/usr/src/app/web/node_modules
