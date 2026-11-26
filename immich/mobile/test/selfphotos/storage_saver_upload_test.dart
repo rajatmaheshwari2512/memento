@@ -14,6 +14,7 @@ import 'package:immich_mobile/domain/services/store.service.dart';
 import 'package:immich_mobile/entities/store.entity.dart';
 import 'package:immich_mobile/infrastructure/repositories/settings.repository.dart';
 import 'package:immich_mobile/infrastructure/repositories/store.repository.dart';
+import 'package:immich_mobile/platform/connectivity_api.g.dart';
 import 'package:immich_mobile/repositories/upload.repository.dart';
 import 'package:immich_mobile/selfphotos/storage_saver/storage_saver.service.dart';
 import 'package:immich_mobile/selfphotos/storage_saver/storage_saver_native.dart';
@@ -293,6 +294,26 @@ void main() {
 
       verify(() => mockStorageSaverService.backupQuality()).called(1);
       expect(uploads, hasLength(3));
+      expect(uploads.every((upload) => upload.fields.containsKey('metadata')), isTrue);
+    });
+
+    test('reads the quality once per backup run, in either upload mode', () async {
+      final assets = [for (var i = 0; i < 3; i++) photo.copyWith(id: 'photo$i')];
+      for (final asset in assets) {
+        stubAsset(asset, '/path/to/photo.jpg', 'photo.jpg');
+      }
+      when(() => mockBackupRepository.getCandidates('user-id')).thenAnswer((_) async => assets);
+      when(() => mockConnectivityApi.getCapabilities()).thenAnswer((_) async => [NetworkCapability.unmetered]);
+      when(() => mockStorageSaverService.backupQuality()).thenAnswer((_) async => BackupQuality.saver);
+      stubShrink(() => shrunk);
+      final uploads = captureUploads();
+
+      await sut.uploadCandidates('user-id', Completer<void>());
+      verify(() => mockStorageSaverService.backupQuality()).called(1);
+      await sut.uploadCandidates('user-id', Completer<void>(), useSequentialUpload: true);
+      verify(() => mockStorageSaverService.backupQuality()).called(1);
+
+      expect(uploads, hasLength(6));
       expect(uploads.every((upload) => upload.fields.containsKey('metadata')), isTrue);
     });
 

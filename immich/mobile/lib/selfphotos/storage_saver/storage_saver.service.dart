@@ -21,9 +21,10 @@ enum BackupQuality {
 }
 
 class StorageSaverService {
-  const StorageSaverService();
+  final ExtrasClient _client;
 
-  static const _client = ExtrasClient();
+  /// [_client]: Memento's extras service (a test can stand in for it).
+  const StorageSaverService([this._client = const ExtrasClient()]);
 
   Future<BackupQuality> quality() async => BackupQuality.fromJson(await _client.send('GET', '/backup/settings'));
 
@@ -32,7 +33,7 @@ class StorageSaverService {
 
   /// The quality to back up at: [BackupQuality.original] while the admin switch is off.
   Future<BackupQuality> backupQuality() async {
-    final flags = await MementoFlags.fetch();
+    final flags = MementoFlags.fromJson(await _client.send('GET', '/flags'));
     return flags.storageSaver ? quality() : BackupQuality.original;
   }
 }
