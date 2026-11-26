@@ -21,7 +21,6 @@ if [ -z "$version" ] || [ "$version" != "$code_version" ]; then
   echo "immich/ is Immich $code_version, but immich_version in host/roles/immich/defaults/main.yml is '$version'." >&2
   exit 1
 fi
-branch="$(git -C "$repo" branch --show-current)"
 commit="$(git -C "$repo" rev-parse --short HEAD)"
 if [ -n "$(git -C "$repo" status --porcelain -- immich)" ]; then
   commit="$commit-uncommitted"
@@ -50,7 +49,6 @@ docker cp "$cid:/usr/src/app/web/build/." "$out/"
 cat > "$dist/$version.build.json" <<EOF
 {
   "immichVersion": "$version",
-  "branch": "$branch",
   "commit": "$commit",
   "builtAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }

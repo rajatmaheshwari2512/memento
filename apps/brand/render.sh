@@ -47,7 +47,6 @@ done
 render "$brand/memento-glyph-white.svg" 1024 1024 "$tmp/glyph.png"
 
 # --- web app (web/static, web/src/lib/assets/memento) ---
-rm -f "$web/src/lib/assets/memento/memento-icon.svg"
 cp "$brand"/memento-{mark-light,mark-dark,inline-light,inline-dark,stacked-light,stacked-dark}.svg "$web/src/lib/assets/memento/"
 cp "$brand/memento-mark-auto.svg" "$web/static/icon.svg"
 resize "$tmp/home-light.png" 180 "$web/static/apple-icon-180.png"
@@ -69,10 +68,8 @@ EOF
 # --- Android app: images used inside the app (mobile/assets) ---
 cp "$tmp/mark-light.png" "$mobile/assets/immich-logo.png"          # light mode (and the default)
 cp "$tmp/mark-dark.png" "$mobile/assets/memento-logo-dark.png"     # dark mode (new)
-cp "$brand/memento-mark-light.svg" "$mobile/assets/immich-logo.svg"
 for t in light dark; do
   cp "$tmp/inline-$t.png" "$mobile/assets/immich-logo-inline-$t.png"
-  cp "$brand/memento-inline-$t.svg" "$mobile/assets/immich-logo-inline-$t.svg"
   cp "$tmp/wordmark-$t.png" "$mobile/assets/immich-text-$t.png"
 done
 cp "$tmp/home-light.png" "$mobile/assets/immich-logo-w-bg.png"
