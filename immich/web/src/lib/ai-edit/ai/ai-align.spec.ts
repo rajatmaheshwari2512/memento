@@ -1,12 +1,8 @@
-// Lining the AI's result up with the photo (ai-align.ts), run with canvases in the test browser:
-// the result here is the photo itself, slightly enlarged and moved and at another size, as
-// Gemini's 4K result was (the first real highlighted edit, 2026-11-22).
 import { IDENTITY, estimateAlignment, type Alignment } from '#lib/ai-edit/ai/ai-align.ts';
 import { alignFor, pasteOnto, type Stroke } from '#lib/ai-edit/ai/ai-area.ts';
 
 type Pixels = { width: number; height: number; data: Uint8ClampedArray };
 
-// A smooth texture that doesn't repeat within the search (no period under 25 px).
 const texture = (x: number, y: number) => {
   const v =
     128 +
@@ -17,7 +13,6 @@ const texture = (x: number, y: number) => {
   return [v, v * 0.8 + 20, 255 - v, 255];
 };
 
-// The photos are as big as the alignment is measured at (ai-tools.json, alignLongSide).
 const [W, H] = [1024, 768];
 
 function makePhoto() {
@@ -30,7 +25,6 @@ function makePhoto() {
   return createImageBitmap(new ImageData(data, W, H), { premultiplyAlpha: 'none' });
 }
 
-// `base` as the AI might return it: at `size`, with the photo's (x, y) at (scale·x + offset).
 async function drifted(
   base: ImageBitmap,
   size: { width: number; height: number },
@@ -51,10 +45,8 @@ async function decode(blob: Blob): Promise<Pixels> {
   return { width: image.width, height: image.height, data: context.getImageData(0, 0, image.width, image.height).data };
 }
 
-const dot: Stroke[] = [{ points: [[0.5, 0.5]], radius: 0.1 }]; // 102 px across 1024
+const dot: Stroke[] = [{ points: [[0.5, 0.5]], radius: 0.1 }];
 
-// The mean difference from the photo in a ring just inside the dot's edge (60–95 px from its
-// centre; the soft edge starts at about 98).
 function insideEdge(out: Pixels) {
   let sum = 0;
   let count = 0;
@@ -73,7 +65,6 @@ function insideEdge(out: Pixels) {
   return sum / count;
 }
 
-// The highlighted dot pasted from `result`, decoded.
 async function pasted(base: ImageBitmap, result: ImageBitmap, alignment: Alignment) {
   const { blob } = await pasteOnto(base, result, dot, 'image/png', alignment);
   return decode(blob);
@@ -90,7 +81,6 @@ describe('alignFor', () => {
     expect(alignment.offsetY).toBeCloseTo(0.004, 3);
     expect(alignment.error * W).toBeLessThan(0.5);
 
-    // Inside the dot, the pasted result is the photo again only when lined up.
     expect(insideEdge(await pasted(base, result, alignment))).toBeLessThan(6);
     expect(insideEdge(await pasted(base, result, IDENTITY))).toBeGreaterThan(10);
   });

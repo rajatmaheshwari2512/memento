@@ -1,5 +1,5 @@
 <script lang="ts">
-  import '#lib/memento/branding.svelte.ts'; // SelfPhotos: Memento logos everywhere
+  import '#lib/memento/branding.svelte.ts';
   import { getPagesProvider, getSettingsProvider } from '#lib/commands.ts';
   import OnEvents from '#lib/components/OnEvents.svelte';
   import { authManager } from '#lib/managers/auth-manager.svelte.ts';

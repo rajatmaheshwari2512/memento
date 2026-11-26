@@ -1,4 +1,4 @@
-import { loadMemoryLabels } from '#lib/ai-edit/memory-labels.svelte.ts'; // SelfPhotos themed memories
+import { loadMemoryLabels } from '#lib/ai-edit/memory-labels.svelte.ts';
 import { QueryParameter } from '#lib/constants.ts';
 import { authManager } from '#lib/managers/auth-manager.svelte.ts';
 import { eventManager } from '#lib/managers/event-manager.svelte.ts';

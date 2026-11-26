@@ -1,8 +1,5 @@
-<!--
-  SelfPhotos: create or edit a live album (an album that fills itself with photos of chosen
-  people). Built from Immich's own pieces: FormModal, Field, Select, Input, DatePicker, and
-  Immich's people picker (PeoplePickerModal). Not part of Immich.
--->
+<!-- SelfPhotos: create or edit a live album (an album that fills itself with photos of chosen -->
+<!-- people). -->
 <script lang="ts">
   import {
     createLiveAlbum,
@@ -34,8 +31,8 @@
   import { t } from 'svelte-i18n';
 
   type Props = {
-    liveAlbum?: LiveAlbum; // editing this one; otherwise a new one
-    albums: AlbumResponseDto[]; // your albums that aren't live albums yet
+    liveAlbum?: LiveAlbum;
+    albums: AlbumResponseDto[];
     people: PersonResponseDto[];
     onClose: (saved?: LiveAlbum) => void;
   };
@@ -126,8 +123,6 @@
       {/if}
     {/if}
 
-    <!-- Immich's Field only shows its label through an input inside it, so the button-only
-         fields carry their own Label (the same component and size the inputs use). -->
     <div>
       <Label label={$t('people')} size="small" />
       <div class="flex flex-wrap items-center gap-2 pt-1">

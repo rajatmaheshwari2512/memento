@@ -1,15 +1,11 @@
-// SelfPhotos Adjust: what the sliders and filters set, and how they become the shader's
-// values (adjust-core.glsl). Not part of Immich. Android has the same logic in
-// mobile/lib/selfphotos/adjust/adjust_params.dart.
+// SelfPhotos Adjust: what the sliders and filters set, and how they become the shader's values
+// (adjust-core.glsl).
 
 import filterList from '#lib/ai-edit/adjust/adjust-filters.json';
 import { isPhotoCorners, type Quad } from '#lib/ai-edit/adjust/adjust-geometry.ts';
 import { clamp } from 'lodash-es';
 
-// The sliders, in the order they're shown. Each is -1..1 (shown as -100..100), 0 = unchanged.
-// The labels are i18n keys; editor_exposure and editor_contrast are the names Immich's own
-// brightness/contrast change (PR #31040) uses.
-// `group` is the heading they're under (an existing Immich key: "Light", "Color").
+// The sliders, in the order they're shown.
 export const SLIDERS = [
   { key: 'exposure', label: 'editor_exposure', group: 'light' },
   { key: 'brightness', label: 'editor_brightness', group: 'light' },
@@ -26,8 +22,8 @@ export type SliderKey = (typeof SLIDERS)[number]['key'];
 export type Adjustments = Record<SliderKey, number>;
 type Rgb = [number, number, number];
 
-// A filter: some sliders, plus two settings only filters use (fade, and colours pushed
-// into the shadows and highlights).
+// A filter: some sliders, plus two settings only filters use (fade, and colours pushed into the
+// shadows and highlights).
 export type Filter = { id: string } & Partial<Adjustments> & { fade?: number; toneShadows?: Rgb; toneHighlights?: Rgb };
 
 export const FILTERS: Filter[] = filterList.filters as Filter[];
@@ -35,8 +31,7 @@ export const FILTERS: Filter[] = filterList.filters as Filter[];
 // Straighten: the slider's range, in degrees (clockwise is positive).
 export const MAX_ANGLE = 45;
 
-// Everything the editor holds. `filter` is a filter id or null; `strength` 0..1;
-// `perspective` the four corners (adjust-geometry.ts), null or left out for none.
+// Everything the editor holds.
 export type AdjustState = {
   adjustments: Adjustments;
   filter: string | null;
@@ -45,7 +40,6 @@ export type AdjustState = {
   perspective?: Quad | null;
 };
 
-// The values the shader takes (adjust-core.glsl's uniforms without the u prefix).
 export type ShaderValues = Adjustments & { fade: number; toneShadows: Rgb; toneHighlights: Rgb };
 
 export const neutralAdjustments = (): Adjustments =>
@@ -62,7 +56,7 @@ export const initialState = (): AdjustState => ({
 // The corners to keep: the photo's own are no perspective (null).
 export const perspectiveOf = (corners: Quad | null) => (corners && !isPhotoCorners(corners) ? corners : null);
 
-// The sliders, plus the filter at its strength. Each ends up -1..1 (fade 0..1).
+// The sliders, plus the filter at its strength.
 export function shaderValues(state: Pick<AdjustState, 'adjustments' | 'filter' | 'strength'>): ShaderValues {
   const filter = FILTERS.find(({ id }) => id === state.filter);
   const strength = filter ? clamp(state.strength, 0, 1) : 0;

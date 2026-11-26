@@ -37,18 +37,15 @@ describe('themed memory titles', () => {
     expect(title(memory('made-by-memento'))).toBe('Spotlight: Mom');
     expect(title(memory('immich-own'))).toBe(immichTitle);
 
-    // Not asked again within a minute.
     const calls = fetch.mock.calls.length;
     await loadMemoryLabels();
     expect(fetch.mock.calls.length).toBe(calls);
 
-    // The service down: the last titles stay, nothing breaks.
     now += 61_000;
     fetch.mockRejectedValue(new TypeError('Failed to fetch'));
     await loadMemoryLabels();
     expect(title(memory('made-by-memento'))).toBe('Spotlight: Mom');
 
-    // Switched off by an admin: Immich's own titles.
     now += 61_000;
     mementoFlags.value = flags(false);
     await loadMemoryLabels();

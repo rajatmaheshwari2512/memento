@@ -1,7 +1,5 @@
-// SelfPhotos: calls to Memento's extras service (memento-extras, was ai-edit) at /extras on the same domain.
-// Not part of Immich. The browser sends the Immich login cookie with these requests on
-// its own, and the service asks Immich who the user is. See the SelfPhotos repo,
-// memento-extras/README.md, for the service's API.
+// SelfPhotos: calls to Memento's extras service (memento-extras) at /extras on the
+// same domain.
 
 export type AiEditUsage = {
   today: { used: number; limit: number };
@@ -23,14 +21,11 @@ export const IMAGE_UNAVAILABLE = 'image_unavailable';
 // The service's code for a photo too large for AI edits (ai/ai-tools.ts MAX_PHOTO).
 export const PHOTO_TOO_LARGE = 'photo_too_large';
 
-// status 0: the service couldn't be reached (`cause`: why, as the browser said it).
+// status 0: the service couldn't be reached.
 export class AiEditError extends Error {
   readonly status: number;
   readonly usage?: AiEditUsage;
-  // Why, in a word: the service's reason when it gives one (e.g. PHOTO_TOO_LARGE), or
-  // IMAGE_UNAVAILABLE.
   readonly code?: string;
-  // The message is the service's own words (plain, for people), not one made here.
   readonly fromService: boolean;
 
   constructor(
@@ -51,9 +46,7 @@ const UNREACHABLE = "Couldn't reach Memento's extras service. Check your connect
 // A failure's message, to show.
 export const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
-// `body` goes as JSON, or a Blob as it is (with its own type): the service refuses
-// POST/PUT/DELETE without a type other sites can't send (its cross-site guard). `timeoutMs`:
-// give up after that long (counted as unreachable).
+// `body` goes as JSON, or a Blob as it is (with its own type).
 export async function request<T>(
   method: 'GET' | 'POST' | 'PUT' | 'DELETE',
   path: string,
@@ -78,7 +71,6 @@ export async function request<T>(
   try {
     data = (await response.json()) as { error?: string; code?: string; usage?: AiEditUsage };
   } catch {
-    // not JSON (e.g. the service is down and something else answered)
   }
   if (!response.ok) {
     throw new AiEditError(response.status, data?.error ?? `AI edit failed (${response.status}).`, {
@@ -92,19 +84,15 @@ export async function request<T>(
 
 export const getAiEditUsage = () => request<AiEditUsage>('GET', '/limits');
 
-// SelfPhotos feature flags (Administration → Settings → Memento Features). Any logged-in
-// user can read them; only an admin can change them.
+// SelfPhotos feature flags (Administration → Settings → Memento Features).
 export type MementoFlags = {
-  // tools: the AI tools (presets and highlighting); a service from before them doesn't list it.
   gemini: { enabled: boolean; tools?: boolean; allow4k: boolean; dailyLimitPerUser: number; monthlyLimitTotal: number };
   liveAlbums: { enabled: boolean };
   askPhotos: { enabled: boolean };
   captions: { enabled: boolean };
   adjust: { enabled: boolean };
-  // Optional: a service from before themed memories doesn't list them.
   themedMemories?: { enabled: boolean };
   creations?: { enabled: boolean };
-  // Optional: a service from before Reduce noise for videos doesn't list it.
   reduceNoise?: { enabled: boolean };
 };
 export type MementoFlagsResponse = { flags: MementoFlags; defaults: MementoFlags };
@@ -114,17 +102,12 @@ export const getMementoFlags = () => request<MementoFlagsResponse>('GET', '/flag
 export const updateMementoFlags = (flags: MementoFlags) => request<MementoFlagsResponse>('PUT', '/flags', flags);
 
 export type AiEditOptions = {
-  // Edit that earlier result again ("Edit more") instead of the original.
   fromEditId?: string;
-  // The AI tools selected (ai/ai-tools.json), if any: their instructions are already in the prompt.
   tools?: string[];
-  // For an edit of a highlighted area (ai/ai-area.ts): the photo with that area tinted red, and
-  // for a first edit the photo itself, upright.
   mark?: Blob;
   photo?: Blob;
 };
 
-// The mark goes base64 in the JSON request.
 const base64 = (blob: Blob) =>
   new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -138,17 +121,16 @@ export const createAiEdit = async (assetId: string, prompt: string, options: AiE
     assetId,
     prompt,
     fromEditId: options.fromEditId,
-    tools: options.tools?.length ? options.tools : undefined, // none: a typed instruction
+    tools: options.tools?.length ? options.tools : undefined,
     mark: options.mark ? await base64(options.mark) : undefined,
     photo: options.photo ? await base64(options.photo) : undefined,
   });
 
-// `whole`: an edit of a highlighted area saved as the AI made it, not pasted (the person chose it).
+// `whole`: an edit of a highlighted area saved as the AI made it, not pasted (the person chose
+// it).
 export const saveAiEdit = (editId: string, whole = false) =>
   request<{ assetId: string }>('POST', `/edits/${encodeURIComponent(editId)}/save`, whole ? { whole: true } : {});
 
-// How a highlighted edit's result was lined up with the photo (numbers only), for the service's
-// log, where the refusal threshold is tuned. Fire and forget.
 export const reportAlignment = (
   editId: string,
   report: {
@@ -162,8 +144,7 @@ export const reportAlignment = (
   },
 ) => request<void>('POST', `/edits/${encodeURIComponent(editId)}/alignment`, report).catch(() => {});
 
-// An edit of a highlighted area: the original with that area of the result pasted on, at full
-// size (ai/ai-area.ts pasteBack), saved like saveAiEdit.
+// An edit of a highlighted area.
 export const saveAiEditArea = (editId: string, image: Blob) =>
   request<{ assetId: string }>('POST', `/edits/${encodeURIComponent(editId)}/save-area`, image);
 
@@ -171,8 +152,7 @@ export const discardAiEdit = (editId: string) => request<void>('DELETE', `/edits
 
 export const aiEditImageUrl = (editId: string) => `${BASE}/edits/${encodeURIComponent(editId)}/image`;
 
-// An edit's picture (the Android app's AiEditService.image). Fails with status 0 when the
-// service can't be reached, otherwise with code IMAGE_UNAVAILABLE.
+// An edit's picture (the Android app's AiEditService.image).
 export async function getAiEditImage(editId: string): Promise<Blob> {
   let response: Response;
   try {
@@ -188,7 +168,6 @@ export async function getAiEditImage(editId: string): Promise<Blob> {
   return response.blob();
 }
 
-// Adjust (sliders, filters, straighten): the photo rendered here at full size, saved as a
-// copy with the original's date and place, stacked on top of it. Returns the copy's ID.
+// Adjust (sliders, filters, straighten).
 export const saveAdjustedCopy = (assetId: string, image: Blob) =>
   request<{ assetId: string }>('POST', `/adjust/${encodeURIComponent(assetId)}/save`, image);

@@ -6,7 +6,6 @@ import { initialState, neutralAdjustments } from '#lib/ai-edit/adjust/adjust-par
 
 type Run = number[];
 
-// One row of pixels from [red, green, blue, how many] runs.
 const picture = (runs: Run[]) => {
   const width = runs.reduce((sum, run) => sum + run[3], 0);
   const data = new Uint8ClampedArray(width * 4);
@@ -19,7 +18,6 @@ const picture = (runs: Run[]) => {
   return { data, width };
 };
 
-// The picture with Auto's sliders, through the shader, as it would be saved.
 async function withAuto(runs: Run[]) {
   const { data, width } = picture(runs);
   const values = autoAdjust(data, width, 1);
@@ -87,14 +85,12 @@ describe('Auto', () => {
   it('gives a flat photo more contrast: its darkest tones go down and its brightest up', async () => {
     const { values, before, after } = await withAuto(ramp(95, 175));
     expect(values.contrast).toBeGreaterThan(0);
-    // A gentle change (contrast at most 0.12), but a visible one.
     expect(after.low).toBeLessThan(before.low - 0.01);
     expect(after.high).toBeGreaterThan(before.high + 0.01);
     expect(Math.abs(after.median - before.median)).toBeLessThan(0.05);
   });
 
   it('nudges a blue cast towards neutral grey', async () => {
-    // A cast, not a blue thing: greyish enough to count (adjust-auto.json's warmth.greyish).
     const blue = ramp(20, 240).map(([r, g, , count]) => [Math.round(r * 0.9), Math.round(g * 0.95), r, count]);
     const { values, before, after } = await withAuto(blue);
     expect(values.warmth).toBeGreaterThan(0);
@@ -115,7 +111,6 @@ describe('Auto', () => {
   it('looks at every pixel of a small picture, and at most about the sample count of a large one', () => {
     const small = new Uint8ClampedArray(64 * 48 * 4).fill(200);
     expect(measure(small, 64, 48).median).toBeCloseTo(200 / 255, 6);
-    // 1000×1000: every third pixel of every third row (334 × 334).
     const large = new Uint8ClampedArray(1000 * 1000 * 4);
     for (let i = 0; i < large.length; i += 4) {
       const x = (i / 4) % 1000;

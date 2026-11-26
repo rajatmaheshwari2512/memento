@@ -1,16 +1,5 @@
-// SelfPhotos Adjust: the shared maths for the light and colour sliders, filters, straighten,
-// perspective and the tiles of a full-size render. Not part of Immich. This one file is used by both
-// apps, so the same values give the same picture on both:
-//   web:     adjust-renderer.ts runs it with WebGL2
-//   Android: mobile/shaders/selfphotos_adjust.frag includes it, and Flutter runs it
-// Each wraps it in a few lines: the GLSL version, where the pixel is, and the output. Keep
-// it to what both GLSL ES 3.0 and Flutter's GLSL accept (no #version here).
-//
-// Every step is per pixel (nothing looks at neighbouring pixels), so a tile of a full-size
-// render has exactly the pixels a single pass would give there, and the preview, made from a
-// smaller image, matches the saved photo.
-//
-// Units: sliders are -1..1, 0 = unchanged. Positions are pixels, y down, (0,0) top-left.
+// SelfPhotos Adjust: the shared maths for the sliders, filters, straighten and perspective.
+// Used by the web (adjust-renderer.ts, WebGL2) and Android (mobile/shaders/selfphotos_adjust.frag).
 
 uniform sampler2D uTexture;   // the source photo, or the part of it this tile needs
 uniform vec2 uTexOrigin;      // where uTexture starts in the source, in source pixels
@@ -21,8 +10,7 @@ uniform vec2 uTileOrigin;     // where this render starts in the output, in pixe
 uniform vec2 uRotation;       // straighten: (cos, sin) of the angle, clockwise
 uniform vec2 uCropScale;      // the crop: its width and height, each a share of the source's
 uniform vec2 uCropCentre;     // the crop's centre: the source's centre, unless perspective moves it
-// Perspective (adjust-geometry.ts): the rows of the matrix from the straightened picture to the
-// source, in pixels. Without it: 1 0 0, 0 1 0, 0 0 1, which changes nothing.
+// Perspective (adjust-geometry.ts): the rows of the matrix from the straightened picture to the source, in pixels (none: 1 0 0, 0 1 0, 0 0 1).
 uniform vec3 uPerspectiveX;
 uniform vec3 uPerspectiveY;
 uniform vec3 uPerspectiveW;
@@ -51,8 +39,7 @@ vec3 linearToSrgb(vec3 c) {
   return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), c));
 }
 
-// An S-curve around middle grey that keeps black and white where they are (more contrast),
-// or a straight pull towards middle grey (less).
+// An S-curve around middle grey (more contrast), or a pull towards it (less).
 vec3 contrastCurve(vec3 v, float amount) {
   if (amount >= 0.0) {
     float k = 1.0 + 1.5 * amount;
@@ -63,9 +50,7 @@ vec3 contrastCurve(vec3 v, float amount) {
   return mix(v, vec3(0.5), -0.5 * amount);
 }
 
-// Shadows lift or deepen the dark tones (most at a third of the way up), highlights the
-// bright ones (most at two thirds). The weights keep the curve rising even with both sliders
-// at their ends, so tones never swap places.
+// Shadows lift or deepen the dark tones, highlights the bright ones.
 float toneCurve(float l, float shadows, float highlights) {
   float darks = l * (1.0 - l) * (1.0 - l);
   float brights = l * l * (1.0 - l);
@@ -76,18 +61,14 @@ float toneCurve(float l, float shadows, float highlights) {
 
 // The colour at one point. `pos` is where it is in the whole output picture, 0..1 (vignette).
 vec3 adjustColor(vec3 rgb, vec2 pos) {
-  // Exposure and white balance change the light itself, so they work on linear values.
   vec3 lin = srgbToLinear(rgb) * exp2(uExposure * 2.0);
   vec3 balance = vec3(1.0 + 0.25 * uWarmth + 0.1 * uTint, 1.0 - 0.2 * uTint, 1.0 - 0.25 * uWarmth + 0.1 * uTint);
-  lin *= balance / dot(balance, LUMA); // the same overall brightness
+  lin *= balance / dot(balance, LUMA);
   vec3 v = linearToSrgb(clamp(lin, 0.0, 1.0));
 
-  // The rest works on how bright things look (sRGB values).
   v = pow(v, vec3(exp2(-0.75 * uBrightness)));
   v = contrastCurve(v, uContrast);
 
-  // Shadows and highlights scale the colour, so it keeps its hue and saturation. A bright
-  // colour pushed past white keeps its brightness and hue instead, and gives up saturation.
   float l = dot(v, LUMA);
   float toned = clamp(toneCurve(l, uShadows, uHighlights), 0.0, 1.0);
   v = l > 0.0001 ? v * (toned / l) : vec3(toned);
@@ -99,13 +80,10 @@ vec3 adjustColor(vec3 rgb, vec2 pos) {
   l = dot(v, LUMA);
   v = mix(vec3(l), v, 1.0 + uSaturation);
 
-  // Filters' fade and colour toning come after saturation, so a black-and-white filter can
-  // still be toned (sepia).
   v = mix(v, vec3(0.08) + 0.86 * v, uFade);
   l = dot(v, LUMA);
   v += 0.4 * (uToneShadows * (1.0 - l) * (1.0 - l) + uToneHighlights * l * l);
 
-  // Vignette: an ellipse the shape of the picture, from its centre (0) to the corners (1).
   float r = length((pos - 0.5) * 2.0) * 0.70710678;
   float edge = smoothstep(0.35, 1.0, r);
   v = uVignette >= 0.0 ? v * (1.0 - 0.65 * uVignette * edge) : mix(v, vec3(1.0), -0.6 * uVignette * edge);
@@ -113,9 +91,7 @@ vec3 adjustColor(vec3 rgb, vec2 pos) {
   return clamp(v, 0.0, 1.0);
 }
 
-// Straighten and perspective: the source position (in source pixels) shown at an output
-// position (in output pixels). The output is a rectangle inside the turned (and warped) photo, so
-// no empty corners show: straighten's of the source's shape, perspective's of any shape.
+// The source position (in source pixels) shown at an output position (in output pixels).
 vec2 sourcePosition(vec2 outPos) {
   vec2 q = (outPos / uOutSize - 0.5) * uSrcSize * uCropScale;
   vec2 turned = vec2(q.x * uRotation.x + q.y * uRotation.y, q.y * uRotation.x - q.x * uRotation.y);

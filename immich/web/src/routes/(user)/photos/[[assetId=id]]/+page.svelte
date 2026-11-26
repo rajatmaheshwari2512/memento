@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { getAiEditAction } from '#lib/ai-edit/ai-edit-action.ts'; // SelfPhotos AI edit
+  import { getAiEditAction } from '#lib/ai-edit/ai-edit-action.ts';
   import ActionMenuItem from '#lib/components/ActionMenuItem.svelte';
   import UserPageLayout from '#lib/components/layouts/UserPageLayout.svelte';
   import MemoryCard from '#lib/components/memories/MemoryCard.svelte';

@@ -1,6 +1,3 @@
-// AI tools' paste-back, run for real with canvases in the test browser: only the highlighted
-// area of the AI's result lands on the photo, with a soft edge; everything else keeps the
-// photo's own pixels.
 import { AdjustExportError } from '#lib/ai-edit/adjust/adjust-export.ts';
 import { IDENTITY } from '#lib/ai-edit/ai/ai-align.ts';
 import {
@@ -43,29 +40,24 @@ const at = ({ width, data }: Pixels, x: number, y: number) => [
   ...data.subarray((y * width + x) * 4, (y * width + x) * 4 + 4),
 ];
 
-// The photo: a gradient with a fine pattern, so any resampling of it would show.
 const photoPixel = (x: number, y: number) => [
   Math.round((x / 399) * 255),
   Math.round((y / 299) * 255),
   (x * 7 + y * 13) % 256,
   255,
 ];
-// The AI's result: its own size class (a little smaller, the same shape) and other colours.
 const resultPixel = () => [20, 200, 90, 255];
 
-// A dot in the middle, 40 px across at 400 px wide (the radius is a share of the longer side).
 const dot: Stroke[] = [{ points: [[0.5, 0.5]], radius: 0.1 }];
 
 describe('pasteOnto', () => {
   it('keeps every pixel outside the highlighted area, takes the result inside, and blends at the edge', async () => {
     const base = await makeImage(400, 300, photoPixel);
     const result = await makeImage(392, 294, resultPixel);
-    // Small tiles, so the paste crosses tile edges.
     const { blob, size } = await pasteOnto(base, result, dot, 'image/png', undefined, 64);
     expect(size).toEqual({ width: 400, height: 300 });
     const out = await decode(blob);
 
-    // Outside the dot and its soft edge (the mask's feather, stretched from its own size).
     const softEdge = ((AREA.feather * AREA.maskLongSide * 4 + 2) * 400) / AREA.maskLongSide;
     let changed = 0;
     for (let y = 0; y < 300; y++) {
@@ -77,7 +69,6 @@ describe('pasteOnto', () => {
     }
     expect(changed).toBe(0);
 
-    // Inside: the result.
     for (const [x, y] of [
       [200, 150],
       [185, 150],
@@ -89,7 +80,6 @@ describe('pasteOnto', () => {
       }
     }
 
-    // At the edge: some of each.
     const edge = at(out, 240, 150);
     const [photoGreen, resultGreen] = [photoPixel(240, 150)[1], resultPixel()[1]];
     expect(edge[1]).toBeGreaterThan(Math.min(photoGreen, resultGreen) + 10);
@@ -148,7 +138,7 @@ describe('markedCopy', () => {
     const out = await decode(await markedCopy(photo, dot));
     expect([out.width, out.height]).toEqual([AREA.markLongSide, (AREA.markLongSide * 3) / 4]);
     const [centre, corner] = [at(out, out.width / 2, out.height / 2), at(out, 10, 10)];
-    expect(centre[0]).toBeGreaterThan(120); // half red over the blue-ish photo
+    expect(centre[0]).toBeGreaterThan(120);
     expect(centre[2]).toBeLessThan(140);
     for (const [i, value] of [40, 120, 200].entries()) {
       expect(Math.abs(corner[i] - value)).toBeLessThanOrEqual(4);
@@ -177,18 +167,14 @@ describe('refusalOf', () => {
   it("counts anything else that goes wrong lining it up or pasting it as a failure ('failed')", async () => {
     const base = await makeImage(400, 300, photoPixel);
     const result = await makeImage(392, 294, resultPixel);
-    // A canvas error while lining it up (a brush the canvas can't draw).
     const broken: Stroke[] = [{ points: [[0.5, 0.5]], radius: -0.1 }];
     const failure = await alignFor(base, result, broken).catch((error: unknown) => error);
     expect(failure).toBeInstanceOf(DOMException);
     expect(refusalOf(failure)).toBe('failed');
-    // The photo too large for this browser's canvas while pasting.
     expect(refusalOf(new AdjustExportError('too-large'))).toBe('failed');
   });
 });
 
-// The photo's picture as this browser reads it, stubbed: always 600×400 (a PNG), whatever the
-// photo's size as Immich shows it.
 describe('the full-size picture a highlighted edit needs', () => {
   const photo = (width: number, height: number) =>
     ({

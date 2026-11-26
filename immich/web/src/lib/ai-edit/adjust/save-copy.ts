@@ -1,7 +1,5 @@
-// SelfPhotos editor: saving a copy (Adjust's, or an AI edit), then waiting until Immich has
-// made its thumbnails, so the viewer opened on it shows it. Immich makes them in the
-// background, possibly before the save answers, so they're noted from the start; after a few
-// seconds without them the copy opens anyway. Not part of Immich.
+// SelfPhotos editor: saving a copy (Adjust's, or an AI edit), then waiting until Immich has made
+// its thumbnails.
 
 import { waitForWebsocketEvent, websocketEvents } from '#lib/stores/websocket.ts';
 

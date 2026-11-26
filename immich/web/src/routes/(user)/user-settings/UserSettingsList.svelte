@@ -1,5 +1,5 @@
 <script lang="ts">
-  import MementoMemoriesSettings from '#lib/ai-edit/MementoMemoriesSettings.svelte'; // SelfPhotos themed memories
+  import MementoMemoriesSettings from '#lib/ai-edit/MementoMemoriesSettings.svelte';
   import SettingAccordion from '#lib/components/shared-components/settings/SettingAccordion.svelte';
   import { OpenQueryParam, QueryParameter } from '#lib/constants.ts';
   import { createPreloadedQuery } from '#lib/queries/client.ts';

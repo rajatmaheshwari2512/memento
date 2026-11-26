@@ -1,22 +1,17 @@
 // SelfPhotos Adjust: straighten's and perspective's crop, and the tiles of a full-size render.
-// Not part of Immich. Android has the same maths in
-// mobile/lib/selfphotos/adjust/adjust_geometry.dart; adjust-geometry-parity.json holds values
-// both are checked against.
 
 export type Size = { width: number; height: number };
 export type Rect = { x: number; y: number; width: number; height: number };
 export type Point = [number, number];
 
 // Perspective: four points the person drags onto lines that should be straight (a building's
-// edges), clockwise from the top left, as shares of the photo's width and height (0..1).
+// edges), clockwise from the top left.
 export type Quad = [Point, Point, Point, Point];
 
 // A 3×3 matrix, row by row, for positions [x, y, 1].
 export type Matrix = [number, number, number, number, number, number, number, number, number];
 
-// Turning a w×h photo by `degrees` leaves empty corners. The largest centred rectangle of
-// the same shape that fits inside the turned photo is this share of its width and height:
-// 1 / (cos + max(w/h, h/w)·sin). 1 at 0°; for a square at 45°, 0.7071.
+// Turning a w×h photo by `degrees` leaves empty corners.
 export function cropScale(degrees: number, { width, height }: Size): number {
   const radians = (Math.abs(degrees) * Math.PI) / 180;
   const ratio = Math.max(width / height, height / width);
@@ -64,10 +59,8 @@ export function invert(m: Matrix): Matrix {
 const cross = (o: Point, a: Point, b: Point) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
 const distance = (a: Point, b: Point) => Math.hypot(b[0] - a[0], b[1] - a[1]);
 
-// The corners as positions in the photo, in pixels.
 const inPixels = (quad: Quad, { width, height }: Size) => quad.map(([x, y]) => [x * width, y * height] as Point);
 
-// The four corners' rectangle once straightened: its sides as long as theirs, on average (pixels).
 function markedSize(quad: Quad, source: Size): Size {
   const [p0, p1, p2, p3] = inPixels(quad, source);
   return {
@@ -76,9 +69,7 @@ function markedSize(quad: Quad, source: Size): Size {
   };
 }
 
-// Perspective's warp, the other way round: from a position in the straightened picture (the
-// four corners' rectangle, markedSize, its top left at 0, 0) to the photo (pixels). The unit
-// square to the corners (Heckbert's formula), after scaling the rectangle down to it.
+// Perspective's warp, the other way round.
 export function perspectiveMatrix(quad: Quad, source: Size): Matrix {
   const [p0, p1, p2, p3] = inPixels(quad, source);
   const { width, height } = markedSize(quad, source);
@@ -104,15 +95,10 @@ export function perspectiveMatrix(quad: Quad, source: Size): Matrix {
   ];
 }
 
-// How sharply each corner must turn (the cross product of its two sides, in shares of the
-// photo): keeps the corners a real four-sided shape, not a sliver or a bow tie.
 const MIN_TURN = 0.01;
-// How far the warp may stretch one side of the photo against the other: 10 times.
 const MIN_DEPTH = 0.1;
 
-// Whether the corners make a warp the photo survives: inside the photo, in order and turning
-// the same way (a convex shape of some size), and with the whole photo still in front after the
-// warp (none of it stretched to infinity), so its corners can be cropped to a rectangle.
+// Whether the corners make a warp the photo survives.
 export function isValidPerspective(quad: Quad): boolean {
   if (quad.some(([x, y]) => !(x >= 0 && x <= 1 && y >= 0 && y <= 1))) {
     return false;
@@ -131,9 +117,7 @@ export function isValidPerspective(quad: Quad): boolean {
 
 export const isPhotoCorners = (quad: Quad) => photoCorners().every(([x, y], i) => quad[i][0] === x && quad[i][1] === y);
 
-// Where each output pixel comes from: the crop's width and height (each a share of the source's),
-// its centre and turn, and perspective's warp to the photo (none without it). The shader's
-// uCropScale, uCropCentre, uRotation and uPerspective rows.
+// Where each output pixel comes from.
 export type Framing = {
   scale: [number, number];
   centre: Point;
@@ -143,9 +127,7 @@ export type Framing = {
 
 export const IDENTITY: Matrix = [1, 0, 0, 0, 1, 0, 0, 0, 1];
 
-// Without perspective, straighten's centred crop, the photo's own shape. With it, a rectangle
-// that keeps everything inside the four corners and has no empty corners, in the photo's own
-// shape where one can, else in the shape closest to it (perspectiveCrop).
+// Without perspective, straighten's centred crop, the photo's own shape.
 export function framing(degrees: number, source: Size, perspective?: Quad | null): Framing {
   const scale = cropScale(degrees, source);
   const plain: Framing = {
@@ -161,8 +143,6 @@ export function framing(degrees: number, source: Size, perspective?: Quad | null
   return { ...perspectiveCrop(toPhoto, degrees, source, markedSize(perspective, source)), toPhoto };
 }
 
-// A rectangle in the crop's own frame (the straightened picture, turned with the angle): its top
-// left, width and height. A condition on one: a·(x, y, width, height) ≤ limit, as [...a, limit].
 type Box = [number, number, number, number];
 type Condition = [number, number, number, number, number];
 
@@ -171,7 +151,6 @@ const det3 = (c0: number[], c1: number[], c2: number[]) =>
   c1[0] * (c0[1] * c2[2] - c0[2] * c2[1]) +
   c2[0] * (c0[1] * c1[2] - c0[2] * c1[1]);
 
-// Of four rows of four.
 function det4(rows: number[][]) {
   let sum = 0;
   for (let j = 0; j < 4; j++) {
@@ -181,16 +160,9 @@ function det4(rows: number[][]) {
   return sum;
 }
 
-// Perspective's crop. In the crop's frame the photo, warped, is a four-sided shape, and the four
-// corners' rectangle (`marked`, straightened) is inside it. The crop is a rectangle inside the
-// shape (no empty corners) and around the marked rectangle (nothing of it cut off): the largest of
-// those with the photo's own shape; if none has it, the largest of those closest to it. Turned
-// with the angle, the marked rectangle may reach past the photo's edges (when corners are on
-// them): then the crop goes around as much of it as fits, kept centred.
 function perspectiveCrop(toPhoto: Matrix, degrees: number, source: Size, marked: Size) {
   const { conditions, fallback } = cropConditions(toPhoto, degrees, source, marked);
   const [x, y, width, height] = bestCrop(conditions, fallback, source);
-  // Its centre turned back, into the straightened picture.
   const [cos, sin] = rotation(degrees);
   return {
     scale: [width / source.width, height / source.height] as [number, number],
@@ -199,10 +171,6 @@ function perspectiveCrop(toPhoto: Matrix, degrees: number, source: Size, marked:
   };
 }
 
-// What a crop box must keep to, in the crop's frame: for each side of the warped photo (its
-// outward direction n, of length 1), the box's corner farthest along n stays inside it; and the
-// box goes around the marked rectangle's bounds, shrunk about their centre (by `fit`, at most 1)
-// until they're inside the photo. `fallback`: those bounds, a box that keeps to all of it.
 function cropConditions(toPhoto: Matrix, degrees: number, source: Size, marked: Size) {
   const fromPhoto = invert(toPhoto);
   const [cos, sin] = rotation(degrees);
@@ -240,7 +208,6 @@ function cropConditions(toPhoto: Matrix, degrees: number, source: Size, marked: 
 const keepsTo = (conditions: Condition[], tolerance: number) => (box: Box) =>
   conditions.every((c) => c[0] * box[0] + c[1] * box[1] + c[2] * box[2] + c[3] * box[3] <= c[4] + tolerance);
 
-// The corners of what's allowed: boxes where four conditions meet, keeping to every condition.
 function cropCorners(conditions: Condition[], tolerance: number): Box[] {
   const keeps = keepsTo(conditions, tolerance);
   const found: Box[] = [];
@@ -267,8 +234,6 @@ function cropCorners(conditions: Condition[], tolerance: number): Box[] {
   return found;
 }
 
-// The boxes of one shape (width ratio·height) that could be the tallest: where three conditions
-// meet, with the width written as ratio·height, keeping to every condition.
 function cropsOfShape(conditions: Condition[], ratio: number, tolerance: number): Box[] {
   const keeps = keepsTo(conditions, tolerance);
   const found: Box[] = [];
@@ -299,11 +264,6 @@ function cropsOfShape(conditions: Condition[], ratio: number, tolerance: number)
   return found;
 }
 
-// The winner. What's allowed is convex, so the shapes it allows run from the narrowest of its
-// corners to the widest, every one between them included: the photo's own shape if it's between,
-// else the nearer end (there, only corners have that shape). Of that shape, the tallest (so the
-// largest); of those (the same box, able to slide), the one in the middle. Returns its centre,
-// width and height.
 function bestCrop(conditions: Condition[], fallback: Box, source: Size): Box {
   const tolerance = 1e-9 * Math.max(source.width, source.height);
   const corners = cropCorners(conditions, tolerance);
@@ -327,7 +287,7 @@ function bestCrop(conditions: Condition[], fallback: Box, source: Size): Box {
 }
 
 // The saved photo's size: the crop at the source's own resolution, never more pixels than the
-// source (perspective's crop may be another shape, so it may be longer on one side).
+// source.
 export function outputSize(degrees: number, source: Size, perspective?: Quad | null): Size {
   const [sx, sy] = framing(degrees, source, perspective).scale;
   const shrink = Math.min(1, 1 / Math.sqrt(sx * sy));
@@ -337,8 +297,6 @@ export function outputSize(degrees: number, source: Size, perspective?: Quad | n
   };
 }
 
-// Where an output position (pixels) is in the source (pixels): adjust-core.glsl's
-// sourcePosition, for working out which part of the source each tile needs.
 function sourcePosition(x: number, y: number, output: Size, source: Size, view: Framing): Point {
   const {
     scale: [sx, sy],
@@ -372,9 +330,6 @@ export function tiles(output: Size, size: number): Rect[] {
   return result;
 }
 
-// The part of the source a tile shows: the box around its turned (and warped) corners, plus
-// `pad` pixels for smooth sampling, inside the source, on whole pixels. Perspective keeps
-// straight lines straight, so the corners are enough.
 function partOf(tile: Rect, output: Size, source: Size, view: Framing, pad: number): Rect {
   const corners = [
     sourcePosition(tile.x, tile.y, output, source, view),
@@ -400,12 +355,11 @@ export const sourceRect = (
   pad = 2,
 ): Rect => partOf(tile, output, source, framing(degrees, source, perspective), pad);
 
-// The biggest tile whose source part still fits in one GPU texture: a turned tile needs up
-// to √2 times its size of the source, plus the padding.
+// The biggest tile whose source part still fits in one GPU texture.
 export const tileSizeFor = (maxTextureSize: number) => Math.max(256, Math.min(2048, Math.floor(maxTextureSize / 1.5)));
 
 // Perspective can make a tile's part of the source larger still (where the warp shrinks the
-// photo): the tile size halved until every tile's part is at most `limit` on a side.
+// photo).
 export function tileSizeWithin(
   output: Size,
   source: Size,

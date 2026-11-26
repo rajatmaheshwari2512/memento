@@ -1,14 +1,4 @@
-<!--
-  SelfPhotos Adjust's Markup: the markup on the photo, drawn by the same code as the saved copy
-  (markup.ts drawMarkup) at the size it's shown. On the Markup tab (`active`) a finger or the
-  mouse draws with the picked tool, as AI Edit's brush does: the layer takes the touches, so
-  drawing doesn't scroll or zoom the page. The first finger draws; others are ignored, except a
-  second one on the Text tool while a text is being edited: the two pinch it to resize it, as on
-  Android. The Text tool places a text with a tap; a text is dragged to move it, and its corner
-  handle resizes it. If Undo, Clear or Reset (another finger) takes away what's being drawn or
-  dragged, the drag stops; so does leaving the tab or starting Save mid-drag (what was drawn
-  stays). Not part of Immich. Android's is markup_layer.dart.
--->
+<!-- SelfPhotos Adjust's Markup. -->
 <script lang="ts">
   import type { MarkupEditor } from '#lib/ai-edit/adjust/markup-editor.svelte.ts';
   import {
@@ -38,7 +28,6 @@
 
   let { editor, active, hidden }: Props = $props();
 
-  // Room around a text that still picks it, and the handle's size (CSS pixels).
   const TEXT_PADDING = 8;
   const HANDLE = 22;
 
@@ -46,31 +35,23 @@
   let space = $state({ width: 0, height: 0 });
   let fontReady = $state(false);
 
-  // A text dragged, resized or pinched: `index` is where it is, `shown` what the drag last made
-  // of it (it's still there unless Undo, Clear or Reset took it away).
   type TextDrag = { index: number; item: MarkupText; shown: MarkupItem; moved: boolean };
   type Drag =
     | { kind: 'line'; pointerId: number; line: MarkupLine }
     | { kind: 'shape'; pointerId: number; start: MarkupPoint; shape: MarkupShape | null }
     | ({ kind: 'move'; pointerId: number; start: MarkupPoint } & TextDrag)
     | ({ kind: 'resize'; pointerId: number; centre: [number, number]; distance: number } & TextDrag)
-    // A press off the text being edited: it stops being edited when the press ends, unless a
-    // second finger makes it a pinch.
     | { kind: 'leave'; pointerId: number }
     | ({ kind: 'pinch'; pointerIds: [number, number]; distance: number } & TextDrag);
   let drag: Drag | null = null;
-  // Where each finger (or the mouse) pressed on the layer is (client pixels). Only the handlers
-  // read it, so it needn't be reactive.
   // eslint-disable-next-line svelte/prefer-svelte-reactivity
   const pointers = new Map<number, [number, number]>();
 
-  // Every drag ends, and the next press draws anew.
   function stop() {
     drag = null;
     pointers.clear();
   }
 
-  // The tab left, or Save started, mid-drag (with another finger): what was drawn stays.
   $effect(() => {
     if (!active) {
       stop();
@@ -95,7 +76,7 @@
     if (!canvas || !fontReady) {
       return;
     }
-    canvas.width = size.width; // also clears it
+    canvas.width = size.width;
     canvas.height = size.height;
     const context = canvas.getContext('2d');
     if (context && !hidden) {
@@ -103,7 +84,6 @@
     }
   });
 
-  // The text being edited, where it is on screen (CSS pixels, with room around it).
   const selectedBox = $derived.by(() => {
     const item = editor.selectedText;
     const context = canvas?.getContext('2d');
@@ -115,7 +95,6 @@
 
   function boxOf(context: CanvasRenderingContext2D, item: MarkupText) {
     const box = textBox(context, item, space);
-    // An empty text still shows where it is.
     const width = Math.max(box.width, box.height / 2);
     return {
       x: box.x - (width - box.width) / 2 - TEXT_PADDING,
@@ -127,7 +106,6 @@
 
   const distance = (a: [number, number], b: [number, number]) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 
-  // The topmost text under `point`, if any.
   function textAt(point: MarkupPoint): number | null {
     const context = canvas!.getContext('2d')!;
     const [x, y] = [point[0] * space.width, point[1] * space.height];
@@ -148,12 +126,10 @@
 
   const isLast = (item: MarkupItem | null) => item !== null && editor.items.at(-1) === item;
 
-  // A press on the layer, or on the handle: what it starts, or a second finger's pinch.
   function press(event: PointerEvent) {
     if (!active || !captureDrawingPress(canvas!, event)) {
       return false;
     }
-    // Keeps the cursor in the text's field (a press elsewhere would take it away).
     event.preventDefault();
     pointers.set(event.pointerId, [event.clientX, event.clientY]);
     if (drag) {
@@ -225,8 +201,6 @@
     };
   };
 
-  // A second finger while a text is being edited (dragged, resized, or the first press off it):
-  // the two pinch it.
   function startPinch() {
     const item = editor.selectedText;
     const pointerIds = [...pointers.keys()];
@@ -245,12 +219,9 @@
     };
   }
 
-  // The finger (or the mouse) of the drag going on.
   const isDrawing = (event: PointerEvent) =>
     drag?.kind === 'pinch' ? drag.pointerIds.includes(event.pointerId) : drag?.pointerId === event.pointerId;
 
-  // A text's next place or size, as one change from the drag's start to its end; false if it's
-  // gone.
   function dragText(drag: TextDrag, change: (index: number, item: MarkupText, newChange: boolean) => void) {
     if (editor.items[drag.index] !== drag.shown) {
       return false;
@@ -262,7 +233,6 @@
   }
 
   const move = (event: PointerEvent) => {
-    // A captured finger's moves still come after the tab is left or Save starts.
     if (!active) {
       stop();
       return;
@@ -299,7 +269,6 @@
             drag.shape = shape;
           }
         } else if (movedPast(drag.start, point, MIN_STEP * 5)) {
-          // A tap draws nothing; a shape starts once the pointer has moved a little.
           editor.commit([...editor.items, shape]);
           drag.shape = shape;
         }
@@ -340,9 +309,6 @@
     }
   };
 
-  // A finger lifted, or the layer lost it (its lift may never come): the drag it was part of ends
-  // (the other finger of a pinch then does nothing). Losing a finger follows each lift too, so
-  // this only ever ends that finger's own drag: a second finger lifting leaves the first's line.
   const end = (event: PointerEvent) => {
     pointers.delete(event.pointerId);
     if (drag && isDrawing(event)) {

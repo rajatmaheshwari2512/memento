@@ -1,12 +1,4 @@
-<!--
-  SelfPhotos themed memories: the person's own switches, a section of Account settings (one
-  line in Immich's UserSettingsList.svelte). Built like Immich's own Features section: Field
-  and Switch, saved with Save. Not part of Immich.
-
-  Shown while an admin has themed memories switched on, or while this person's are on: with
-  them switched off for everyone, the person can still turn theirs off (and their key goes),
-  but not on. The collages switch shows while collages are switched on.
--->
+<!-- SelfPhotos themed memories. -->
 <script lang="ts">
   import { errorMessage } from '#lib/ai-edit/ai-edit-api.ts';
   import {
@@ -37,7 +29,7 @@
   onMount(async () => {
     await loadMementoFlags();
     if (mementoFlags.value === null) {
-      return; // the service can't be reached: nothing to show
+      return;
     }
     try {
       apply(await getMemorySettings());
@@ -48,7 +40,6 @@
 
   const adminOn = $derived(isThemedMemoriesEnabled());
   const shown = $derived(adminOn || saved?.enabled === true);
-  // Paused (e.g. their key was deleted in Immich): saving with them on makes a new key.
   const fixesPause = $derived(adminOn && enabled && !!saved?.pausedReason);
   const changed = $derived(!!saved && (enabled !== saved.enabled || creations !== saved.creations || fixesPause));
 
@@ -58,7 +49,6 @@
     }
     saving = true;
     try {
-      // Only what changed: turning memories on makes a key, so it isn't sent again needlessly.
       apply(
         await updateMemorySettings({
           ...((enabled !== saved.enabled || fixesPause) && { enabled }),
@@ -89,7 +79,6 @@
       {:else}
         <div class="flex flex-col gap-4 sm:ms-4 md:ms-8">
           <Field label={$t('themed_memories')} description={$t('themed_memories_enable_description')}>
-            <!-- Switched off for everyone: theirs can only be turned off. -->
             <Switch bind:checked={enabled} disabled={!adminOn && !enabled} />
           </Field>
           {#if !adminOn}

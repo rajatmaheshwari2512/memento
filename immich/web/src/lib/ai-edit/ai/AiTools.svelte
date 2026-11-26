@@ -1,15 +1,4 @@
-<!--
-  SelfPhotos AI tools: the presets (ai-tools.json) as buttons like the Android app's (Immich's
-  column buttons: icon above its name, up to two lines, no border, the selected ones in the
-  primary colour), in two sections, each under its heading: Fixes, then Styles, each an even grid
-  that wraps onto as many rows as needed (no sideways scrolling). Tapping a preset only selects or
-  unselects it (the rules: ai-tools.ts toggleTool); Generate sends them. And the brush as an
-  accordion: "Highlight" with undo and clear; opened, how it works and the brush size. A tool that
-  needs a highlight (Move) waits for one; a tool that always changes the whole photo (styles, Auto
-  frame) waits for the highlight to be cleared, and while one is selected brushing does nothing,
-  so what's charged is what it does. A preset that can't be picked looks greyed, and tapping it
-  says why (as the Android app does). A selected tool can always be unselected. Not part of Immich.
--->
+<!-- SelfPhotos AI tools: the presets (ai-tools.json) as buttons like the Android app's. -->
 <script lang="ts">
   import AdjustSlider from '#lib/ai-edit/adjust/AdjustSlider.svelte';
   import {
@@ -69,7 +58,6 @@
     onClear,
   }: Props = $props();
 
-  // Each tool's icon; the Android app has its own (ai_tools.dart).
   const ICONS: Record<string, string> = {
     enhance: mdiAutoFix,
     unblur: mdiBlurOff,
@@ -85,7 +73,6 @@
     painting: mdiPalette,
   };
 
-  // Why a tool can't be picked now, if it can't (a selected one can always be unselected).
   const blocked = (tool: AiTool) => {
     const reason = blockedReason(tool, selected, hasHighlight);
     return reason ? $t(reason, { values: { count: MAX_SELECTED } }) : null;
@@ -93,13 +80,9 @@
 </script>
 
 {#each TOOL_GROUPS as { group, labelKey } (group)}
-  <!-- Immich's editor section heading (TransformTool, Adjust's pages), in the weight of the
-       Highlight header and the preset names. -->
   <div class="mt-2 flex h-10 w-full items-center justify-between text-sm font-medium">
     <h2>{$t(labelKey)}</h2>
   </div>
-  <!-- Equal columns, the same in both sections so they line up: 4 in the side panel, 3 on a
-       phone. Buttons sit at the top of their cells, so a row's icons are level. -->
   <div class="-mx-2 grid grid-cols-3 min-[25rem]:grid-cols-4">
     {#each AI_TOOLS.filter((tool) => tool.group === group) as tool (tool.id)}
       {const chosen = $derived(has(selected, tool))}
@@ -123,11 +106,6 @@
   </div>
 {/each}
 
-<!--
-  The brush, as an accordion (like Immich's SettingAccordion, without its card): "Highlight" with
-  undo and clear, needed while brushing, open or closed; opened, how it works and the brush size.
-  Brushing on the photo works either way.
--->
 <div class="mt-1 flex items-center gap-2">
   <button
     type="button"

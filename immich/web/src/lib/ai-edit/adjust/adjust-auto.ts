@@ -1,20 +1,5 @@
-// SelfPhotos Adjust's Auto: one tap sets the light and colour sliders from the photo itself,
-// from its histogram and average colour. No AI and nothing sent anywhere. Not part of Immich.
-// Android has the same logic in mobile/lib/selfphotos/adjust/adjust_auto.dart; both read
-// adjust-auto.json and are checked against adjust-auto-parity.json.
-//
-// It looks at Immich's preview of the photo (already loaded for the editor), every few pixels,
-// and works in the order the shader applies the sliders (adjust-core.glsl):
-//   - exposure lifts the brightest tones towards white (never darker, never the middle tone past
-//     the middle brightness aims for);
-//   - contrast takes the darkest tones down towards black;
-//   - brightness moves the middle tone part of the way into a comfortable range;
-//   - shadows lift what's crushed to black, highlights tame what's blown out;
-//   - warmth nudges the average colour of the greyish parts (white walls, roads, clouds: not a
-//     blue sky or a red dress) towards neutral, blue as strong as red;
-//   - saturation makes a dull photo a little more colourful.
-// Black-and-white photos keep their colour sliders at 0. Each value is capped (adjust-auto.json)
-// so the result stays natural, and rounded to the slider's steps.
+// SelfPhotos Adjust's Auto: one tap sets the light and colour sliders from the photo itself, from
+// its histogram and average colour.
 
 import settings from '#lib/ai-edit/adjust/adjust-auto.json';
 import type { SliderKey } from '#lib/ai-edit/adjust/adjust-params.ts';
@@ -32,19 +17,15 @@ export const AUTO_SLIDERS = [
 
 export type AutoValues = Record<(typeof AUTO_SLIDERS)[number], number>;
 
-// What Auto sees of a photo. Tones 0..1 (sRGB).
+// What Auto sees of a photo.
 export type PhotoStats = {
-  // The tones the darkest 0.5%, half, and all but the brightest 0.5% of the photo are at or below.
   low: number;
   median: number;
   high: number;
-  // The share crushed to black, and blown out to white.
   darkClipped: number;
   brightClipped: number;
-  // The greyish midtones' average colour, as light (linear red, green, blue), and their share.
   balance: [number, number, number];
   greyish: number;
-  // The midtones' average saturation, 0 (grey) to 1.
   saturation: number;
 };
 
@@ -52,8 +33,7 @@ const toLinear = (v: number) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055
 const toSrgb = (v: number) => (v <= 0.0031308 ? v * 12.92 : 1.055 * v ** (1 / 2.4) - 0.055);
 const LINEAR = Array.from({ length: 256 }, (_, v) => toLinear(v / 255));
 
-// Looks at the photo (RGBA, unpremultiplied, rows top first): every `step`-th pixel of every
-// `step`-th row, so at most about `settings.samples` of them.
+// Looks at the photo (RGBA, unpremultiplied, rows top first).
 export function measure(pixels: ArrayLike<number>, width: number, height: number): PhotoStats {
   const step = Math.max(1, Math.floor(Math.sqrt((width * height) / settings.samples)));
   const histogram = Array.from({ length: 256 }, () => 0);
@@ -69,7 +49,6 @@ export function measure(pixels: ArrayLike<number>, width: number, height: number
       const r = pixels[i];
       const g = pixels[i + 1];
       const b = pixels[i + 2];
-      // How bright it looks, 0..255, in whole numbers so both apps agree exactly.
       const luma = Math.floor((2126 * r + 7152 * g + 722 * b + 5000) / 10_000);
       histogram[luma]++;
       count++;
@@ -121,7 +100,6 @@ export function measure(pixels: ArrayLike<number>, width: number, height: number
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
-// To the slider's steps (1/100), halves away from zero as Dart rounds, and never -0.
 const toStep = (value: number) => (Math.sign(value) * Math.round(Math.abs(value) * 100)) / 100 + 0;
 
 // The sliders for a photo with these stats.
@@ -135,14 +113,11 @@ export function autoValues(stats: PhotoStats): AutoValues {
   const gain = 2 ** (2 * exposure);
   const exposed = (tone: number) => toSrgb(Math.min(1, toLinear(tone) * gain));
 
-  // The shader's contrast curve below the middle is 0.5·(2v)^k, k = 1 + 1.5·contrast.
   const low = exposed(stats.low);
   const contrast =
     low > c.black && low < 0.5 ? toStep(clamp((Math.log(2 * c.black) / Math.log(2 * low) - 1) / 1.5, 0, c.max)) : 0;
   const k = 1 + 1.5 * contrast;
 
-  // Brightness raises tones to a power. The middle tone, after exposure and contrast, if it's
-  // outside the range, part of the way to it; aimed at the tone contrast then turns into it.
   const contrasted = (tone: number) => (tone < 0.5 ? 0.5 * (2 * tone) ** k : 1 - 0.5 * (2 * (1 - tone)) ** k);
   const uncontrasted = (tone: number) =>
     tone < 0.5 ? 0.5 * (2 * tone) ** (1 / k) : 1 - 0.5 * (2 * (1 - tone)) ** (1 / k);

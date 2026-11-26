@@ -1,11 +1,5 @@
-<!--
-  SelfPhotos Adjust: light and colour sliders, filters, straighten and markup, saved as a copy
-  stacked on the original (the same save as AI Edit). Not part of Immich.
-
-  Laid out like Immich's own editor (EditorShell.svelte). The preview is Immich's screen-sized
-  preview through the shader; Save renders the photo at full size (adjust-export.ts) and
-  uploads it through Memento's extras service.
--->
+<!-- SelfPhotos Adjust: light and colour sliders, filters, straighten and markup, saved as a copy -->
+<!-- stacked on the original (the same save as AI Edit). -->
 <script lang="ts">
   import AdjustFilters from '#lib/ai-edit/adjust/AdjustFilters.svelte';
   import AdjustPerspective from '#lib/ai-edit/adjust/AdjustPerspective.svelte';
@@ -55,7 +49,6 @@
   const asset = $derived(data.adjustAsset);
   let tab = $state<AdjustTab>(data.tab);
   let editor = $state<AdjustState>(initialState());
-  // What's drawn on the photo (the Markup tab), on top of everything else.
   const markup = new MarkupEditor();
   let preview = $state.raw<ImageBitmap | null>(null);
   let previewFailed = $state(false);
@@ -63,12 +56,10 @@
   let saving = $state(false);
   let progress = $state(0);
   let comparing = $state(false);
-  // Straighten's Perspective mode: the photo shown whole, unwarped, with its four corners.
   let perspectiveMode = $state(false);
   const placingCorners = $derived(tab === 'straighten' && perspectiveMode);
 
   const allowed = $derived(canAdjustAsset(asset));
-  // Immich's own editor (the Crop tab) opens for this photo; not for motion photos.
   const cropAvailable = $derived(getAssetActions($t, asset).Edit.$if?.() ?? false);
   const unchanged = $derived(isUnchanged(editor) && markup.isEmpty);
   const busy = $derived(saving || !allowed || unsupported);
@@ -83,7 +74,6 @@
 
   onDestroy(() => preview?.close());
 
-  // Leaving with changes asks first, as Immich's editor does (the same words).
   const confirmLeave = async () =>
     saving
       ? false
@@ -101,7 +91,7 @@
   };
 
   const selectTab = async (next: EditorTab) => {
-    markup.select(null); // a text left empty goes
+    markup.select(null);
     if (next !== 'crop') {
       tab = next;
       return;
@@ -133,7 +123,7 @@
       if (copy.fromPreview) {
         toastManager.warning($t('editor_copy_from_preview', { values: copy.size }));
       }
-      editor = initialState(); // saved: nothing to ask about on the way out
+      editor = initialState();
       markup.reset();
       await goto(Route.viewAsset({ id: assetId }));
     } catch (error) {

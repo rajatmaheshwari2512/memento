@@ -1,11 +1,4 @@
-<!--
-  SelfPhotos Adjust: Perspective's four corners, on the photo shown whole and unwarped. Each is
-  dragged onto a line that should be straight, such as a building's edge (or moved with the
-  arrow keys); outside them is dimmed. The photo is then warped so the four make a rectangle
-  (adjust-geometry.ts), which shows when the Straighten mode is chosen again. A move that would
-  bring corners too close, cross them over, or stretch the photo too far, is refused, and a short
-  hint says so for a moment. Not part of Immich.
--->
+<!-- SelfPhotos Adjust: Perspective's four corners, on the photo shown whole and unwarped. -->
 <script lang="ts">
   import { isValidPerspective, photoCorners, type Point, type Quad } from '#lib/ai-edit/adjust/adjust-geometry.ts';
   import { clamp } from 'lodash-es';
@@ -24,10 +17,8 @@
 
   const shown = $derived(corners ?? photoCorners());
   let box = $state<HTMLElement>();
-  // The corner being dragged, and how far the pointer is from its exact spot.
   let drag = $state<{ index: number; offset: Point } | null>(null);
 
-  // A move was refused just now: the hint shows until a moment after the last one.
   let refused = $state(false);
   let hideHint: ReturnType<typeof setTimeout> | undefined;
   onDestroy(() => clearTimeout(hideHint));
@@ -114,7 +105,6 @@
       onpointercancel={() => (drag = null)}
       onkeydown={(event) => nudge(event, index)}
     >
-      <!-- While dragged, a ring, so the photo under it shows. -->
       <span
         class={[
           'rounded-full border-2 border-white shadow-[0_0_0_1.5px_rgb(0_0_0/0.7)]',

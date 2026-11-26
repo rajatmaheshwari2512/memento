@@ -1,10 +1,4 @@
-<!--
-  SelfPhotos Adjust: the Straighten tab, in two modes. Straighten: one angle slider; the photo is
-  cropped to the largest rectangle of its own shape so no empty corners show
-  (adjust-geometry.ts). Perspective: four corners on the photo (AdjustPerspective.svelte), shown
-  whole while they're moved; the result shows back in Straighten. The modes are buttons like the
-  editor's tabs. Not part of Immich.
--->
+<!-- SelfPhotos Adjust: the Straighten tab, in two modes. -->
 <script lang="ts">
   import AdjustSlider from '#lib/ai-edit/adjust/AdjustSlider.svelte';
   import { MAX_ANGLE } from '#lib/ai-edit/adjust/adjust-params.ts';

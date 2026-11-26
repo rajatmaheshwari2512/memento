@@ -1,10 +1,4 @@
-<!--
-  SelfPhotos Adjust's Markup tab: how the picked tool works, with undo, redo and clear; the tools
-  as Immich's column buttons (as AI Edit's presets are): pen, highlighter, text and shapes, and
-  for shapes, arrow, box or circle as pills (as the editor's tabs are); the field for the text
-  being edited; and the colour and size. Drawing happens on the photo (MarkupLayer.svelte). Not
-  part of Immich.
--->
+<!-- SelfPhotos Adjust's Markup tab. -->
 <script lang="ts">
   import type { MarkupEditor, MarkupShapeKind, MarkupTool } from '#lib/ai-edit/adjust/markup-editor.svelte.ts';
   import { MARKUP_COLOURS, MARKUP_SIZES, TEXT } from '#lib/ai-edit/adjust/markup.ts';
@@ -44,12 +38,10 @@
     { shape: 'circle', icon: mdiCircleOutline, label: $t('editor_markup_circle') },
   ]);
 
-  // The dots that show the sizes (CSS pixels).
   const DOTS = [6, 10, 16];
 
   let field = $state<HTMLInputElement | null>(null);
 
-  // A new text: the cursor goes to its field.
   $effect(() => {
     if (editor.newText > 0) {
       void tick().then(() => field?.focus());

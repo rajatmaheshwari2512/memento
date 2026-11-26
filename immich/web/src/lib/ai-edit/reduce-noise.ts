@@ -1,9 +1,4 @@
-// SelfPhotos Reduce noise for videos: the "Reduce noise" button in the video viewer. Memento's
-// extras service cleans the video's sound on our own server (DeepFilterNet; memento-extras,
-// POST /videos/:id/reduce-noise) and saves a copy stacked on top of the video; the picture isn't
-// touched. The job is followed here, outside the viewer (GET /videos/jobs/:id every few
-// seconds), so the person can keep browsing: a message when it starts, one with "Open" when it's
-// done, a plain one if it fails. Not part of Immich.
+// SelfPhotos Reduce noise for videos: the "Reduce noise" button in the video viewer.
 
 import { AiEditError, errorMessage, request } from '#lib/ai-edit/ai-edit-api.ts';
 import { isReduceNoiseEnabled, loadMementoFlags } from '#lib/ai-edit/flags.svelte.ts';
@@ -17,18 +12,13 @@ import { goto } from '$app/navigation';
 export type ReduceNoiseJob = {
   jobId: string;
   state: 'queued' | 'running' | 'done' | 'failed';
-  assetId?: string; // the cleaned copy, once done
-  error?: string; // why not, in words for the person
+  assetId?: string;
+  error?: string;
 };
 
-// The service's code for "cleaning other videos, try again in a few minutes".
 const BUSY = 'busy';
 const POLL_MS = 3000;
-// The service unreachable this many times in a row (a minute): the job is given up on here (it
-// carries on on the server; the copy still lands on top of the video).
 const MAX_MISSES = 20;
-// Followed for at most an hour in all (the server's longest wait and cleaning together), then
-// given up on here with a plain message; the copy still lands on top of the video if it's made.
 const GIVE_UP_MS = 60 * 60_000;
 
 export const startReduceNoise = (assetId: string) =>
@@ -41,21 +31,18 @@ type Target = {
   id: string;
   isVideo: boolean;
   isTrashed: boolean;
-  // Only your own videos (not in the locked folder or a shared link): the copy is saved into
-  // your library, stacked on the original.
   isOwner: boolean;
 };
 
-// Whether Reduce noise can work on this video (the service checks the same, and its length and size).
+// Whether Reduce noise can work on this video (the service checks the same, and its length and
+// size).
 export const canReduceNoise = (target: Target | undefined): target is Target =>
   isReduceNoiseEnabled() && !!target && target.isOwner && target.isVideo && !target.isTrashed;
 
-// The videos being cleaned, followed from this tab: a second tap only says it's under way.
 const following = new Set<string>();
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// A refusal or failure, in the person's words where the service gave some.
 const failure = ($t: MessageFormatter, error: unknown) => {
   if (error instanceof AiEditError && error.code === BUSY) {
     return $t('reduce_noise_busy');
@@ -63,11 +50,8 @@ const failure = ($t: MessageFormatter, error: unknown) => {
   return error instanceof AiEditError && error.fromService ? error.message : $t('reduce_noise_failed');
 };
 
-// Followed for too long: given up on here (it may still finish on the server).
 class TooLong extends Error {}
 
-// Asks about the job every `pollMs` until it's done or failed, for at most `giveUpMs` in all. A
-// moment without the service is waited out.
 async function follow(job: ReduceNoiseJob, pollMs: number, giveUpMs: number): Promise<ReduceNoiseJob> {
   const giveUpAt = Date.now() + giveUpMs;
   let misses = 0;
@@ -90,8 +74,6 @@ async function follow(job: ReduceNoiseJob, pollMs: number, giveUpMs: number): Pr
 }
 
 // Starts cleaning the video's sound and follows it to the end, with a message at each step.
-// `open` shows the cleaned copy (the viewer, by default); `pollMs`: how often it's asked about;
-// `giveUpMs`: how long it's followed at most.
 export async function reduceNoise(
   $t: MessageFormatter,
   assetId: string,

@@ -1,9 +1,5 @@
-<!--
-  SelfPhotos editor: Adjust's tabs inside Immich's own editor (EditorPanel.svelte), after its
-  crop tool. Choosing one leaves Immich's editor (asking first if it has unsaved changes) and
-  opens Adjust on the same photo. They show only when Adjust is on and can work on this photo.
-  AI Edit isn't a tab: it opens from its own button. Not part of Immich.
--->
+<!-- SelfPhotos editor: Adjust's tabs inside Immich's own editor (EditorPanel.svelte), after its -->
+<!-- crop tool. -->
 <script lang="ts">
   import EditorTabs, { type EditorTab } from '#lib/ai-edit/adjust/EditorTabs.svelte';
   import { adjustPath, canAdjustAsset } from '#lib/ai-edit/adjust/adjust-action.ts';

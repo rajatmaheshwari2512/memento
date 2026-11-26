@@ -1,8 +1,4 @@
-<!--
-  SelfPhotos Adjust: the Filters tab. Each filter's thumbnail is the photo itself through the
-  shader (drawn once, from a small copy, with one short-lived GPU context), in a grid like
-  Immich's crop ratios, and a strength slider for the chosen one. Not part of Immich.
--->
+<!-- SelfPhotos Adjust: the Filters tab. -->
 <script lang="ts">
   import AdjustSlider from '#lib/ai-edit/adjust/AdjustSlider.svelte';
   import { FILTERS, initialState, shaderValues } from '#lib/ai-edit/adjust/adjust-params.ts';
@@ -19,7 +15,7 @@
 
   let { image, filter = $bindable(), strength = $bindable(), disabled }: Props = $props();
 
-  const THUMB = 96; // CSS pixels, the longer side
+  const THUMB = 96;
   const choices = [null, ...FILTERS.map(({ id }) => id)];
   const canvases: Record<string, HTMLCanvasElement> = $state({});
 
@@ -63,7 +59,6 @@
           canvas.getContext('2d')?.drawImage(work, 0, 0);
         }
       } catch {
-        // no thumbnails: the names still work
       } finally {
         renderer?.dispose();
         small?.close();
@@ -88,7 +83,7 @@
       class="flex flex-col items-center gap-1 text-sm text-white disabled:opacity-50"
       onclick={() => {
         filter = id;
-        strength = 1; // a new filter starts at full strength, as in the Android app
+        strength = 1;
       }}
     >
       <span

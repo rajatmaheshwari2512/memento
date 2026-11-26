@@ -1,5 +1,5 @@
 // SelfPhotos AI edit: the "AI Edit" menu item, shared by the photo viewer's menu and the
-// timeline's selection menu. It opens AI Edit, /photos/edit/<photo id>; nothing else does.
+// timeline's selection menu.
 
 import { isGeminiEnabled, loadMementoFlags } from '#lib/ai-edit/flags.svelte.ts';
 import { authManager } from '#lib/managers/auth-manager.svelte.ts';
@@ -14,9 +14,7 @@ export const AI_EDIT_TITLE = 'AI Edit';
 // AI Edit's page (routes/(user)/photos/edit/[id=id]).
 export const aiEditPath = (assetId: string) => `/photos/edit/${assetId}`;
 
-// Whether AI edits can work on this photo, as Immich describes it (the server checks the same):
-// switched on, yours (logged in, not in the locked folder: the copy would land outside it), a
-// photo, not in the trash.
+// Whether AI edits can work on this photo.
 export const canAiEditAsset = (asset: AssetResponseDto) =>
   isGeminiEnabled() &&
   authManager.authenticated &&
@@ -29,7 +27,6 @@ type Target = {
   id: string;
   isImage: boolean;
   isTrashed: boolean;
-  // Only your own photos: the edit is saved into your library, stacked with the original.
   isOwner: boolean;
 };
 
@@ -38,7 +35,6 @@ export const getAiEditAction = (target: Target | undefined, beforeOpen?: () => v
   return {
     title: AI_EDIT_TITLE,
     icon: mdiCreationOutline,
-    // Hidden when an admin has switched Gemini edits off (Administration → Settings → Memento Features).
     $if: () => isGeminiEnabled() && !!target && target.isOwner && target.isImage && !target.isTrashed,
     onAction: async () => {
       if (!target) {

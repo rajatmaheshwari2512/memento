@@ -63,7 +63,6 @@ describe('cropScale', () => {
             touches++;
           }
         }
-        // Largest: some corner touches an edge (unless not turned at all, when all do).
         expect(touches).toBeGreaterThan(0);
       }
     }
@@ -118,8 +117,6 @@ describe('sourceRect', () => {
         for (let y = tile.y + 0.5; y < tile.y + tile.height; y += 37) {
           for (let x = tile.x + 0.5; x < tile.x + tile.width; x += 37) {
             const [sx, sy] = toSource(x, y, output, source, degrees);
-            // Bilinear sampling reads the pixel around it, so one more on each side (at the
-            // source's own edges the shader holds on to the edge pixel).
             expect(Math.max(0, sx - 1)).toBeGreaterThanOrEqual(rect.x - 1e-6);
             expect(Math.max(0, sy - 1)).toBeGreaterThanOrEqual(rect.y - 1e-6);
             expect(Math.min(source.width, sx + 1)).toBeLessThanOrEqual(rect.x + rect.width + 1e-6);
@@ -145,7 +142,6 @@ const corners = (output: Size): Point[] => [
   [0, output.height],
 ];
 
-// Where a position in the photo (pixels) shows in the output (pixels): toSource the other way.
 function toOutput(point: Point, output: Size, source: Size, degrees: number, quad: Quad): Point {
   const {
     scale: [sx, sy],
@@ -158,7 +154,6 @@ function toOutput(point: Point, output: Size, source: Size, degrees: number, qua
   return [(q[0] / (source.width * sx) + 0.5) * output.width, (q[1] / (source.height * sy) + 0.5) * output.height];
 }
 
-// The four corners, in the photo (pixels), moved `share` of the way to their middle.
 const markedCorners = (quad: Quad, source: Size, share = 0): Point[] => {
   const middle = [0, 1].map((axis) => quad.reduce((sum, corner) => sum + corner[axis], 0) / 4);
   return quad.map(([x, y]) => [
@@ -167,7 +162,6 @@ const markedCorners = (quad: Quad, source: Size, share = 0): Point[] => {
   ]);
 };
 
-// No empty corners: every output corner comes from inside the photo.
 function expectNoEmptyCorners(degrees: number, source: Size, quad: Quad) {
   const output = outputSize(degrees, source, quad);
   const margin = 1e-6 * Math.max(source.width, source.height);
@@ -180,7 +174,6 @@ function expectNoEmptyCorners(degrees: number, source: Size, quad: Quad) {
   }
 }
 
-// Nothing cut off: each of `points` (in the photo) shows in the output.
 function expectShown(points: Point[], degrees: number, source: Size, quad: Quad) {
   const output = outputSize(degrees, source, quad);
   for (const point of points) {
@@ -192,13 +185,11 @@ function expectShown(points: Point[], degrees: number, source: Size, quad: Quad)
   }
 }
 
-// The crop's area, in straightened pixels.
 const cropArea = (degrees: number, source: Size, quad: Quad) => {
   const [sx, sy] = framing(degrees, source, quad).scale;
   return source.width * sx * source.height * sy;
 };
 
-// The crop's shape: its width over its height, in straightened pixels.
 const cropShape = (degrees: number, source: Size, quad: Quad) => {
   const [sx, sy] = framing(degrees, source, quad).scale;
   return (source.width * sx) / (source.height * sy);
@@ -281,8 +272,6 @@ describe('perspective', () => {
       expectNoEmptyCorners(degrees, source, quad);
       expectShown(markedCorners(quad, source), degrees, source, quad);
     }
-    // A building in the middle of a landscape photo, and the same in a portrait one (Android's
-    // test photo): a crop of the photo's own shape holds it, so the copy keeps that shape.
     const building: Quad = [
       [0.32, 0.2],
       [0.68, 0.2],
@@ -291,7 +280,6 @@ describe('perspective', () => {
     ];
     expect(cropShape(0, { width: 4000, height: 3000 }, building)).toBeCloseTo(4 / 3, 9);
     expect(cropShape(0, { width: 300, height: 400 }, building)).toBeCloseTo(3 / 4, 9);
-    // A wall seen from the side, portrait: no 3:4 crop holds it, so a little wider (under 2%).
     const wall: Quad = [
       [0.05, 0.1],
       [0.95, 0],
@@ -311,8 +299,6 @@ describe('perspective', () => {
       seed = (seed * 16_807) % 2_147_483_647;
       return seed / 2_147_483_647;
     };
-    // (Not corners on the photo's edges: then a box has to fit exactly, which a grid can't find.)
-    // Strong keystones, where the photo's shape can't hold the marked area, and a turned one.
     const keystone: Quad = [
       [0.25, 0.1],
       [0.75, 0.1],
@@ -335,7 +321,6 @@ describe('perspective', () => {
       [3, { width: 1600, height: 1200 }, keystone],
     ];
     while (quads.length < 12) {
-      // Corners inside the photo, near each of its own: the marked area well inside the photo.
       const quad = photoCorners().map(([x, y]) => [
         0.05 + 0.4 * random() + 0.5 * x,
         0.05 + 0.4 * random() + 0.5 * y,
@@ -354,13 +339,9 @@ describe('perspective', () => {
       const gap = Math.log(source.width / source.height / shape);
       if (Math.abs(gap) < 1e-9) {
         ownShape++;
-        // Many boxes of the photo's shape fit: the grid finds one nearly as large.
         expect(grid, name).toBeGreaterThan(area * 0.85);
       } else {
-        // At the end of the shapes that fit only the crop has its shape (a grid can't find it
-        // exactly), but a shape a little farther from the photo's fits.
         expect(largestByGrid(degrees, source, quad, shape / Math.exp(Math.sign(gap) * 0.02)), name).toBeGreaterThan(0);
-        // Shapes closer to the photo's, from 0.5% closer up to its own: none fits anywhere.
         for (let step = 0.005; step < Math.abs(gap) + 0.005; step += 0.005) {
           const closer = shape * Math.exp(Math.sign(gap) * Math.min(step, Math.abs(gap)));
           expect(largestByGrid(degrees, source, quad, closer), `${name} at ${closer}`).toBe(0);
@@ -369,13 +350,11 @@ describe('perspective', () => {
       expectNoEmptyCorners(degrees, source, quad);
       expectShown(markedCorners(quad, source), degrees, source, quad);
     }
-    // Both kinds were checked.
     expect(ownShape).toBeGreaterThan(0);
     expect(ownShape).toBeLessThan(quads.length);
   });
 
   it('with straighten, goes around as much of the marked area as fits when it reaches the photo’s edges', () => {
-    // The bottom corners left on the photo's: turned, the marked area's bottom reaches past it.
     const source = { width: 4032, height: 3024 };
     const quad: Quad = [
       [0.15, 0],
@@ -386,7 +365,6 @@ describe('perspective', () => {
     expect(outputSize(0, source, quad)).toEqual({ width: 3427, height: 3084 });
     for (const degrees of [4, -4]) {
       expectNoEmptyCorners(degrees, source, quad);
-      // At 4°, about 87% of its width and height (from its middle).
       expectShown(markedCorners(quad, source, 0.2), degrees, source, quad);
       expect(cropArea(degrees, source, quad)).toBeLessThan(cropArea(0, source, quad));
     }
@@ -438,17 +416,10 @@ describe('perspective', () => {
       const part = sourceRect(tile, output, source, 0, steep);
       expect(Math.max(part.width, part.height)).toBeLessThanOrEqual(2048);
     }
-    // Without perspective nothing changes.
     expect(tileSizeWithin(outputSize(45, source), source, 45, null, tileSizeFor(4096), 4096)).toBe(tileSizeFor(4096));
   });
 });
 
-// The largest box of one shape (its width over its height) found by trying boxes on a grid, on its
-// own (not with the app's maths): in the straightened picture turned with the angle, boxes around
-// the four corners' bounds, placed on a grid from flush with their left and top to flush with
-// their right and bottom, each as large as it can be with its corners coming from inside the
-// photo (placed so, a larger box holds the smaller). Its area, in straightened pixels; 0 if none
-// fits.
 function largestByGrid(degrees: number, source: Size, quad: Quad, shape: number) {
   const toPhoto = perspectiveMatrix(quad, source);
   const fromPhoto = invert(toPhoto);
@@ -456,7 +427,6 @@ function largestByGrid(degrees: number, source: Size, quad: Quad, shape: number)
   const [cos, sin] = [Math.cos(radians), Math.sin(radians)];
   const toFrame = ([x, y]: Point): Point => [cos * x - sin * y, sin * x + cos * y];
   const fromFrame = ([x, y]: Point): Point => [cos * x + sin * y, -sin * x + cos * y];
-  // Small: a box let past the photo's edges by it is that much larger.
   const margin = 1e-9 * Math.max(source.width, source.height);
   const inside = (point: Point) => {
     const [x, y] = project(toPhoto, fromFrame(point));
@@ -467,8 +437,6 @@ function largestByGrid(degrees: number, source: Size, quad: Quad, shape: number)
   const [top, bottom] = [Math.min(...held.map(([, y]) => y)), Math.max(...held.map(([, y]) => y))];
   const outline = corners(source).map((point) => toFrame(project(fromPhoto, point)));
   const tallest = Math.max(...outline.map(([, y]) => y)) - Math.min(...outline.map(([, y]) => y)) + 1;
-  // A box of this height, `u` of the way from flush left to flush right and `v` from flush top
-  // to flush bottom.
   const fits = (height: number, u: number, v: number) => {
     const width = height * shape;
     const x = left - u * (width - (right - left));
@@ -480,7 +448,6 @@ function largestByGrid(degrees: number, source: Size, quad: Quad, shape: number)
       [x, y + height],
     ].every((corner) => inside(corner as Point));
   };
-  // The smallest box of this shape that holds the corners.
   const smallest = Math.max(bottom - top, (right - left) / shape);
   const steps = 60;
   let best = 0;

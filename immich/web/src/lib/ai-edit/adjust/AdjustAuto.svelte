@@ -1,8 +1,4 @@
-<!--
-  SelfPhotos Adjust: Auto, first in the Adjust tab. One click works out the light and colour
-  sliders from the photo itself (adjust-auto.ts, from the preview already loaded); they can be
-  moved after, and clicking again sets them from the photo again. Not part of Immich.
--->
+<!-- SelfPhotos Adjust: Auto, first in the Adjust tab. -->
 <script lang="ts">
   import { autoAdjust, type AutoValues } from '#lib/ai-edit/adjust/adjust-auto.ts';
   import { Button } from '@immich/ui';
@@ -25,7 +21,7 @@
     }
     context.drawImage(picture, 0, 0);
     const { data } = context.getImageData(0, 0, picture.width, picture.height);
-    canvas.width = canvas.height = 0; // free it now
+    canvas.width = canvas.height = 0;
     onAuto(autoAdjust(data, picture.width, picture.height));
   };
 </script>

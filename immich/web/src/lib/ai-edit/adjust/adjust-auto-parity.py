@@ -1,17 +1,13 @@
 #!/usr/bin/env python3
-# SelfPhotos Adjust's Auto: makes adjust-auto-parity.json, small made-up pictures and the slider
-# values both apps must set for them (web: adjust-auto.spec.ts; Android:
-# test/selfphotos/adjust_test.dart), from adjust-auto.json. Its own copy of Auto's maths
-# (adjust-auto.ts explains it), so neither app's code is the source of truth. After changing
-# adjust-auto.json or Auto:
-#   python3 -I adjust-auto-parity.py adjust-auto.json > adjust-auto-parity.json
+# SelfPhotos Adjust's Auto: makes adjust-auto-parity.json.
+# python3 -I adjust-auto-parity.py adjust-auto.json > adjust-auto-parity.json
 #   npx prettier --write src/lib/ai-edit/adjust/adjust-auto-parity.json   (from web/)
 import json, math, sys
 
 cfg = json.load(open(sys.argv[1]))
 
 
-def js_round(value):  # as Math.round (halves up), not Python's halves to even
+def js_round(value):
     return math.floor(value + 0.5)
 
 
@@ -77,7 +73,7 @@ def clamp(value, low, high):
     return min(high, max(low, value))
 
 
-def to_step(value):  # to the slider's steps, halves away from zero, never -0
+def to_step(value):
     stepped = math.copysign(js_round(abs(value) * 100), value) / 100
     return 0 if stepped == 0 else stepped
 
@@ -115,7 +111,6 @@ def auto_values(stats):
             'shadows': shadows, 'saturation': saturation, 'warmth': warmth}
 
 
-# A run of `steps` tones from `start` to `end`, tinted, `count` pixels each: [red, green, blue, how many].
 def ramp(start, end, tint, count, steps=24):
     out = []
     for i in range(steps):

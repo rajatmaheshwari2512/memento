@@ -132,7 +132,7 @@
       key: 'location',
       icon: mdiMapMarkerOutline,
     },
-    // SelfPhotos: Memento's own features (memento-extras service), not Immich system config.
+    // SelfPhotos: Memento's own features (memento-extras service).
     {
       component: MementoFeaturesSettings,
       title: 'Memento Features',

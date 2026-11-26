@@ -1,9 +1,4 @@
-<!--
-  SelfPhotos Adjust: one slider, as Immich does them (VideoRemoteViewer.svelte, and its own
-  brightness/contrast change, PR #31040): a plain range input, its label and value above
-  it (or, with `hideLabel`, only the slider, its label read out but not shown). Double-click
-  puts it back to the middle. Not part of Immich.
--->
+<!-- SelfPhotos Adjust: one slider. -->
 <script lang="ts">
   interface Props {
     label: string;

@@ -1,4 +1,4 @@
-import { memoryLabel } from '#lib/ai-edit/memory-labels.svelte.ts'; // SelfPhotos themed memories
+import { memoryLabel } from '#lib/ai-edit/memory-labels.svelte.ts';
 import { defaultLang, locales } from '#lib/constants.ts';
 import { authManager } from '#lib/managers/auth-manager.svelte.ts';
 import { alwaysLoadOriginalFile, lang, locale } from '#lib/stores/preferences.store.ts';

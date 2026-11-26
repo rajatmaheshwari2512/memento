@@ -28,9 +28,7 @@ describe('AiPhoto', () => {
       },
     });
     const canvas = box.querySelector('canvas')!;
-    // The tests run without the app's styles: the brush's layer over the photo, 400×300.
     canvas.style.cssText = 'position: absolute; left: 0; top: 0; width: 400px; height: 300px';
-    // Only a real finger can be captured.
     const capture = vi.spyOn(canvas, 'setPointerCapture').mockImplementation(() => {});
     await tick();
     const { left, top } = canvas.getBoundingClientRect();
@@ -51,7 +49,6 @@ describe('AiPhoto', () => {
     send('pointermove', 200, 150);
     send('pointermove', 300, 225);
     send('pointerup', 300, 225);
-    // Moves after the finger lifted brush nothing.
     send('pointermove', 350, 50);
     expect(strokes).toEqual([
       {

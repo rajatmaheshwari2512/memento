@@ -1,8 +1,4 @@
-<!--
-  SelfPhotos: Live albums. Each one is an album that fills itself with photos of chosen
-  people; Memento's extras service checks every few minutes (memento-extras). Built from
-  Immich's own page layout and components so it looks like the Albums page.
--->
+<!-- SelfPhotos: Live albums. -->
 <script lang="ts">
   import { isLiveAlbumsEnabled, loadMementoFlags } from '#lib/ai-edit/flags.svelte.ts';
   import LiveAlbumModal from '#lib/ai-edit/LiveAlbumModal.svelte';
@@ -50,7 +46,6 @@
 
   const byId = $derived(new Map(people.map((person) => [person.id, person])));
   const enabled = $derived(isLiveAlbumsEnabled());
-  // Your own albums that aren't live albums yet: the ones a new live album can use.
   const freeAlbums = $derived(
     albums.filter(
       (album) =>
@@ -78,7 +73,6 @@
       albums = albumsResult.value;
     }
     await reload();
-    // Saving fills the album in the background; keep the counts fresh while the page is open.
     refresh = setInterval(() => void reload(), 15_000);
   });
 

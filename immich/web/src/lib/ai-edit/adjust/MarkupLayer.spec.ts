@@ -4,17 +4,13 @@ import type { MarkupLine, MarkupText } from '#lib/ai-edit/adjust/markup.ts';
 import { tick } from 'svelte';
 import { render } from 'vitest-browser-svelte';
 
-// The layer on a 400×300 photo box, on the Markup tab; `finger(type, id, x, y)` sends a finger's
-// event (`id`) at x, y on the box, to the layer or to `on`.
 async function renderLayer(editor: MarkupEditor) {
   const box = document.createElement('div');
   box.style.cssText = 'position: relative; width: 400px; height: 300px';
   document.body.append(box);
   const { rerender } = await render(MarkupLayer, { target: box, props: { editor, active: true, hidden: false } });
   const canvas = box.querySelector('canvas')!;
-  // The tests run without the app's styles: the layer fills the box as its classes say.
   canvas.style.cssText = 'position: absolute; inset: 0; width: 100%; height: 100%';
-  // Only a real finger can be captured.
   const capture = vi.spyOn(canvas, 'setPointerCapture').mockImplementation(() => {});
   await new Promise((resolve) => requestAnimationFrame(resolve));
   await tick();
@@ -46,7 +42,6 @@ describe('MarkupLayer', () => {
     finger('pointermove', 2, 310, 70);
     finger('pointermove', 1, 140, 150);
     finger('pointerup', 2, 310, 70);
-    // The browser lets go of a finger after it lifts: only that finger's.
     finger('lostpointercapture', 2, 310, 70);
     finger('pointermove', 1, 160, 150);
     finger('pointerup', 1, 160, 150);
@@ -98,7 +93,6 @@ describe('MarkupLayer', () => {
     editor.setText('Hi');
     const before = editor.selectedText!;
     const { finger } = await renderLayer(editor);
-    // Both fingers well outside the text, either side of it.
     finger('pointerdown', 1, 40, 150);
     finger('pointerdown', 2, 360, 150);
     finger('pointermove', 1, 20, 150);
@@ -150,12 +144,10 @@ describe('MarkupLayer', () => {
     editor.setText('Hi');
     const before = editor.selectedText!;
     const { finger, box, capture } = await renderLayer(editor);
-    // The handle shows once the font is ready.
     await expect.poll(() => box.querySelector('.cursor-nwse-resize')).toBeTruthy();
     const handle = box.querySelector('.cursor-nwse-resize')!;
-    // The text's middle is at 200, 150: the finger goes from 40, 20 off it to twice as far.
     finger('pointerdown', 1, 240, 170, handle);
-    expect(capture).toHaveBeenCalledWith(1); // the layer takes the finger's moves
+    expect(capture).toHaveBeenCalledWith(1);
     finger('pointermove', 1, 260, 180);
     finger('pointermove', 1, 280, 190);
     finger('pointerup', 1, 280, 190);
@@ -173,7 +165,6 @@ describe('MarkupLayer', () => {
     finger('pointerdown', 1, 100, 100);
     finger('pointermove', 1, 150, 100);
     await rerender({ active: false });
-    // The finger, still captured, goes on moving: the line doesn't grow.
     finger('pointermove', 1, 200, 100);
     finger('pointermove', 1, 250, 100);
     await rerender({ active: true });
@@ -195,7 +186,6 @@ describe('MarkupLayer', () => {
     finger('pointerdown', 1, 100, 100);
     finger('pointermove', 1, 150, 100);
     finger('lostpointercapture', 1, 150, 100);
-    // Not taken for a second finger: a line of its own.
     finger('pointerdown', 2, 100, 200);
     finger('pointermove', 2, 150, 200);
     finger('pointerup', 2, 150, 200);

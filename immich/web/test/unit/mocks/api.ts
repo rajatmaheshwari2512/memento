@@ -52,8 +52,6 @@ export class MockFetch extends Dispatcher {
 
   private async respond(request: Request) {
     const url = new URL(request.url);
-    // SelfPhotos: Memento's extras service isn't part of these tests; it answers as if down,
-    // which the apps must cope with anyway.
     if (url.pathname.startsWith('/extras/')) {
       return new Response(null, { status: 503 });
     }

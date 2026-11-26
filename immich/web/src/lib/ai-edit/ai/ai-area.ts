@@ -1,28 +1,4 @@
-// SelfPhotos AI tools: highlighting an area, and pasting just that area back. Not part of Immich.
-//
-// The AI redraws fine detail across the whole photo, even when asked to change one area
-// (FEATURES.md, section 5: the test). So for an edit of a highlighted area:
-//   1. the brush's strokes mark the area; the AI gets the photo, plus a small copy with that
-//      area tinted red (markedCopy), and "change only the highlighted area";
-//   2. only that area of its result is pasted onto the original, with a soft edge (pasteOnto,
-//      on the screen-sized preview to show it, and pasteBack at full size to save it): the rest
-//      of the photo keeps its own pixels.
-// LATER (phase 2, FEATURES.md "Cutting Gemini's cost"; not built): the AI gets the whole photo at
-// 4K (~₹12). Phase 2 sends only a crop of about twice the highlighted area at 2K (~₹4–5.5); the
-// paste here would then place the result over that crop instead of over the whole photo.
-//
-// Strokes are kept in the photo's own proportions (x and y from 0 to 1, the radius as a share of
-// the longer side), so the same strokes draw the highlight on screen, the marked copy and the
-// mask at any size. Android does the same with the same numbers (ai-tools.json, "area").
-//
-// The full-size paste starts from the same picture Adjust saves from (readSource: the original
-// as Immich shows it, upright, with Immich's own crop), stretches the result to its size, lines
-// it up (ai-align.ts: the AI's content drifts by a fraction of a percent), and works only on the
-// part of the photo the mask covers, a tile at a time. If the AI changed the photo's shape
-// (portrait for landscape, or a crop), or its result can't be lined up closely enough, nothing
-// is pasted (ShapeChangedError) and the person is offered another try (alignFor). The result
-// was paid for, so it's kept, to use whole or try again; also when anything else goes wrong
-// lining it up or pasting it (refusalOf), on the preview or at full size at Save.
+// SelfPhotos AI tools: highlighting an area, and pasting just that area back.
 
 import { AdjustExportError, copyType, readSource, toBlob } from '#lib/ai-edit/adjust/adjust-export.ts';
 import { tiles, type Rect, type Size } from '#lib/ai-edit/adjust/adjust-geometry.ts';
@@ -74,8 +50,7 @@ export function drawStrokes(context: Context2D, strokes: Stroke[], size: Size, c
   context.restore();
 }
 
-// The copy the AI gets with the photo: `image` (what the user brushed on), small, with the
-// highlighted area tinted red, as a JPEG.
+// The copy the AI gets with the photo.
 export async function markedCopy(image: ImageBitmap, strokes: Stroke[]): Promise<Blob> {
   const size = fit(image, AREA.markLongSide);
   const canvas = new OffscreenCanvas(size.width, size.height);
@@ -83,15 +58,12 @@ export async function markedCopy(image: ImageBitmap, strokes: Stroke[]): Promise
   const context = canvas.getContext('2d')!;
   const [r, g, b, alpha] = AREA.tint;
   context.drawImage(image, 0, 0, size.width, size.height);
-  // Drawn solid on a layer first, so overlapping strokes aren't darker.
   drawStrokes(layer.getContext('2d')!, strokes, size, `rgb(${r}, ${g}, ${b})`);
   context.globalAlpha = alpha;
   context.drawImage(layer, 0, 0);
   return canvas.convertToBlob({ type: 'image/jpeg', quality: AREA.markQuality });
 }
 
-// Softens a mask's edges: three box blurs, about a Gaussian's (canvas blur filters aren't in
-// every browser).
 function feather(alpha: Float32Array, { width, height }: Size, radius: number): Float32Array {
   let soft = alpha;
   for (let n = 0; n < 3; n++) {
@@ -102,12 +74,10 @@ function feather(alpha: Float32Array, { width, height }: Size, radius: number): 
 
 export type AreaMask = {
   canvas: OffscreenCanvas;
-  // The part of the photo it covers (0–1), or null when it covers nothing.
   bounds: Rect | null;
 };
 
-// The highlighted area of a photo of shape `shape`: white with soft edges on transparent,
-// small (it's stretched to any size).
+// The highlighted area of a photo of shape `shape`.
 export function areaMask(strokes: Stroke[], shape: Size): AreaMask {
   const size = fit(shape, AREA.maskLongSide);
   const canvas = new OffscreenCanvas(size.width, size.height);
@@ -142,32 +112,24 @@ export function areaMask(strokes: Stroke[], shape: Size): AreaMask {
   return { canvas, bounds };
 }
 
-// Whether the AI kept the photo's shape, so its result lines up with the original (it returns
-// its own size class, e.g. 3050×1408 for 3120×1440).
+// Whether the AI kept the photo's shape.
 export const sameShape = (result: Size, original: Size) =>
   Math.abs(result.width / result.height / (original.width / original.height) - 1) <= AREA.shapeTolerance;
 
-// The AI's result can't be pasted: another shape, or (`alignment`) it couldn't be lined up
-// closely enough. The person can still use the whole result, or try again.
+// The AI's result can't be pasted.
 export class ShapeChangedError extends Error {
   constructor(readonly alignment: Alignment | null = null) {
     super('The AI’s result doesn’t line up with the photo');
   }
 }
 
-// Why a paid highlighted edit's result is kept unpasted, to use whole or try again: 'shape' for
-// the normal refusal (ShapeChangedError), 'failed' for anything else that went wrong lining it up
-// or pasting it (it was paid for, so it's never thrown away). Each has its own note.
 export const refusalOf = (error: unknown): 'shape' | 'failed' =>
   error instanceof ShapeChangedError ? 'shape' : 'failed';
 
-// The photo can't be read here at full size (isFullSize), only Immich's preview of it (e.g. HEIC
-// outside Safari): a highlighted edit's copy couldn't be saved (the service refuses one that isn't
-// full size), so the edit isn't made (said before anything is paid for), nor its copy pasted.
+// The photo can't be read here at full size (isFullSize).
 export class NeedsOriginalError extends Error {}
 
-// For a first highlighted edit: the photo upright, as the paste starts from it (readSource), at
-// most AREA.photoLongSide, as a JPEG for the AI, and that picture (for the mark, so the two match).
+// For a first highlighted edit.
 export async function uprightPhoto(asset: AssetResponseDto): Promise<{ blob: Blob; image: ImageBitmap }> {
   const source = await readSource(asset);
   try {
@@ -188,7 +150,6 @@ export async function uprightPhoto(asset: AssetResponseDto): Promise<{ blob: Blo
   }
 }
 
-// The pixels of `image` stretched to `size`.
 function pixelsOf(image: CanvasImageSource, size: Size) {
   const canvas = new OffscreenCanvas(size.width, size.height);
   const context = canvas.getContext('2d', { willReadFrequently: true })!;
@@ -196,7 +157,6 @@ function pixelsOf(image: CanvasImageSource, size: Size) {
   return context.getImageData(0, 0, size.width, size.height).data;
 }
 
-// `image` shrunk to `size` (smoothly: a 4K result is shrunk about 4×), in grey.
 async function greyOf(image: ImageBitmap, size: Size): Promise<Grey> {
   const small = await createImageBitmap(image, {
     resizeWidth: size.width,
@@ -215,7 +175,6 @@ async function greyOf(image: ImageBitmap, size: Size): Promise<Grey> {
   }
 }
 
-// The highlighted area at `size`: its mask's alpha.
 function changedOf(strokes: Stroke[], size: Size): Grey {
   const data = pixelsOf(areaMask(strokes, size).canvas, size);
   const alpha = new Float32Array(size.width * size.height);
@@ -225,9 +184,6 @@ function changedOf(strokes: Stroke[], size: Size): Grey {
   return { ...size, data: alpha };
 }
 
-// How to line `result` up with `base` (the photo as shown) before pasting the highlighted area,
-// measured once and used for the preview and the full-size copy alike. Throws ShapeChangedError
-// when the result has another shape or can't be lined up closely enough: pasting would misalign.
 export async function alignFor(base: ImageBitmap, result: ImageBitmap, strokes: Stroke[]): Promise<Alignment> {
   if (!sameShape(result, base)) {
     throw new ShapeChangedError();
@@ -240,7 +196,6 @@ export async function alignFor(base: ImageBitmap, result: ImageBitmap, strokes: 
   return alignment ?? IDENTITY;
 }
 
-// The pixels of the photo (`size`) the mask's bounds cover, a little wider, on whole pixels.
 function region(bounds: Rect, size: Size): Rect {
   const x = Math.max(0, Math.floor(bounds.x * size.width) - 2);
   const y = Math.max(0, Math.floor(bounds.y * size.height) - 2);
@@ -249,8 +204,6 @@ function region(bounds: Rect, size: Size): Rect {
   return { x, y, width: right - x, height: bottom - y };
 }
 
-// `result` drawn through the mask onto `context` (which shows the base at `size`), in `tile`, lined
-// up by `alignment`.
 function pasteTile(
   context: Context2D,
   layer: OffscreenCanvas,
@@ -260,7 +213,7 @@ function pasteTile(
   tile: Rect,
   alignment: Alignment,
 ) {
-  layer.width = tile.width; // also clears it
+  layer.width = tile.width;
   layer.height = tile.height;
   const work = layer.getContext('2d')!;
   const part = (source: Size, { scaleX, offsetX, scaleY, offsetY }: Alignment) => {
@@ -280,8 +233,7 @@ function pasteTile(
 }
 
 // The highlighted area of `result` pasted onto `base`, at base's size, lined up by `alignment`
-// (alignFor), encoded. Works a tile at a time, only where the mask is. `tileSize` is only set by
-// the tests.
+// (alignFor), encoded.
 export async function pasteOnto(
   base: ImageBitmap,
   result: ImageBitmap,
@@ -304,8 +256,6 @@ export async function pasteOnto(
       throw new AdjustExportError('too-large');
     }
     context.drawImage(base, 0, 0);
-    // A canvas that's too big for the browser takes nothing in, without an error: compare its
-    // centre with the base's.
     const probe = new OffscreenCanvas(1, 1).getContext('2d', { willReadFrequently: true })!;
     const [cx, cy] = [Math.floor(size.width / 2), Math.floor(size.height / 2)];
     probe.drawImage(base, cx, cy, 1, 1, 0, 0, 1, 1);
@@ -318,7 +268,7 @@ export async function pasteOnto(
       const area = region(mask.bounds, size);
       for (const tile of tiles(area, tileSize)) {
         pasteTile(context, layer, result, mask, size, { ...tile, x: area.x + tile.x, y: area.y + tile.y }, alignment);
-        await new Promise((resolve) => setTimeout(resolve, 0)); // let the page update between tiles
+        await new Promise((resolve) => setTimeout(resolve, 0));
       }
     }
 
@@ -328,15 +278,12 @@ export async function pasteOnto(
     }
     return { blob, size };
   } finally {
-    // Free their memory now, not at the next garbage collection.
     canvas.width = canvas.height = 0;
     layer.width = layer.height = 0;
   }
 }
 
-// The copy saved for an edit of a highlighted area: the original at full size, as Adjust reads
-// it, with that area of the AI's result pasted on, lined up as on the preview. Only from the photo
-// at full size (isFullSize): from anything smaller (NeedsOriginalError), nothing is pasted or sent.
+// The copy saved for an edit of a highlighted area.
 export async function pasteBack(
   asset: AssetResponseDto,
   result: ImageBitmap,

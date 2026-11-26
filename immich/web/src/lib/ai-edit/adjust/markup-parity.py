@@ -1,10 +1,6 @@
 #!/usr/bin/env python3
-# SelfPhotos Adjust's Markup: makes markup-parity.json, the values both apps' tests check
-# (web: markup.spec.ts; Android: test/selfphotos/markup_test.dart), from adjust-markup.json and
-# the text's font file, on its own so neither app's code is the source of truth. After changing
-# adjust-markup.json:
-#   python3 -I markup-parity.py adjust-markup.json \
-#     ../../../../../mobile/fonts/GoogleSans/GoogleSans-Bold.ttf > markup-parity.json
+# SelfPhotos Adjust's Markup.
+# python3 -I markup-parity.py adjust-markup.json \
 #   npx prettier --write markup-parity.json   (from web/)
 import json, math, struct, sys
 
@@ -39,15 +35,13 @@ for frm, to, photo, size in [
     ([0.1, 0.2], [0.6, 0.7], [4000, 3000], 1),
     ([0.9, 0.5], [0.2, 0.5], [3000, 4000], 2),
     ([0.5, 0.9], [0.5, 0.1], [1080, 1920], 0),
-    ([0.5, 0.5], [0.505, 0.502], [4000, 3000], 2),  # short: the head is capped
+    ([0.5, 0.5], [0.505, 0.502], [4000, 3000], 2),
 ]:
     longer = max(photo)
     width = cfg['sizes'][size]['width'] * longer
     f = [frm[0]*photo[0], frm[1]*photo[1]]; t = [to[0]*photo[0], to[1]*photo[1]]
     arrows.append({'from': frm, 'to': to, 'photo': photo, 'size': size, **arrow(f, t, width)})
 
-# The font's own numbers (a TrueType file's head, hhea, hmtx and cmap tables): units per em, the
-# line's ascent, descent and gap, and each letter's advance. No kerning: the texts below have none.
 def table(tag):
     for i in range(struct.unpack('>H', font[4:6])[0]):
         name, _, offset, _ = struct.unpack('>4sIII', font[12 + 16 * i:28 + 16 * i])
@@ -57,7 +51,7 @@ def table(tag):
 units = struct.unpack('>H', font[table('head') + 18:table('head') + 20])[0]
 ascent, descent, gap = struct.unpack('>hhh', font[table('hhea') + 4:table('hhea') + 10])
 metrics = struct.unpack('>H', font[table('hhea') + 34:table('hhea') + 36])[0]
-def glyph(char):  # cmap format 4 (letters in the basic plane)
+def glyph(char):
     base = table('cmap')
     for i in range(struct.unpack('>H', font[base + 2:base + 4])[0]):
         _, _, offset = struct.unpack('>HHI', font[base + 4 + 8 * i:base + 12 + 8 * i])

@@ -90,7 +90,7 @@ export const getSearchTypeTitle = (type: string) => {
       return $t('ocr');
     }
     case 'ask': {
-      return 'Ask'; // SelfPhotos Ask Photos
+      return 'Ask';
     }
     default: {
       return;
@@ -117,7 +117,7 @@ export const getSearchTypePlaceholder = (type: string) => {
       return $t('search_by_context_example');
     }
     case 'ask': {
-      return 'Ask anything, e.g. "Mom and me at the beach last December"'; // SelfPhotos Ask Photos
+      return 'Ask anything, e.g. "Mom and me at the beach last December"';
     }
     default: {
       return $t('search_your_photos');

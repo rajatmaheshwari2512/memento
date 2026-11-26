@@ -1,8 +1,4 @@
-// SelfPhotos Adjust's Markup: what's drawn on the photo (pen, highlighter, text, arrows, boxes
-// and circles), kept as shapes in the picture's own 0–1 coordinates, and how it's drawn: the same
-// function draws the preview and the full-size copy, at the size each is. Its colours, sizes and
-// shapes are adjust-markup.json's, which the Android app reads too (markup.dart has the same
-// maths). Not part of Immich.
+// SelfPhotos Adjust's Markup.
 
 import type { Size } from '#lib/ai-edit/adjust/adjust-geometry.ts';
 import data from '#lib/ai-edit/adjust/adjust-markup.json';
@@ -31,7 +27,7 @@ export const MARKUP_SIZES: { width: number; text: number }[] = data.sizes;
 export const HIGHLIGHTER = data.highlighter;
 export const ARROW = data.arrow;
 export const TEXT = data.text;
-// A line's points are kept only this far apart (a share of the picture), so a long one stays small.
+// A line's points are kept only this far apart (a share of the picture).
 export const MIN_STEP: number = data.minStep;
 
 type Context2D = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
@@ -44,9 +40,7 @@ export const toPixels = (share: number, size: Size) => share * longerSide(size);
 
 const pixel = ([x, y]: MarkupPoint, size: Size): Pixel => [x * size.width, y * size.height];
 
-// An arrow from `from` to `to` (pixels), its line `width` pixels wide: where its line ends and
-// the corners of its filled head. The line stops inside the head, so its round end doesn't show
-// past the point.
+// An arrow from `from` to `to` (pixels), its line `width` pixels wide.
 export function arrowGeometry(from: Pixel, to: Pixel, width: number) {
   const length = Math.hypot(to[0] - from[0], to[1] - from[1]);
   const [ux, uy] = length > 0 ? [(to[0] - from[0]) / length, (to[1] - from[1]) / length] : [1, 0];
@@ -63,8 +57,7 @@ export function arrowGeometry(from: Pixel, to: Pixel, width: number) {
 
 export const textFont = (pixels: number) => `${TEXT.weight} ${pixels}px ${TEXT.font}`;
 
-// The box a text takes on a picture of `size` (pixels), centred on its place. Measured with
-// the font's own line height, as Android's text layout does.
+// The box a text takes on a picture of `size` (pixels), centred on its place.
 export function textBox(context: Context2D, item: MarkupText, size: Size) {
   const pixels = toPixels(item.fontSize, size);
   context.save();
@@ -85,7 +78,6 @@ export function textBox(context: Context2D, item: MarkupText, size: Size) {
 
 const outlineOf = (colour: string) => MARKUP_COLOURS.find(({ fill }) => fill === colour)?.outline ?? '#000000';
 
-// A freehand line through `points`, smoothed: curves through the middles between them.
 function linePath(points: Pixel[]) {
   const [first, ...rest] = points;
   const path = new Path2D();
@@ -99,8 +91,6 @@ function linePath(points: Pixel[]) {
   return path;
 }
 
-// Draws `items` on a picture of `size` (the canvas's own size, or the part of it to draw on).
-// The fonts must be loaded first (markupFontReady).
 export function drawMarkup(context: Context2D, items: MarkupItem[], size: Size) {
   for (const item of items) {
     context.save();
@@ -113,7 +103,6 @@ export function drawMarkup(context: Context2D, items: MarkupItem[], size: Size) 
       case 'highlighter': {
         const width = toPixels(item.width, size);
         const points = item.points.map((point) => pixel(point, size));
-        // The whole line as one path: a see-through one isn't darker where it crosses itself.
         context.globalAlpha = item.kind === 'highlighter' ? HIGHLIGHTER.opacity : 1;
         if (points.length === 1) {
           const dot = new Path2D();
@@ -167,7 +156,6 @@ export function drawMarkup(context: Context2D, items: MarkupItem[], size: Size) 
         context.font = textFont(pixels);
         context.textAlign = 'left';
         context.textBaseline = 'alphabetic';
-        // The outline first, half of it under the letters.
         context.strokeStyle = outlineOf(item.colour);
         context.lineWidth = pixels * TEXT.outline;
         context.strokeText(item.text, box.x, box.baseline);
@@ -182,8 +170,6 @@ export function drawMarkup(context: Context2D, items: MarkupItem[], size: Size) 
 // The text font, loaded (canvases draw with a fallback font until it is).
 export const markupFontReady = () => document.fonts.load(textFont(16)).then(() => undefined);
 
-// Undo and redo for the markup: each change that can be undone keeps the items as they were
-// before it. Items aren't changed in place, so keeping the lists costs little.
 export class MarkupHistory {
   constructor(
     readonly items: MarkupItem[] = [],
@@ -191,13 +177,10 @@ export class MarkupHistory {
     readonly future: MarkupItem[][] = [],
   ) {}
 
-  // A change that can be undone.
   commit(items: MarkupItem[]) {
     return new MarkupHistory(items, [...this.past, this.items], []);
   }
 
-  // More of the last change (a line growing, text typed, a drag going on): undone with it. If
-  // that brings the items back to how they were before it, the change is forgotten.
   amend(items: MarkupItem[]) {
     const before = this.past.at(-1);
     if (before && sameItems(before, items)) {

@@ -1,10 +1,4 @@
-<!--
-  SelfPhotos: Memento's own features, switched on or off for everyone. Not part of Immich.
-  The values live in Memento's extras service (GET/PUT /extras/flags), not in Immich's system
-  config, which refuses settings it doesn't know. Built from the same parts as Immich's
-  own sections (see MapSettings.svelte) so it looks the same. Each feature adds its own
-  sub-section here when it's built.
--->
+<!-- SelfPhotos: Memento's own features, switched on or off for everyone. -->
 <script lang="ts">
   import { errorMessage, getMementoFlags, updateMementoFlags, type MementoFlags } from '#lib/ai-edit/ai-edit-api.ts';
   import { mementoFlags } from '#lib/ai-edit/flags.svelte.ts';
@@ -28,7 +22,7 @@
     saved = response.flags;
     defaults = response.defaults;
     edit = cloneDeep(response.flags);
-    mementoFlags.value = response.flags; // so buttons elsewhere follow at once
+    mementoFlags.value = response.flags;
   };
 
   onMount(async () => {
@@ -89,7 +83,6 @@
                 isEdited={edit.gemini.enabled !== saved.gemini.enabled}
               />
 
-              <!-- Only when the service has it (one from before the AI tools doesn't). -->
               {#if edit.gemini.tools !== undefined && saved.gemini.tools !== undefined}
                 <SettingSwitch
                   title="Enable AI tools: presets and highlighting"
@@ -177,7 +170,6 @@
             </div>
           </SettingAccordion>
 
-          <!-- Only when the service has them (one from before themed memories doesn't). -->
           {#if edit.themedMemories && saved.themedMemories && edit.creations && saved.creations}
             <SettingAccordion
               key="memento-memories"
@@ -219,7 +211,6 @@
             </div>
           </SettingAccordion>
 
-          <!-- Only when the service has it (one from before Reduce noise doesn't). -->
           {#if edit.reduceNoise && saved.reduceNoise}
             <SettingAccordion
               key="memento-videos"
@@ -237,7 +228,6 @@
             </SettingAccordion>
           {/if}
 
-          <!-- The same buttons as Immich's own sections (SystemConfigButtonRow.svelte). -->
           <div class="mt-8 flex justify-between gap-2">
             <div class="left">
               {#if showResetToDefault}

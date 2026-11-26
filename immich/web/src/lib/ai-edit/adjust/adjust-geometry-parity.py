@@ -1,22 +1,11 @@
 #!/usr/bin/env python3
-# SelfPhotos Adjust: makes adjust-geometry-parity.json, the values both apps' tests check
-# (web: adjust-geometry.spec.ts; Android: test/selfphotos/adjust_test.dart): perspective's warp,
-# its crop (with straighten) and the saved photo's size. Its own copy of the maths, so neither
-# app's code is the source of truth. After a deliberate change to the maths, change it here too:
-#   python3 -I adjust-geometry-parity.py > adjust-geometry-parity.json
+# SelfPhotos Adjust: makes adjust-geometry-parity.json, the values both apps' tests check.
+# python3 -I adjust-geometry-parity.py > adjust-geometry-parity.json
 #   npx prettier --write src/lib/ai-edit/adjust/adjust-geometry-parity.json   (from web/)
-#
-# The crop (adjust-geometry.ts explains it at more length): in the crop's own frame (turned with
-# the angle), a rectangle inside the warped photo and around the four corners' rectangle (if the
-# angle turns that rectangle past the photo's edges, around as much of it as fits, kept centred):
-# the photo's own shape if one of those has it, else the shape closest to it; of that shape the
-# largest, then the middle. A rectangle is (x, y, width, height); each condition is
-# a·(x, y, width, height) ≤ limit. The shapes allowed run between those of the corners (where four
-# conditions meet); a shape between them is tallest where three meet, its width ratio·height.
 import itertools, json, math
 
 
-def js_round(value):  # as Math.round and Dart's round() do for positive values (not halves to even)
+def js_round(value):
     return math.floor(value + 0.5)
 
 
@@ -87,7 +76,7 @@ def is_valid(quad):
     return all(sign(d) == sign(depths[0]) for d in depths) and min(map(abs, depths)) >= 0.1 * max(map(abs, depths))
 
 
-def det3(c0, c1, c2):  # columns
+def det3(c0, c1, c2):
     return (c0[0] * (c1[1] * c2[2] - c1[2] * c2[1]) - c1[0] * (c0[1] * c2[2] - c0[2] * c2[1])
             + c2[0] * (c0[1] * c1[2] - c0[2] * c1[1]))
 
@@ -193,8 +182,6 @@ def to_source(x, y, output, size, view):
     return list(project(view['toPhoto'], turned))
 
 
-# Each with the crop's shape it should have: the photo's own ('own'), or not but within 2% of it
-# ('near'), or whichever is closest (None).
 CASES = [
     ('a building shot from below', (4000, 3000), 0, [[0.2, 0.05], [0.8, 0.05], [1, 0.95], [0, 0.95]], None),
     ('the same, also straightened: around as much of it as fits', (4000, 3000), 3.5,

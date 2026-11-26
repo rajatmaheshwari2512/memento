@@ -1,6 +1,6 @@
 <script lang="ts">
   import { shortcuts } from '#lib/actions/shortcut.ts';
-  import AdjustEntry from '#lib/ai-edit/adjust/AdjustEntry.svelte'; // SelfPhotos Adjust
+  import AdjustEntry from '#lib/ai-edit/adjust/AdjustEntry.svelte';
   import { EditToolType, editManager } from '#lib/managers/edit/edit-manager.svelte.ts';
   import { websocketEvents } from '#lib/stores/websocket.ts';
   import { getAssetEdits, type AssetResponseDto } from '@immich/sdk';

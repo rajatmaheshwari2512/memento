@@ -1,5 +1,3 @@
-// AI tools' shared list (ai-tools.json, read by the Android app too), the rules for picking
-// several for one edit, and which photos AI edits take.
 import en from '#i18n/en.json';
 import {
   AI_TOOLS,
@@ -21,16 +19,13 @@ import {
   type AiTool,
 } from '#lib/ai-edit/ai/ai-tools.ts';
 
-// memento-extras refuses longer instructions (MAX_PROMPT_CHARS) and other tool names.
 const MAX_PROMPT_CHARS = 1500;
 const TOOL_NAME = /^[a-z][a-z0-9-]{0,39}$/;
-// The header before several items (the Android app's test has the same).
 const HEADER =
   'Make all of these changes to the photo in one edit. Where an item says to keep something the same, that means apart from the other changes in this list:';
 
 const tool = (id: string) => AI_TOOLS.find((candidate) => candidate.id === id)!;
 const ids = (tools: AiTool[]) => tools.map(({ id }) => id);
-// The selection after tapping these tools in turn.
 const tapAll = (tapped: AiTool[]) => {
   let selected: AiTool[] = [];
   for (const next of tapped) {
@@ -52,7 +47,6 @@ describe('AI tools', () => {
       if (tool.ask) {
         expect(translations[toolAskKey(tool)], tool.id).toBeTruthy();
       }
-      // Move takes the thing elsewhere: pasting back only the highlighted area would lose it.
       if (tool.highlight !== 'optional') {
         expect(tool.pasteBack, tool.id).toBe(false);
       }
@@ -105,7 +99,6 @@ describe('picking several tools', () => {
     expect(blockedReason(tool('move'), fixes, false)).toBe('editor_ai_needs_highlight');
     expect(blockedReason(tool('move'), withStyle, true)).toBeNull();
     expect(ids(toggleTool(withStyle, tool('move')))).toEqual(['move']);
-    // No style selected to swap: a style waits like any other.
     expect(blockedReason(tool('watercolour'), fixes, false)).toBe('editor_ai_up_to');
     expect(ids(toggleTool(fixes, tool('watercolour')))).toEqual(['enhance', 'unblur', 'sky']);
   });
@@ -113,7 +106,6 @@ describe('picking several tools', () => {
   it("keeps today's highlight rules: Move needs one, whole-photo tools need none", () => {
     expect(blockedReason(tool('move'), [], false)).toBe('editor_ai_needs_highlight');
     expect(blockedReason(tool('move'), [], true)).toBeNull();
-    // Picked, then the highlight cleared: Move can still be unselected.
     expect(blockedReason(tool('move'), pick('move'), false)).toBeNull();
     expect(blockedReason(tool('watercolour'), [], true)).toBe('editor_ai_whole_only');
     expect(blockedReason(tool('reframe'), [], true)).toBe('editor_ai_whole_only');
@@ -133,7 +125,6 @@ describe('picking several tools', () => {
 });
 
 describe('combinedInstruction', () => {
-  // The Android app's test (ai_tools_test.dart) expects this same string.
   it('joins the tools in ai-tools.json order, then the words, into one list', () => {
     const expected =
       'Make all of these changes to the photo in one edit. Where an item says to keep something the same, that means apart from the other changes in this list:\n' +
@@ -191,16 +182,15 @@ describe('combinedLabel', () => {
   });
 });
 
-// The Android app's test (ai_tools_test.dart) checks the same sizes.
 describe('which photos AI edits take', () => {
   it('refuses a photo over 100 megapixels or 12,000 px on its longer side, by its size as shown', () => {
     expect(MAX_PHOTO).toEqual({ megapixels: 100, longSide: 12_000 });
-    expect(tooLargeForAi({ width: 10_000, height: 10_000 })).toBe(false); // exactly 100 megapixels
+    expect(tooLargeForAi({ width: 10_000, height: 10_000 })).toBe(false);
     expect(tooLargeForAi({ width: 10_000, height: 10_001 })).toBe(true);
-    expect(tooLargeForAi({ width: 12_000, height: 8000 })).toBe(false); // exactly 12,000 px
-    expect(tooLargeForAi({ width: 8000, height: 12_001 })).toBe(true); // a narrow panorama, either way round
+    expect(tooLargeForAi({ width: 12_000, height: 8000 })).toBe(false);
+    expect(tooLargeForAi({ width: 8000, height: 12_001 })).toBe(true);
     expect(tooLargeForAi({ width: 12_001, height: 100 })).toBe(true);
-    expect(tooLargeForAi({ width: 4080, height: 3072 })).toBe(false); // a phone's photo
+    expect(tooLargeForAi({ width: 4080, height: 3072 })).toBe(false);
   });
 
   it('takes a photo whose size Immich doesn’t know (the service checks it too)', () => {
@@ -215,18 +205,17 @@ describe('isFullSize (the service’s check of a pasted copy)', () => {
   it('takes the photo itself, and a picture down to 90% on each side, never larger', () => {
     expect(FULL_SIZE).toEqual({ minShare: 0.9, aspectTolerance: 0.01 });
     expect(isFullSize({ width: 6000, height: 4000 }, photo)).toBe(true);
-    expect(isFullSize({ width: 5760, height: 3840 }, photo)).toBe(true); // a RAW photo's full-size JPEG
-    expect(isFullSize({ width: 5400, height: 3600 }, photo)).toBe(true); // exactly 90%
+    expect(isFullSize({ width: 5760, height: 3840 }, photo)).toBe(true);
+    expect(isFullSize({ width: 5400, height: 3600 }, photo)).toBe(true);
     expect(isFullSize({ width: 5399, height: 3600 }, photo)).toBe(false);
     expect(isFullSize({ width: 6001, height: 4000 }, photo)).toBe(false);
-    expect(isFullSize({ width: 1440, height: 960 }, photo)).toBe(false); // Immich's preview
+    expect(isFullSize({ width: 1440, height: 960 }, photo)).toBe(false);
   });
 
   it('wants the same shape within 1%, upright as Immich shows it', () => {
-    expect(isFullSize({ width: 6000, height: 3970 }, photo)).toBe(true); // 0.76% off
-    expect(isFullSize({ width: 6000, height: 3960 }, photo)).toBe(false); // 1.01% off
-    expect(isFullSize({ width: 4000, height: 6000 }, photo)).toBe(false); // turned
-    // A nearly square photo, its picture turned: the same shape within 1%, but turned.
+    expect(isFullSize({ width: 6000, height: 3970 }, photo)).toBe(true);
+    expect(isFullSize({ width: 6000, height: 3960 }, photo)).toBe(false);
+    expect(isFullSize({ width: 4000, height: 6000 }, photo)).toBe(false);
     expect(isFullSize({ width: 1000, height: 998 }, { width: 1000, height: 1005 })).toBe(false);
     expect(isFullSize({ width: 998, height: 1000 }, { width: 1000, height: 1005 })).toBe(true);
   });

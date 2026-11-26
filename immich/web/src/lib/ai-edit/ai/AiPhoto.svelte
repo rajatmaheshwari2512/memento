@@ -1,9 +1,5 @@
-<!--
-  SelfPhotos AI tools: the photo in the editor, fitted to the space as Adjust's preview is, with
-  the brush: while `brushing`, a finger or the mouse paints the area to change, shown tinted red
-  as the AI will see it. Holding "compare" shows `original` instead. A pulse covers the photo
-  while the AI works. Not part of Immich.
--->
+<!-- SelfPhotos AI tools: the photo in the editor, fitted to the space as Adjust's preview is, with -->
+<!-- the brush: while `brushing`, a finger or the mouse paints the area to change. -->
 <script lang="ts">
   import { drawStrokes, type Stroke } from '#lib/ai-edit/ai/ai-area.ts';
   import { AREA } from '#lib/ai-edit/ai/ai-tools.ts';
@@ -60,7 +56,7 @@
     if (!canvas) {
       return;
     }
-    canvas.width = size.width; // also clears it
+    canvas.width = size.width;
     canvas.height = size.height;
     const context = canvas.getContext('2d');
     if (context && !comparing) {
@@ -84,7 +80,6 @@
       return;
     }
     const point = pointOn(canvas!, event);
-    // Only points a little apart, so a long stroke stays small.
     if (movedPast(last.points.at(-1)!, point, 0.002)) {
       strokes = [...strokes.slice(0, -1), { ...last, points: [...last.points, point] }];
     }

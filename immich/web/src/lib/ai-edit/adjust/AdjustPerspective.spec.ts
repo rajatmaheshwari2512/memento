@@ -2,7 +2,6 @@ import AdjustPerspective from '#lib/ai-edit/adjust/AdjustPerspective.svelte';
 import type { Quad } from '#lib/ai-edit/adjust/adjust-geometry.ts';
 import { render } from 'vitest-browser-svelte';
 
-// The corners on a 400×300 photo box.
 async function renderCorners(corners: Quad | null) {
   const onChange = vi.fn<(corners: Quad) => void>();
   const box = document.createElement('div');
@@ -13,7 +12,6 @@ async function renderCorners(corners: Quad | null) {
     props: { corners, disabled: false, onChange },
   });
   const handles = [...baseElement.querySelectorAll<HTMLButtonElement>('button')];
-  // The tests run without the app's styles: the layer fills the box as its classes say.
   handles[0].parentElement!.style.cssText = 'position: absolute; inset: 0';
   return { onChange, handles };
 }
@@ -25,7 +23,6 @@ describe('AdjustPerspective', () => {
   it('refuses corners brought too close together, with the hint, which goes a moment later', async () => {
     vi.useFakeTimers();
     try {
-      // A tenth of the photo a side: the smallest allowed.
       const corners: Quad = [
         [0.45, 0.45],
         [0.55, 0.45],

@@ -1,6 +1,4 @@
-// SelfPhotos Adjust page: /photos/adjust/<photo id>?tab=adjust|filters|straighten|markup.
-// As with the AI Edit page, the param is `id` and the photo `adjustAsset`, not
-// `assetId`/`asset`: the (user) layout opens the photo viewer for those.
+// SelfPhotos Adjust page: /photos/adjust/<photo id>?tab=adjust/filters/straighten/markup.
 import type { AdjustTab } from '#lib/ai-edit/adjust/adjust-action.ts';
 import { authenticate } from '#lib/utils/auth.ts';
 import { getFormatter } from '#lib/utils/i18n.ts';

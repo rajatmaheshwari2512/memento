@@ -1,11 +1,4 @@
-<!--
-  SelfPhotos editor pages (Adjust, AI Edit): laid out like Immich's own editor. The photo on
-  black, and its dark side panel (EditorPanel.svelte) with close, the title and Save, the
-  editor's tabs (Adjust's pages: Crop opens Immich's own editor), the tool, and a footer at the
-  bottom. On narrow screens the panel goes under the photo instead of beside it, so the photo
-  stays visible; a compact panel (AI Edit's) is only as tall as its tools there, so the photo
-  gets about two thirds of the height. Not part of Immich.
--->
+<!-- SelfPhotos editor pages (Adjust, AI Edit): laid out like Immich's own editor. -->
 <script lang="ts">
   import { focusTrap } from '#lib/actions/focus-trap.ts';
   import { shortcuts } from '#lib/actions/shortcut.ts';
@@ -17,8 +10,7 @@
   interface Props {
     // The header's title: "Editor" unless given.
     title?: string;
-    // On narrow screens, a panel under the photo only as tall as its tools (at most half the
-    // height; what doesn't fit scrolls inside it), so the photo gets the rest.
+    // On narrow screens, a panel under the photo only as tall as its tools.
     compact?: boolean;
     saving: boolean;
     canSave: boolean;

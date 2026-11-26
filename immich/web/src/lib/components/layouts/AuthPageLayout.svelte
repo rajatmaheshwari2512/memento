@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { mementoMark } from '#lib/memento/branding.svelte.ts'; // SelfPhotos
+  import { mementoMark } from '#lib/memento/branding.svelte.ts';
   import { Card, CardBody, CardHeader, Heading, Logo, VStack } from '@immich/ui';
   import type { Snippet } from 'svelte';
 

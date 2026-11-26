@@ -1,8 +1,4 @@
-<!--
-  SelfPhotos Adjust: the live preview. Immich's screen-sized preview of the photo, drawn
-  through the shared shader at the size it's shown, so moving a slider costs one GPU pass.
-  The saved copy is rendered separately, at full size (adjust-export.ts). Not part of Immich.
--->
+<!-- SelfPhotos Adjust: the live preview. -->
 <script lang="ts">
   import { framing } from '#lib/ai-edit/adjust/adjust-geometry.ts';
   import { initialState, shaderValues, type AdjustState } from '#lib/ai-edit/adjust/adjust-params.ts';
@@ -32,8 +28,6 @@
 
   const shownState = $derived(original ? initialState() : settings);
 
-  // The picture fitted into the space, keeping its shape: the photo's (straightening keeps it),
-  // or perspective's crop's, which may be another (so Markup's layer, in this box, follows it).
   const shown = $derived.by(() => {
     const view = framing(shownState.angle, image, shownState.perspective);
     const picture = view.toPhoto

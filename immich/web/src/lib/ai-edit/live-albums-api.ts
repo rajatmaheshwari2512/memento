@@ -1,5 +1,4 @@
 // SelfPhotos live albums: calls to Memento's extras service (memento-extras) at /extras.
-// An album that fills itself with photos of chosen people. See SelfPhotos FEATURES.md.
 
 import { request } from '#lib/ai-edit/ai-edit-api.ts';
 
@@ -7,10 +6,10 @@ export type LiveAlbum = {
   id: string;
   albumId: string;
   albumName: string;
-  match: 'any' | 'all'; // any: at least one of the people; all: all of them in the same photo
+  match: 'any' | 'all';
   include: string[];
   exclude: string[];
-  since: string | null; // YYYY-MM-DD
+  since: string | null;
   createdAt: string;
   lastRunAt: string | null;
   lastAdded: number;
@@ -29,7 +28,7 @@ export const createLiveAlbum = (target: { albumName: string } | { albumId: strin
 export const updateLiveAlbum = (id: string, rules: LiveAlbumRules) =>
   request<LiveAlbum>('PUT', `/live-albums/${encodeURIComponent(id)}`, rules);
 
-// Stops it adding photos. The album and its photos stay.
+// Stops it adding photos.
 export const deleteLiveAlbum = (id: string) => request<void>('DELETE', `/live-albums/${encodeURIComponent(id)}`, {});
 
 export const checkLiveAlbum = (id: string) =>

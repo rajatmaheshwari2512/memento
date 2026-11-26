@@ -1,6 +1,6 @@
 <script lang="ts">
-  // SelfPhotos Ask Photos: what the question was read as, in the same chips Immich's search
-  // results show for its filters, plus any hints (e.g. how to make "me" work).
+  // SelfPhotos Ask Photos: what the question was read as, in the same chips Immich's search results
+  // show for its filters, plus any hints (e.g. how to make "me" work).
   import type { AskUnderstood } from '#lib/ai-edit/ask-api.ts';
   import { getSearchTypeTitle } from '#lib/components/shared-components/search-bar/search-bar-utils.ts';
   import { Icon, Text } from '@immich/ui';
@@ -52,8 +52,6 @@
         {getSearchTypeTitle('ask')}
       </span>
       {#each chips as chip (chip.key)}
-        <!-- A copy of the filter chip on Immich's search page (+page.svelte, same classes), without
-             the remove button. Immich has no chip component to reuse. -->
         <div
           class="inline-flex max-w-full items-center rounded-full bg-primary/10 py-1 ps-1 pe-1 text-xs text-primary ring-1 ring-primary/15 transition-shadow hover:ring-primary/25 dark:bg-immich-dark-primary/15 dark:text-immich-dark-primary dark:ring-immich-dark-primary/20 dark:hover:ring-immich-dark-primary/30"
         >

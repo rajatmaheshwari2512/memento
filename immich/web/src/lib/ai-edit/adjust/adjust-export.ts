@@ -1,20 +1,4 @@
-// SelfPhotos Adjust: the full-size render that's saved as the copy. Not part of Immich.
-//
-// What the copy starts from (FEATURES.md, section 6): the photo as Immich shows it, at the
-// largest size this browser can read:
-//   1. the original, with Immich's own crop/rotate applied if it has any (Immich keeps that
-//      edit as a full-size JPEG), when the browser can read the original's format;
-//   2. otherwise (HEIC outside Safari, RAW) Immich's full-size JPEG of it, if the server
-//      makes those (Administration → Settings → Image Settings → full-size images), else its
-//      preview, and the user is told;
-//   3. the preview, if all else fails.
-// Phones' rotation tags are applied while reading. Wide-gamut colours become sRGB, and
-// Ultra HDR's extra brightness is not kept: the copy is a normal photo.
-//
-// The source is read once (a 50 MP photo takes about 200 MB) and rendered in tiles no larger
-// than the GPU allows, each from just the part of the source it shows, into one canvas of the
-// output's size. Browsers fail silently on canvases that are too big, so every tile is read
-// back and checked, and nothing is uploaded unless the whole picture is there.
+// SelfPhotos Adjust: the full-size render that's saved as the copy.
 
 import {
   outputSize,
@@ -30,9 +14,6 @@ import { drawMarkup, markupFontReady, type MarkupItem } from '#lib/ai-edit/adjus
 import { getAssetMediaUrl } from '#lib/utils.ts';
 import { AssetMediaSize, type AssetResponseDto } from '@immich/sdk';
 
-// Originals worth trying: Immich's own list of web-supported images (less GIF: a copy of an
-// animation would be its first frame), and HEIC/HEIF, which Safari reads (other browsers
-// fail on it quickly and the next picture is used).
 const BROWSER_FORMATS = new Set([
   'image/jpeg',
   'image/png',
@@ -45,7 +26,6 @@ const BROWSER_FORMATS = new Set([
 
 const JPEG_QUALITY = 0.92;
 
-// Perspective can make a tile's part of the source much larger than the tile: its largest side.
 const MAX_PART = 4096;
 
 export class AdjustExportError extends Error {
@@ -57,7 +37,6 @@ export class AdjustExportError extends Error {
 export type ExportResult = {
   blob: Blob;
   size: Size;
-  // Made from a smaller picture than the photo's own (Immich's preview).
   fromPreview: boolean;
 };
 
@@ -88,12 +67,11 @@ export async function readImage(url: string): Promise<ImageBitmap | null> {
       colorSpaceConversion: 'default',
     });
   } catch {
-    return null; // a format this browser can't read: try the next
+    return null;
   }
 }
 
-// The best of sourceUrls this browser can read. Also the base AI tools paste a highlighted
-// area onto (ai/ai-area.ts).
+// The best of sourceUrls this browser can read.
 export async function readSource(asset: AssetResponseDto): Promise<ImageBitmap> {
   for (const url of sourceUrls(asset)) {
     const image = await readImage(url);
@@ -117,18 +95,16 @@ export const toBlob = (canvas: HTMLCanvasElement, type: string) =>
   new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, JPEG_QUALITY));
 
 // PNG originals stay PNG (they may have transparent parts); everything else becomes a JPEG.
-// Decided by the file's name, as the Android app does.
 export const copyType = (asset: AssetResponseDto) =>
   /\.png$/i.test(asset.originalFileName) ? ('image/png' as const) : ('image/jpeg' as const);
 
-// Whether the copy was made from a smaller picture than the photo's own (Immich's preview).
 export const fromPreview = (asset: AssetResponseDto, image: ImageBitmap) => {
   const largest = Math.max(asset.width ?? 0, asset.height ?? 0);
   return largest > 0 && Math.max(image.width, image.height) < largest * 0.9;
 };
 
 // Renders `image` with the editor's settings at full size, draws the `markup` on top, and encodes
-// it. Exported for the tests; `tileSize` is only set by them.
+// it.
 export async function renderImage(
   image: ImageBitmap,
   state: AdjustState,
@@ -143,8 +119,6 @@ export async function renderImage(
 
   const canvas = document.createElement('canvas');
   const work = document.createElement('canvas');
-  // Each tile's part of the source is drawn here first: drawImage takes parts of a photo read
-  // upright the right way round (createImageBitmap's crop doesn't, for EXIF-rotated photos).
   const part = new OffscreenCanvas(1, 1);
   const partContext = part.getContext('2d');
   let renderer: AdjustRenderer | undefined;
@@ -158,15 +132,13 @@ export async function renderImage(
     renderer = new AdjustRenderer(work);
     let size = tileSize ?? tileSizeFor(renderer.maxTextureSize);
     if (state.perspective) {
-      // Each tile's part of the source at most 4096 a side (64 MB), however large the GPU allows,
-      // as Android keeps it within 2048.
       const limit = Math.min(renderer.maxTextureSize, MAX_PART);
       size = tileSizeWithin(output, source, state.angle, state.perspective, size, limit);
     }
     const parts = tiles(output, size);
     for (const [index, tile] of parts.entries()) {
       const texture = sourceRect(tile, output, source, state.angle, state.perspective);
-      part.width = texture.width; // also clears it
+      part.width = texture.width;
       part.height = texture.height;
       partContext.drawImage(
         image,
@@ -193,12 +165,10 @@ export async function renderImage(
         onScreen: false,
       });
       const pixels = renderer.read(tile.width, tile.height);
-      // The GPU gave up (out of memory): an error, or an empty tile where a JPEG has no gaps.
       if (!renderer.ok || (type === 'image/jpeg' && !hasVisiblePixel(pixels))) {
         throw new AdjustExportError('gpu');
       }
       context.putImageData(new ImageData(pixels, tile.width, tile.height), tile.x, tile.y);
-      // A canvas that's too big for the browser takes nothing in, without an error.
       const centre = Math.floor(tile.height / 2) * tile.width + Math.floor(tile.width / 2);
       const check = context.getImageData(
         tile.x + Math.floor(tile.width / 2),
@@ -210,7 +180,7 @@ export async function renderImage(
         throw new AdjustExportError('too-large');
       }
       onProgress?.(index + 1, parts.length);
-      await new Promise((resolve) => setTimeout(resolve, 0)); // let the page update between tiles
+      await new Promise((resolve) => setTimeout(resolve, 0));
     }
     if (markup.length > 0) {
       await markupFontReady();
@@ -224,7 +194,6 @@ export async function renderImage(
     return { blob, size: output };
   } finally {
     renderer?.dispose();
-    // Free their memory now, not at the next garbage collection.
     canvas.width = canvas.height = 0;
     part.width = part.height = 0;
   }

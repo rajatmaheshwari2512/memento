@@ -86,8 +86,7 @@
   );
   let tagsTitle = $state<string>();
   let mediaTitle = $derived(getSearchMediaTitle(searchManager.filter.mediaType));
-  // SelfPhotos Ask Photos: the question says who, when and what, so the other filters are hidden,
-  // including an Advanced panel left open from another search type.
+  // SelfPhotos Ask Photos: the other filters are hidden.
   let isAsk = $derived(searchManager.filter.queryType === 'ask');
   $effect(() => {
     if (isAsk) {

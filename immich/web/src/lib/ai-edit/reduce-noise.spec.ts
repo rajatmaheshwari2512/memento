@@ -7,10 +7,8 @@ import type { MessageFormatter } from 'svelte-i18n';
 const video = { id: 'v1', isVideo: true, isTrashed: false, isOwner: true };
 const flags = (enabled: boolean | undefined) =>
   ({ reduceNoise: enabled === undefined ? undefined : { enabled } }) as unknown as MementoFlags;
-// The keys themselves, so the tests read which message was shown.
 const $t = ((key: string) => key) as unknown as MessageFormatter;
 
-// The service's answers, in order, for each request (POST then GETs).
 const answers = (...bodies: Array<{ status?: number; body: unknown }>) => {
   const fetch = vi.spyOn(globalThis, 'fetch');
   for (const { status = 200, body } of bodies) {
@@ -44,7 +42,7 @@ describe('Reduce noise', () => {
     mementoFlags.value = flags(false);
     expect(canReduceNoise(video)).toBe(false);
     mementoFlags.value = flags(undefined);
-    expect(canReduceNoise(video)).toBe(false); // a service from before it
+    expect(canReduceNoise(video)).toBe(false);
     mementoFlags.value = flags(true);
     expect(canReduceNoise(video)).toBe(true);
     expect(getReduceNoiseAction($t, video).title).toBe('reduce_noise');
@@ -122,8 +120,7 @@ describe('Reduce noise', () => {
     const asked = fetch.mock.calls.length;
     expect(asked).toBeGreaterThan(1);
     await new Promise((resolve) => setTimeout(resolve, 30));
-    expect(fetch).toHaveBeenCalledTimes(asked); // no longer asked about
-    // Followed no more: a new tap starts it again.
+    expect(fetch).toHaveBeenCalledTimes(asked);
     fetch.mockResolvedValueOnce(Response.json({ jobId: 'j6', state: 'done', assetId: 'copy-6' }, { status: 202 }));
     await reduceNoise($t, 'v6', { open: vi.fn() });
     expect(success).toHaveBeenCalledTimes(1);

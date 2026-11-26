@@ -1,8 +1,3 @@
-// SelfPhotos Adjust: the page's own logic. Auto fills the light and colour sliders from the photo
-// (the rest keep theirs); Straighten's two modes swap the angle slider for Perspective's corners
-// and back, the preview's box then taking the crop's shape; and Save makes the copy with
-// perspective, at the size its crop gives. Pumps the real page with stand-ins for the photo's
-// pictures and Memento's extras service.
 import { autoAdjust } from '#lib/ai-edit/adjust/adjust-auto.ts';
 import { outputSize, photoCorners, type Quad } from '#lib/ai-edit/adjust/adjust-geometry.ts';
 import type { MockData } from '#test/common/data.ts';
@@ -14,7 +9,6 @@ import { page } from 'vitest/browser';
 import Page from './+page.svelte';
 import { load } from './+page.ts';
 
-// Saving waits for Immich's websocket to say the copy is ready: not here.
 vi.mock('#lib/ai-edit/adjust/save-copy.ts', () => ({
   saveCopy: async (save: () => Promise<{ assetId: string }>) => {
     const { assetId } = await save();
@@ -24,7 +18,6 @@ vi.mock('#lib/ai-edit/adjust/save-copy.ts', () => ({
 
 const PHOTO = { width: 400, height: 300 };
 
-// A dull, dark photo: a grey-blue gradient, as a PNG.
 const photo = () => {
   const canvas = new OffscreenCanvas(PHOTO.width, PHOTO.height);
   const context = canvas.getContext('2d')!;
@@ -36,8 +29,6 @@ const photo = () => {
   return canvas.convertToBlob({ type: 'image/png' });
 };
 
-// The photo's pictures (its preview and original), and Memento's extras service: its flags
-// unknown (everything on) and the save answering with the copy's id. `saved`: what was saved.
 async function standIn() {
   const passOn = fetch;
   const picture = await photo();
@@ -63,7 +54,6 @@ async function standIn() {
   return { picture, saved };
 }
 
-// Adjust's page for a photo of yours, on `tab`, loaded (its preview drawn).
 async function open(
   { data, router, render }: { data: MockData; router: MockRouter; render: Mock['render'] },
   tab: string,
@@ -74,7 +64,6 @@ async function open(
   const pictures = await standIn();
   await render(Page, load);
   await expect.poll(() => document.querySelector('[role="img"][aria-label="photo.jpg"] canvas')).toBeTruthy();
-  // The tests run without the app's styles: the photo's space as the page's layout gives it.
   const space = document.querySelector('[role="img"][aria-label="photo.jpg"]')!.parentElement!;
   space.style.cssText = 'display: flex; align-items: center; justify-content: center; width: 800px; height: 600px';
   return pictures;
@@ -83,7 +72,6 @@ async function open(
 const slider = (label: string) => page.getByRole('slider', { name: label, exact: true });
 const corners = () => page.getByRole('button', { name: 'editor_handle_corner' });
 
-// Moves corner `index` by four keyboard nudges of 0.02 (with Shift), as a person can.
 const nudge = (index: number, key: string) => {
   for (let i = 0; i < 4; i++) {
     corners()
@@ -93,7 +81,6 @@ const nudge = (index: number, key: string) => {
   }
 };
 
-// The corners those nudges give: the top two pulled in by 0.08 each (a building's top).
 const pulledIn = (): Quad => {
   const quad = photoCorners();
   for (let i = 0; i < 4; i++) {
@@ -103,7 +90,6 @@ const pulledIn = (): Quad => {
   return quad;
 };
 
-// The preview's box: its width over its height.
 const shownShape = () => {
   const { width, height } = document.querySelector('[role="img"][aria-label="photo.jpg"]')!.getBoundingClientRect();
   return width / height;
@@ -120,13 +106,12 @@ test('Auto sets the light and colour sliders from the photo, and leaves the othe
   tint.dispatchEvent(new Event('input', { bubbles: true }));
   await expect.element(slider('editor_tint')).toHaveValue('30');
 
-  // What Auto works out from the same picture, read as the page reads it.
   const image = await createImageBitmap(picture, { premultiplyAlpha: 'none' });
   const canvas = new OffscreenCanvas(image.width, image.height);
   canvas.getContext('2d')!.drawImage(image, 0, 0);
   const { data: pixels } = canvas.getContext('2d')!.getImageData(0, 0, image.width, image.height);
   const expected = autoAdjust(pixels, image.width, image.height);
-  expect(expected.exposure).toBeGreaterThan(0); // a dark photo: something to do
+  expect(expected.exposure).toBeGreaterThan(0);
 
   await page.getByRole('button', { name: 'editor_auto' }).click();
   for (const [key, value] of Object.entries(expected)) {
@@ -153,7 +138,6 @@ test("Straighten's modes: Perspective swaps the angle for the corners, and back 
   await expect.element(slider('editor_straighten')).not.toBeInTheDocument();
   nudge(0, 'ArrowRight');
   nudge(1, 'ArrowLeft');
-  // The photo shows whole while the corners are placed.
   expect(shownShape()).toBeCloseTo(4 / 3, 2);
 
   await page.getByRole('radio', { name: 'editor_straighten' }).click();
@@ -161,7 +145,6 @@ test("Straighten's modes: Perspective swaps the angle for the corners, and back 
   expect(corners().elements()).toHaveLength(0);
   const crop = outputSize(0, PHOTO, pulledIn());
   await expect.poll(() => shownShape()).toBeCloseTo(crop.width / crop.height, 1);
-  // All four corners on the photo's edges: only one crop holds them, and it isn't the photo's 4:3.
   expect(crop.width / crop.height).toBeLessThan(1.25);
 });
 

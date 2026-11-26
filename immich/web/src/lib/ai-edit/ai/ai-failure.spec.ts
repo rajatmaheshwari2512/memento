@@ -1,6 +1,3 @@
-// What AI Edit's failures say: the service's own words, or a translated text, never an
-// exception's technical text nor the app's own English. The Android app's tests
-// (ai_edit_layout_test.dart, ai_edit_service_test.dart) check the same.
 import { AdjustExportError } from '#lib/ai-edit/adjust/adjust-export.ts';
 import {
   AiEditError,
@@ -16,17 +13,14 @@ import { MAX_PHOTO } from '#lib/ai-edit/ai/ai-tools.ts';
 import { locale } from '#lib/stores/preferences.store.ts';
 import { get } from 'svelte/store';
 
-// The translation's key and the values put in it, so the test sees which text was picked.
 const t = (key: string, options?: { values: Record<string, string> }) =>
   options ? `[${key} ${JSON.stringify(options.values)}]` : `[${key}]`;
 
-// The too-large text, with the limits in ai-tools.json as this browser writes numbers.
 const tooLarge = `[editor_ai_too_large ${JSON.stringify({
   megapixels: MAX_PHOTO.megapixels.toLocaleString(),
   pixels: MAX_PHOTO.longSide.toLocaleString(),
 })}]`;
 
-// What `promise` failed with.
 const failure = (promise: Promise<unknown>) => promise.then(() => null).catch((error: unknown) => error);
 
 describe('failureMessage', () => {
@@ -42,8 +36,6 @@ describe('failureMessage', () => {
 
   it('says how large a photo AI edits take, from ai-tools.json, its numbers written as the locale writes them', () => {
     expect(tooLargeMessage(t)).toBe(tooLarge);
-    // In the person's locale, whatever this browser's is: in English as the text said before it
-    // took them from the file ("12,000", not "12000"); in German, "12.000".
     const before = get(locale);
     try {
       locale.set('en-US');
@@ -136,7 +128,7 @@ describe("the service's answers, as AI Edit reads them", () => {
     vi.stubGlobal('fetch', () => Promise.reject(new TypeError('Failed to fetch')));
     const unreachable = (await failure(getAiEditImage('edit'))) as AiEditError;
     expect(failureMessage(unreachable, t)).toBe('[errors.unable_to_connect]');
-    expect(unreachable.cause).toBeInstanceOf(TypeError); // the real cause, for the console
+    expect(unreachable.cause).toBeInstanceOf(TypeError);
     expect(failureMessage(await failure(createAiEdit('asset', 'make it warmer')), t)).toBe(
       '[errors.unable_to_connect]',
     );

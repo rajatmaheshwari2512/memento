@@ -51,7 +51,6 @@ describe('the markup settings, as the Android app works them out (markup-parity.
   });
 
   it('gives a text the same box, centred on its place, in GoogleSans Bold', async () => {
-    // The app's font, as app.css loads it (the tests run without the app's styles).
     document.fonts.add(await new FontFace('GoogleSans', `url(${fontUrl})`, { weight: '100 900' }).load());
     await markupFontReady();
     const context = new OffscreenCanvas(1, 1).getContext('2d')!;
@@ -62,7 +61,6 @@ describe('the markup settings, as the Android app works them out (markup-parity.
         { kind: 'text', colour: '#ffffff', fontSize, at: at as MarkupPoint, text },
         size(photo),
       );
-      // Within the rounding of each app's text layout (markup-parity.json).
       expect(Math.abs(box.width - expected.width), text).toBeLessThanOrEqual(0.1);
       expect(Math.abs(box.x - expected.x), text).toBeLessThanOrEqual(0.1);
       expect(Math.abs(box.height - expected.height), text).toBeLessThanOrEqual(1);
@@ -119,7 +117,7 @@ describe('MarkupEditor', () => {
     const editor = new MarkupEditor();
     editor.addText([0.5, 0.5]);
     expect(editor.items).toHaveLength(1);
-    expect(editor.isEmpty).toBe(true); // nothing to save yet
+    expect(editor.isEmpty).toBe(true);
     editor.setText('Hi');
     expect(editor.isEmpty).toBe(false);
     editor.setText(' ');
@@ -225,7 +223,6 @@ describe('the saved copy', () => {
       { kind: 'box', colour: '#000000', width: 0.02, from: [0.6, 0.6], to: [0.9, 0.9] },
     ]);
     expect(at(60, 50)).toEqual([229, 57, 53, 255]);
-    // See-through: 40% white over grey.
     const [r] = at(150, 20);
     expect(r).toBeCloseTo(128 + (255 - 128) * HIGHLIGHTER.opacity, -1);
     expect(at(120, 60)).toEqual([0, 0, 0, 255]);

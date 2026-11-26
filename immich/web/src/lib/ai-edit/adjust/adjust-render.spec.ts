@@ -1,4 +1,3 @@
-// The shared shader, run for real with WebGL2 in the test browser.
 import { renderImage } from '#lib/ai-edit/adjust/adjust-export.ts';
 import { initialState, neutralAdjustments, type AdjustState } from '#lib/ai-edit/adjust/adjust-params.ts';
 import parity from '#lib/ai-edit/adjust/adjust-parity.json';
@@ -57,7 +56,6 @@ describe('the Adjust shader', () => {
     const source = await render(image, { ...initialState() });
     const out = await render(image, initialState());
     expect(out.width).toBe(64);
-    // Unchanged: each pixel as it was (the sRGB round trip may move a value by one).
     const original = new OffscreenCanvas(64, 48).getContext('2d')!;
     original.drawImage(image, 0, 0);
     expect(maxDifference(out.data, original.getImageData(0, 0, 64, 48).data)).toBeLessThanOrEqual(1);
@@ -157,8 +155,6 @@ describe('the Adjust shader', () => {
   });
 
   it('reads EXIF-rotated photos the right way round, tile by tile', async () => {
-    // Stored as 64×48 with four coloured quarters, tagged "rotate 90° clockwise to show"
-    // (EXIF orientation 6), as phones store portraits.
     const stored = new OffscreenCanvas(64, 48);
     const draw = stored.getContext('2d')!;
     for (const [x, y, colour] of [
@@ -172,7 +168,6 @@ describe('the Adjust shader', () => {
     }
     const encoded = await stored.convertToBlob({ type: 'image/jpeg', quality: 1 });
     const jpeg = new Uint8Array(await encoded.arrayBuffer());
-    // An APP1 Exif segment with one tag, Orientation = 6, after the JFIF one.
     const exif = [
       0xff, 0xe1, 0x00, 0x22, 0x45, 0x78, 0x69, 0x66, 0x00, 0x00, 0x4d, 0x4d, 0x00, 0x2a, 0x00, 0x00, 0x00, 0x08, 0x00,
       0x01, 0x01, 0x12, 0x00, 0x03, 0x00, 0x00, 0x00, 0x01, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -191,7 +186,6 @@ describe('the Adjust shader', () => {
     expect(maxDifference(out.data, expected.getImageData(0, 0, 48, 64).data)).toBeLessThanOrEqual(2);
   });
 
-  // After a deliberate change to the maths, copy the pixels this prints into adjust-parity.json.
   it('matches the parity table that the Android app is checked against', async () => {
     const { width, height, pixels } = parity.image;
     const image = await makeImage(width, height, (x, y) => pixels.slice((y * width + x) * 4, (y * width + x) * 4 + 4));

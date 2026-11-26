@@ -1,7 +1,4 @@
-<!--
-  SelfPhotos Adjust: the Adjustments tab. Auto first (AdjustAuto.svelte), then the sliders under
-  Immich's own headings ("Light", "Color"), laid out like its crop tool. Not part of Immich.
--->
+<!-- SelfPhotos Adjust: the Adjustments tab. -->
 <script lang="ts">
   import AdjustAuto from '#lib/ai-edit/adjust/AdjustAuto.svelte';
   import AdjustSlider from '#lib/ai-edit/adjust/AdjustSlider.svelte';
@@ -10,7 +7,6 @@
 
   interface Props {
     adjustments: Adjustments;
-    // The photo Auto looks at (Immich's preview), once loaded.
     image: ImageBitmap | null;
     disabled: boolean;
   }

@@ -1,6 +1,5 @@
 // SelfPhotos editors: a finger or the mouse drawing on the photo (Adjust's Markup,
-// MarkupLayer.svelte, and AI Edit's brush, AiPhoto.svelte): where a press is on the picture, and
-// how far apart a line's points are kept. Not part of Immich.
+// MarkupLayer.svelte, and AI Edit's brush, AiPhoto.svelte): where a press is on the picture.
 
 import { clamp } from 'lodash-es';
 
@@ -14,7 +13,7 @@ export function pointOn(element: Element, event: PointerEvent): Point {
 }
 
 // Whether a press draws (a finger, a pen, or the mouse's main button); if so, `element` captures
-// it: its moves and its lift keep coming to `element`, also outside it.
+// it.
 export function captureDrawingPress(element: Element, event: PointerEvent) {
   if (event.button > 0) {
     return false;
@@ -23,6 +22,5 @@ export function captureDrawingPress(element: Element, event: PointerEvent) {
   return true;
 }
 
-// `to` is more than `step` (a share of the picture) from `from`: a line keeps only points that
-// far apart, so a long one stays small.
+// `to` is more than `step` (a share of the picture) from `from`.
 export const movedPast = (from: Point, to: Point, step: number) => Math.hypot(to[0] - from[0], to[1] - from[1]) > step;

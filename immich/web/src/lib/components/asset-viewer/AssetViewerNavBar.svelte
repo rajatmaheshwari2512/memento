@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { getAdjustAction } from '#lib/ai-edit/adjust/adjust-action.ts'; // SelfPhotos Adjust
-  import { getAiEditAction } from '#lib/ai-edit/ai-edit-action.ts'; // SelfPhotos AI edit
-  import { getReduceNoiseAction } from '#lib/ai-edit/reduce-noise.ts'; // SelfPhotos Reduce noise
+  import { getAdjustAction } from '#lib/ai-edit/adjust/adjust-action.ts';
+  import { getAiEditAction } from '#lib/ai-edit/ai-edit-action.ts';
+  import { getReduceNoiseAction } from '#lib/ai-edit/reduce-noise.ts';
 
   import ActionMenuItem from '#lib/components/ActionMenuItem.svelte';
   import LoadingDots from '#lib/components/LoadingDots.svelte';
