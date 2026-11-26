@@ -9,7 +9,7 @@
 # matched anywhere, ignoring case. Blank lines and lines starting with # are skipped.
 # .env values of 8 characters or more are matched as they are; only file:line and the name
 # of the setting are shown, never the value.
-# Not checked: TZ, DEV_TZ and AWS_REGION, whose values (time zones, a region) are in the code anyway.
+# Not checked: TZ, DEV_TZ, AWS_REGION, ANDROID_KEYSTORE_PATH and ANDROID_KEYSTORE_ALIAS.
 # Exit: 0 nothing found, 1 something found, 2 the check couldn't run.
 set -euo pipefail
 
@@ -72,7 +72,7 @@ if [ -f "$root/.env" ]; then
   (umask 077 && tr -d '\r' < "$root/.env" | sed -n 's/^[[:space:]]*\([A-Za-z_][A-Za-z0-9_]*\)=\(.*\)$/\1=\2/p' > "$work/env")
   while IFS= read -r entry; do
     key=${entry%%=*}
-    case "$key" in TZ | DEV_TZ | AWS_REGION) continue ;; esac
+    case "$key" in TZ | DEV_TZ | AWS_REGION | ANDROID_KEYSTORE_PATH | ANDROID_KEYSTORE_ALIAS) continue ;; esac
     value=$(printf '%s' "${entry#*=}" |
       sed -e 's/[[:space:]]#.*$//' -e 's/[[:space:]]*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/")
     [ "${#value}" -ge 8 ] || continue
