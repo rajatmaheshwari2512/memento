@@ -397,7 +397,7 @@ class ForegroundUploadService {
         ]);
       }
 
-      final storageSaverCopy = await storageSaverUpload.prepare(asset, file, storageSaver);
+      final storageSaverCopy = entity.isLivePhoto ? null : await storageSaverUpload.prepare(asset, file, storageSaver);
       if (storageSaverUpload.isCancelled) {
         return;
       }

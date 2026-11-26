@@ -236,6 +236,31 @@ void main() {
       verify(() => mockAssetService.linkStorageSaverCopy(unhashed.id, originalSha, copySha)).called(1);
     });
 
+    test('keeps a Live Photo full size, with its iCloud metadata', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      final livePhoto = photo.copyWith(cloudId: 'cloud-id');
+      stubAsset(livePhoto, '/path/to/IMG_0001.HEIC', 'IMG_0001.HEIC');
+      final mockEntity = MockAssetEntity();
+      when(() => mockEntity.isLivePhoto).thenReturn(true);
+      when(() => mockStorageRepository.getAssetEntityForAsset(livePhoto)).thenAnswer((_) async => mockEntity);
+      when(
+        () => mockStorageRepository.getMotionFileForAsset(livePhoto),
+      ).thenAnswer((_) async => File('/path/to/IMG_0001.MOV'));
+      final uploads = captureUploads();
+
+      await sut.uploadSingleAsset(
+        livePhoto,
+        null,
+        callbacks: const UploadCallbacks(),
+        storageSaver: const StorageSaverRun(BackupQuality.saver, 1),
+      );
+
+      expect(uploads.map((upload) => upload.path), ['/path/to/IMG_0001.MOV', '/path/to/IMG_0001.HEIC']);
+      expect(uploads.last.fields['metadata'], contains('mobile-app'));
+      expect(uploads.last.fields['livePhotoVideoId'], 'remote-1');
+      verifyZeroInteractions(mockStorageSaverNative);
+    });
+
     test('names a shrunk video after the original with the copy\'s extension', () async {
       stubAsset(video, '/path/to/clip.mov', 'clip.mov');
       stubShrink(() => shrunk);
