@@ -1,7 +1,4 @@
-# The whole setup, wired together. Each block below calls one module in ./modules.
-# A module is a folder of .tf files with its own inputs (variables) and outputs,
-# like an Ansible role. One module's output feeds the next one's input, for example
-# the VM's public IP goes into the Cloudflare DNS record.
+# The whole setup, wired together: each block calls one module in ./modules.
 #
 # Three optional parts, each on or off (./memento sets them from .env; variables.tf):
 #   oracle_server   the Oracle server, its network and the budget alert
@@ -10,10 +7,7 @@
 
 # --- Oracle ---
 
-# A compartment is a folder for Oracle resources. Keeping ours in one makes them
-# easy to find and keeps them apart from anything else in the account.
-# Terraform can't delete a compartment by default (enable_delete is false), so a
-# destroy only forgets it.
+# A compartment holds our Oracle resources; a destroy only forgets it (enable_delete is false).
 resource "oci_identity_compartment" "selfphotos" {
   count = var.oracle_server ? 1 : 0
 

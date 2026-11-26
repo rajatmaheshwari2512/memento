@@ -1,6 +1,4 @@
-# Which Terraform and which providers (plugins) this code needs.
-# `terraform init` downloads them and records the exact versions in .terraform.lock.hcl.
-# "~> 9.13" means 9.13 or any newer 9.x, but never 10.0.
+# Which Terraform and providers this code needs; `terraform init` records the exact versions in .terraform.lock.hcl.
 
 terraform {
   required_version = "~> 1.17"

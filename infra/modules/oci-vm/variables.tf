@@ -22,7 +22,7 @@ variable "name" {
   default     = "selfphotos"
 }
 
-# Defaults = the whole Always Free ARM allowance (since June 2026).
+# Defaults = the whole Always Free ARM allowance.
 variable "ocpus" {
   type    = number
   default = 2

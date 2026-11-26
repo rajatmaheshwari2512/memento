@@ -1,16 +1,10 @@
-# The free ARM VM that runs Caddy and Immich.
-# Terraform only creates it. Everything inside it (Docker, rclone, Caddy, Immich)
-# is set up by Ansible (../../../host), so there is no cloud-init script here.
+# The free ARM VM that runs Caddy and Immich. Everything inside it is set up by Ansible (../../../host).
 
-# `data` blocks read things that already exist instead of creating them.
-
-# The region's first availability domain. This finds its name.
 data "oci_identity_availability_domains" "this" {
   compartment_id = var.tenancy_ocid
 }
 
 # The newest Ubuntu 24.04 image that runs on the A1 (ARM) shape.
-# "24.04" leaves out the "24.04 Minimal" images.
 data "oci_core_images" "ubuntu" {
   compartment_id           = var.compartment_id
   operating_system         = "Canonical Ubuntu"
@@ -49,19 +43,14 @@ resource "oci_core_instance" "this" {
   }
 
   lifecycle {
-    # `terraform destroy`, or any change that needs a new VM, stops with an error
-    # instead of deleting the VM (Postgres and thumbnails live on its disk).
+    # A destroy, or any change that needs a new VM, stops with an error instead of deleting it.
     prevent_destroy = true
 
     ignore_changes = [
-      # Oracle publishes new Ubuntu images often, so the data block above returns a
-      # new ID. For Linux images, Oracle applies a new source_id IN PLACE by swapping
-      # the boot disk, which would wipe the VM. Ignoring it pins the image used at
-      # creation. Ubuntu updates itself through apt instead.
+      # Ignored on purpose: a new image ID would swap the boot disk in place and wipe the VM.
       source_details[0].source_id,
-      # The SSH key only matters at first boot. Manage keys on the VM after that.
+      # The SSH key only matters at first boot.
       metadata,
-      # Changing it would need a new VM.
       availability_domain,
     ]
   }

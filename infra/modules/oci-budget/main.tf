@@ -1,9 +1,5 @@
-# An email if Oracle ever starts charging. Everything here should be free, so any
-# spend means something left the Always Free limits (e.g. extra disk, or a change
-# in what Oracle gives away).
+# An email if Oracle ever starts charging.
 
-# The budget covers the whole tenancy (the root compartment), not just ours,
-# so a charge anywhere in the account is caught.
 resource "oci_budget_budget" "this" {
   compartment_id = var.tenancy_ocid
   display_name   = "selfphotos-monthly"
@@ -25,8 +21,7 @@ resource "oci_budget_alert_rule" "actual" {
   message        = "SelfPhotos: Oracle spend has reached the monthly budget. Check Billing → Cost Analysis."
 }
 
-# Email when Oracle predicts the month will end over budget. This usually fires
-# earlier than the rule above.
+# Email when Oracle predicts the month will end over budget.
 resource "oci_budget_alert_rule" "forecast" {
   budget_id      = oci_budget_budget.this.id
   display_name   = "forecast-spend"

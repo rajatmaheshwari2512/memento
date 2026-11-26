@@ -10,7 +10,6 @@ resource "aws_s3_bucket" "this" {
   }
 }
 
-# Nothing in this bucket is ever public.
 resource "aws_s3_bucket_public_access_block" "this" {
   bucket                  = aws_s3_bucket.this.id
   block_public_acls       = true
@@ -19,9 +18,7 @@ resource "aws_s3_bucket_public_access_block" "this" {
   restrict_public_buckets = true
 }
 
-# Versioning closes a gap in "the VM can't delete": the backup user can still
-# PUT a file with the same name, which would replace the old copy. With versioning
-# on, the old copy is kept as a "noncurrent version" instead.
+# Versioning keeps a replaced copy as a noncurrent version.
 resource "aws_s3_bucket_versioning" "this" {
   bucket = aws_s3_bucket.this.id
   versioning_configuration {
@@ -32,8 +29,7 @@ resource "aws_s3_bucket_versioning" "this" {
 resource "aws_s3_bucket_lifecycle_configuration" "this" {
   bucket = aws_s3_bucket.this.id
 
-  # Big videos upload in parts. If an upload dies halfway, the parts sit there and
-  # cost money. The backup user can't delete, so S3 cleans them up after 7 days.
+  # Parts of a failed multi-part upload are cleaned up after 7 days.
   rule {
     id     = "abort-incomplete-uploads"
     status = "Enabled"
@@ -43,8 +39,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "this" {
     }
   }
 
-  # Replaced copies (see versioning) are kept 180 days, which is also Deep
-  # Archive's minimum billed storage time, then removed.
+  # Replaced copies are kept 180 days, then removed.
   rule {
     id     = "expire-replaced-versions"
     status = "Enabled"
@@ -63,7 +58,6 @@ resource "aws_iam_user" "backup" {
   name = var.iam_user_name
 }
 
-# A policy document is AWS's JSON permission format, written in HCL.
 data "aws_iam_policy_document" "backup" {
   statement {
     sid       = "ListTheBucket"
@@ -83,8 +77,6 @@ data "aws_iam_policy_document" "backup" {
     resources = ["${aws_s3_bucket.this.arn}/*"]
   }
 
-  # Nothing above allows these anyway. The explicit Deny makes the intent clear and
-  # wins over any Allow someone might add later.
   statement {
     sid    = "NeverDeleteOrWeaken"
     effect = "Deny"
@@ -109,8 +101,7 @@ resource "aws_iam_user_policy" "backup" {
   policy = data.aws_iam_policy_document.backup.json
 }
 
-# The key pair rclone uses. The secret is stored in Terraform state.
-# To rotate it: terraform apply -replace=module.backup.aws_iam_access_key.backup
+# The key pair rclone uses. Rotate it with: terraform apply -replace=module.backup.aws_iam_access_key.backup
 resource "aws_iam_access_key" "backup" {
   user = aws_iam_user.backup.name
 }

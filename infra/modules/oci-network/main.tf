@@ -3,8 +3,6 @@
 #   internet ── internet gateway ── route table ── subnet (10.0.0.0/24) ── VM
 #                                                    └─ security list = firewall
 #
-# The security list is Oracle's firewall in front of the VM. The VM has its own
-# firewall too (iptables), which the Ansible caddy role opens for 80 and 443.
 
 resource "oci_core_vcn" "this" {
   compartment_id = var.compartment_id
@@ -20,7 +18,6 @@ resource "oci_core_internet_gateway" "this" {
   enabled        = true
 }
 
-# Send all traffic that isn't for the VCN itself out through the internet gateway.
 resource "oci_core_route_table" "public" {
   compartment_id = var.compartment_id
   vcn_id         = oci_core_vcn.this.id
@@ -44,8 +41,6 @@ resource "oci_core_security_list" "public" {
     destination = "0.0.0.0/0"
   }
 
-  # protocol "6" is TCP, "1" is ICMP (Oracle uses protocol numbers).
-
   # SSH, for Ansible and you.
   ingress_security_rules {
     protocol    = "6"
@@ -57,7 +52,7 @@ resource "oci_core_security_list" "public" {
     }
   }
 
-  # HTTP. Caddy needs it to get the Let's Encrypt certificate, then redirects to HTTPS.
+  # HTTP: Caddy needs it for the Let's Encrypt certificate.
   ingress_security_rules {
     protocol    = "6"
     source      = "0.0.0.0/0"
@@ -79,8 +74,7 @@ resource "oci_core_security_list" "public" {
     }
   }
 
-  # "Fragmentation needed" messages. Without them some large transfers stall.
-  # Oracle's default security list has the same two ICMP rules.
+  # ICMP "fragmentation needed" messages, so large transfers don't stall.
   ingress_security_rules {
     protocol    = "1"
     source      = "0.0.0.0/0"
