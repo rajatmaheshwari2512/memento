@@ -236,6 +236,29 @@ void main() {
       verify(() => mockAssetService.linkStorageSaverCopy(unhashed.id, originalSha, copySha)).called(1);
     });
 
+    test('on iOS links an edited photo by the app\'s own hash of it', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      final edited = photo.copyWith(checksum: 'edited-sha', isEdited: true, adjustmentTime: DateTime(2024));
+      stubAsset(edited, '/path/to/FullSizeRender.heic', 'IMG_0001.HEIC');
+      stubShrink(() => shrunk);
+      final uploads = captureUploads();
+
+      await sut.uploadSingleAsset(
+        edited,
+        null,
+        callbacks: const UploadCallbacks(),
+        storageSaver: const StorageSaverRun(BackupQuality.saver, 1),
+      );
+
+      expect(jsonDecode(uploads.single.fields['metadata']!), [
+        {
+          'key': 'memento-storage-saver',
+          'value': {'originalChecksum': 'edited-sha', 'quality': 'saver'},
+        },
+      ]);
+      verify(() => mockAssetService.linkStorageSaverCopy(edited.id, 'edited-sha', copySha)).called(1);
+    });
+
     test('keeps a Live Photo full size, with its iCloud metadata', () async {
       debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
       final livePhoto = photo.copyWith(cloudId: 'cloud-id');
