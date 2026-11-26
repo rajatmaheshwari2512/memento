@@ -31,6 +31,9 @@ import 'package:path/path.dart' as p;
 
 part 'background_upload.service.freezed.dart';
 
+// Photo file types Storage saver shrinks on iOS (StorageSaverPlugin.swift).
+const _shrinkablePhotos = {'.jpg', '.jpeg', '.heic'};
+
 final backgroundUploadServiceProvider = Provider((ref) {
   final db = ref.watch(driftProvider);
   final service = BackgroundUploadService(
@@ -197,7 +200,9 @@ class BackgroundUploadService {
   }
 
   bool _canShrink(LocalAsset asset) =>
-      (asset.type == AssetType.image || asset.type == AssetType.video) && !asset.isMotionPhoto;
+      !asset.isMotionPhoto &&
+      (asset.type == AssetType.video ||
+          (asset.type == AssetType.image && _shrinkablePhotos.contains(p.extension(asset.name).toLowerCase())));
 
   /// Cancel all ongoing background uploads and reset the upload queue
   ///

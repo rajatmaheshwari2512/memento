@@ -489,6 +489,8 @@ void main() {
     final video = LocalAssetStub.image1.copyWith(id: 'video', type: AssetType.video);
     final livePhoto = LocalAssetStub.image1.copyWith(id: 'live', playbackStyle: AssetPlaybackStyle.livePhoto);
     final audio = LocalAssetStub.image1.copyWith(id: 'audio', type: AssetType.audio);
+    final heic = LocalAssetStub.image1.copyWith(id: 'heic', name: 'IMG_0001.HEIC');
+    final png = LocalAssetStub.image1.copyWith(id: 'png', name: 'screenshot.png');
 
     setUpAll(() => registerFallbackValue(photo));
 
@@ -502,12 +504,14 @@ void main() {
     ).captured.map((asset) => (asset as LocalAsset).id).toList();
 
     test('leaves the photos and videos it could shrink for a foreground upload', () async {
-      when(() => mockBackupRepository.getCandidates('user')).thenAnswer((_) async => [photo, video, livePhoto, audio]);
+      when(
+        () => mockBackupRepository.getCandidates('user'),
+      ).thenAnswer((_) async => [photo, heic, png, video, livePhoto, audio]);
       when(() => mockStorageSaverService.backupQuality()).thenAnswer((_) async => BackupQuality.saver);
 
       await sut.uploadBackupCandidates('user');
 
-      expect(listedIds(), ['live', 'audio']);
+      expect(listedIds(), ['png', 'live', 'audio']);
     });
 
     test('leaves them out before taking a batch', () async {
