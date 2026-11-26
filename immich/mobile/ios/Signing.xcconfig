@@ -25,5 +25,9 @@ IMMICH_BUNDLE_ID_DEV = app.futo.immich
 // Build scheme suffixes (`.debug`/`.profile`) will be appended
 IMMICH_GROUP_ID = group.app.immich.share
 
+// SelfPhotos: the Runner target's entitlements in the Debug and Release configurations.
+// Runner/RunnerFreeSigning.entitlements for a free Apple ID (apps/ios/build.sh sets it).
+MEMENTO_RUNNER_ENTITLEMENTS = Runner/Runner.entitlements
+
 // Optional per-developer configuration override
 #include? "Signing.local.xcconfig"
