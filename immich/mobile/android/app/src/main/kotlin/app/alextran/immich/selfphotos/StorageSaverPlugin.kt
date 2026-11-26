@@ -23,7 +23,6 @@ import androidx.media3.transformer.EditedMediaItem
 import androidx.media3.transformer.Effects
 import androidx.media3.transformer.ExportException
 import androidx.media3.transformer.ExportResult
-import androidx.media3.transformer.TransformationRequest
 import androidx.media3.transformer.Transformer
 import androidx.media3.transformer.VideoEncoderSettings
 import io.flutter.embedding.engine.plugins.FlutterPlugin
@@ -235,49 +234,19 @@ class StorageSaverPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
       ExifInterface.TAG_ORIENTATION,
       ExifInterface.TAG_MAKE,
       ExifInterface.TAG_MODEL,
-      ExifInterface.TAG_SOFTWARE,
       ExifInterface.TAG_ARTIST,
       ExifInterface.TAG_COPYRIGHT,
       ExifInterface.TAG_IMAGE_DESCRIPTION,
       ExifInterface.TAG_USER_COMMENT,
-      ExifInterface.TAG_IMAGE_UNIQUE_ID,
-      ExifInterface.TAG_CAMERA_OWNER_NAME,
-      ExifInterface.TAG_BODY_SERIAL_NUMBER,
       ExifInterface.TAG_LENS_MAKE,
       ExifInterface.TAG_LENS_MODEL,
-      ExifInterface.TAG_LENS_SPECIFICATION,
-      ExifInterface.TAG_LENS_SERIAL_NUMBER,
       ExifInterface.TAG_EXPOSURE_TIME,
       ExifInterface.TAG_F_NUMBER,
-      ExifInterface.TAG_APERTURE_VALUE,
-      ExifInterface.TAG_MAX_APERTURE_VALUE,
-      ExifInterface.TAG_SHUTTER_SPEED_VALUE,
-      ExifInterface.TAG_BRIGHTNESS_VALUE,
-      ExifInterface.TAG_EXPOSURE_BIAS_VALUE,
-      ExifInterface.TAG_EXPOSURE_PROGRAM,
-      ExifInterface.TAG_EXPOSURE_MODE,
       ExifInterface.TAG_PHOTOGRAPHIC_SENSITIVITY,
-      ExifInterface.TAG_SENSITIVITY_TYPE,
-      ExifInterface.TAG_METERING_MODE,
-      ExifInterface.TAG_LIGHT_SOURCE,
       ExifInterface.TAG_FLASH,
       ExifInterface.TAG_FOCAL_LENGTH,
       ExifInterface.TAG_FOCAL_LENGTH_IN_35MM_FILM,
-      ExifInterface.TAG_DIGITAL_ZOOM_RATIO,
       ExifInterface.TAG_WHITE_BALANCE,
-      ExifInterface.TAG_SCENE_CAPTURE_TYPE,
-      ExifInterface.TAG_SCENE_TYPE,
-      ExifInterface.TAG_SUBJECT_DISTANCE,
-      ExifInterface.TAG_SUBJECT_DISTANCE_RANGE,
-      ExifInterface.TAG_CONTRAST,
-      ExifInterface.TAG_SATURATION,
-      ExifInterface.TAG_SHARPNESS,
-      ExifInterface.TAG_GAIN_CONTROL,
-      ExifInterface.TAG_COLOR_SPACE,
-      ExifInterface.TAG_EXIF_VERSION,
-      ExifInterface.TAG_X_RESOLUTION,
-      ExifInterface.TAG_Y_RESOLUTION,
-      ExifInterface.TAG_RESOLUTION_UNIT,
     )
   }
 }
@@ -303,12 +272,14 @@ private class VideoFacts(val shortSide: Int, val frameRate: Float, val hdr: Bool
         } else {
           -1
         }
-        val frameRate = if (format.containsKey(MediaFormat.KEY_FRAME_RATE)) {
-          runCatching { format.getInteger(MediaFormat.KEY_FRAME_RATE).toFloat() }
-            .getOrElse { format.getFloat(MediaFormat.KEY_FRAME_RATE) }
+        val frameRate = if (!format.containsKey(MediaFormat.KEY_FRAME_RATE)) {
+          0f
         } else {
-          val frames = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_FRAME_COUNT)?.toLongOrNull() ?: 0L
-          if (durationMs > 0) frames * 1000f / durationMs else 0f
+          try {
+            format.getFloat(MediaFormat.KEY_FRAME_RATE)
+          } catch (e: ClassCastException) {
+            format.getInteger(MediaFormat.KEY_FRAME_RATE).toFloat()
+          }
         }
         return VideoFacts(
           shortSide = min(format.getInteger(MediaFormat.KEY_WIDTH), format.getInteger(MediaFormat.KEY_HEIGHT)),
@@ -378,7 +349,6 @@ private class VideoExport(
       .setEncoderFactory(encoderFactory)
       .addListener(object : Transformer.Listener {
         override fun onCompleted(composition: Composition, exportResult: ExportResult) {
-          Log.i(TAG, "Encoded a video with ${exportResult.videoEncoderName} to ${exportResult.width}x${exportResult.height}, ${exportResult.averageVideoBitrate} bps")
           val outputShortSide = min(exportResult.width, exportResult.height)
           finish(if (outputShortSide in 0 until shortSide - SIZE_TOLERANCE) "encoderLimit" else null)
         }
@@ -386,14 +356,6 @@ private class VideoExport(
         override fun onError(composition: Composition, exportResult: ExportResult, exportException: ExportException) {
           Log.w(TAG, "Couldn't shrink a video", exportException)
           finish("failed: ${exportException.errorCodeName}")
-        }
-
-        override fun onFallbackApplied(
-          composition: Composition,
-          originalTransformationRequest: TransformationRequest,
-          fallbackTransformationRequest: TransformationRequest,
-        ) {
-          Log.i(TAG, "Encoder fallback: $originalTransformationRequest -> $fallbackTransformationRequest")
         }
       })
       .build()
