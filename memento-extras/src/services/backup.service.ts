@@ -1,4 +1,4 @@
-// Backup quality: each person's choice for backups from Memento's Android app, which makes the smaller copy before uploading. Off (the storageSaver flag) refuses choosing a Storage saver level; choosing original still works.
+// Backup quality: each person's choice for backups from Memento's phone app, which makes the smaller copy before uploading. Off (the storageSaver flag) refuses choosing a Storage saver level; choosing original still works.
 
 import { STORAGE_SAVER_OFF } from "../constants/backup.constants.ts";
 import { getFlags } from "./flags.service.ts";

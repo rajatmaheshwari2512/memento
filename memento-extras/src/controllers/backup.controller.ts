@@ -1,4 +1,4 @@
-// Backup quality: the person's own choice for backups from Memento's Android app.
+// Backup quality: the person's own choice for backups from Memento's phone app.
 
 import { requireUser } from "../middleware/auth.middleware.ts";
 import { parseBackupSettings } from "../schemas/backup.schema.ts";

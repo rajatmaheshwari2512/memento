@@ -91,8 +91,12 @@ A free Apple ID can put Memento on your own iPhone, with these limits:
 
 A paid Apple Developer account ($99 a year) has none of these limits.
 
-## What isn't on iPhone yet
+## How iPhone differs from Android
 
-- **Adjust's Save** fails, and **Storage saver** isn't offered, until their iPhone code is done.
+- **Storage saver** works the same way, with iPhone formats:
+  - HEIC photos stay HEIC.
+  - These stay full size: HDR videos (iPhones record Dolby Vision HDR by default), HDR photos (most iPhone photos), Live Photos and portrait photos.
+  - iOS doesn't let background uploads shrink anything, so items to be shrunk wait until the app is open, or for iOS's longer overnight run.
+  - Free up space shows no size when smaller copies are involved, because iOS has no public way to read a photo's file size.
 - **Links to my.immich.app** don't open the app. Links that start with `immich://` do.
 - **Push notifications:** the app shows only its own notifications on the phone, as on Android.

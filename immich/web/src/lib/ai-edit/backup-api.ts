@@ -2,7 +2,7 @@
 
 import { request } from '#lib/ai-edit/ai-edit-api.ts';
 
-// The person's own choice for backups from Memento's Android app.
+// The person's own choice for backups from Memento's phone app.
 export type BackupQuality = 'original' | 'saverHigh' | 'saver';
 export type BackupSettings = { quality: BackupQuality };
 

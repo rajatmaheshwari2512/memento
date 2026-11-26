@@ -675,7 +675,7 @@
   "backup_info_card_assets": "assets",
   "backup_options": "Backup Options",
   "backup_quality": "Backup quality",
-  "backup_quality_description": "Applies to backups from Memento's Android app. Uploads from the website always keep full quality.",
+  "backup_quality_description": "Applies to backups from Memento's phone app. Uploads from the website always keep full quality.",
   "backup_quality_note": "HDR videos, and HDR, motion and portrait photos, always keep full quality. A change applies to new backups only. With Free up space, the phone's full-quality original is deleted and only the smaller copy is kept.",
   "backup_quality_original": "Original",
   "backup_quality_original_description": "Full quality, as on your phone. Uses the most space.",

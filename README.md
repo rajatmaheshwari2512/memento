@@ -29,10 +29,10 @@ It comes as a website and an Android app. The iPhone app is built from source
   animation and a cinematic photo (a still photo that moves in 3D). They're saved into the
   library like any other photo.
 - **Live albums.** Albums that fill themselves with new photos of the people you choose.
-- **Storage saver.** Like Google Photos: each person can back up from the Android app at
-  Original quality, or as smaller copies made on the phone (videos at 1080p, about 4 or 8 Mbps;
-  ordinary photos over 16 MP at 16 MP). HDR, motion and portrait items stay full size. The app
-  still counts the phone's original as backed up, so "Free up space" works.
+- **Storage saver.** Like Google Photos: each person can back up from the phone app (Android or
+  iPhone) at Original quality, or as smaller copies made on the phone (videos at 1080p, about 4 or 8
+  Mbps; ordinary photos over 16 MP at 16 MP). HDR, motion, Live and portrait items stay full size.
+  The app still counts the phone's original as backed up, so "Free up space" works.
 - **Feature switches.** Admins turn each feature on or off, and set AI Edit's limits, from
   Immich's own settings page.
 - **Admin on the phone.** Immich's own Android app has no admin controls; Memento's does. From

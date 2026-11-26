@@ -1,4 +1,4 @@
-<!-- SelfPhotos backup quality (Storage saver) for backups from Memento's Android app. -->
+<!-- SelfPhotos backup quality (Storage saver) for backups from Memento's phone app. -->
 <script lang="ts">
   import { errorMessage } from '#lib/ai-edit/ai-edit-api.ts';
   import {

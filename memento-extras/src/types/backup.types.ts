@@ -1,4 +1,4 @@
-// Backup quality: each person's choice for backups from Memento's Android app (services/backup.service.ts).
+// Backup quality: each person's choice for backups from Memento's phone app (services/backup.service.ts).
 
 import type { QUALITIES } from "../constants/backup.constants.ts";
 
