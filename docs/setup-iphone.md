@@ -102,4 +102,5 @@ A paid Apple Developer account ($99 a year) has none of these limits.
   - iOS doesn't let background uploads shrink anything, so items to be shrunk wait until the app is open, or for iOS's longer overnight run.
   - Free up space shows no size when smaller copies are involved, because iOS has no public way to read a photo's file size.
 - **Links to my.immich.app** don't open the app. Links that start with `immich://` do.
+- **Passkeys and password autofill** tied to my.immich.app don't apply to the app.
 - **Push notifications:** the app shows only its own notifications on the phone, as on Android.

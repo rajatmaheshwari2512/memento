@@ -299,8 +299,9 @@ In Administration → Settings. Immich keeps them in its own database, so they s
 
 ## The Android app
 
-The iPhone app is built from source: [setup-iphone.md](setup-iphone.md). The Android app is built on your computer (below), or downloaded from a
-[release](#releases) (`memento-<version>.apk`, then step 4), and installed by hand.
+The iPhone app is built from source: [setup-iphone.md](setup-iphone.md). The Android app is
+built on your computer (below), or downloaded from a [release](#releases)
+(`memento-<version>.apk`, then step 4), and installed by hand.
 
 1. **MANUAL, once: the build tools.** The build is set up for a Mac with Homebrew. From the top
    of the repo:
