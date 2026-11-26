@@ -30,7 +30,7 @@ apps/ios/build.sh device   # the plugged-in iPhone; needs the IPHONE part of .en
    ```
    brew install mise cocoapods
    cd immich && mise trust mise.toml mobile/mise.toml native/mise.toml
-   cd mobile && mise install aqua:flutter/flutter rust
+   cd mobile && mise install aqua:flutter/flutter java rust
    cd .. && mise install node pnpm npm:@openapitools/openapi-generator-cli
    cd native && mise install rust
    ```
