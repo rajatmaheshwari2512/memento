@@ -6,23 +6,20 @@ backup_secret_access_key: ""
 backup_off: "{{ (backup_bucket ~ backup_access_key_id ~ backup_secret_access_key) | length == 0 }}"
 backup_aws_region: us-east-1
 backup_rclone_version: "1.76.0"
-# The two encryption passwords (obscured), for jobs with encrypt_names.
+# The two encryption passwords (obscured).
 backup_crypt_password_obscured: ""
 backup_crypt_password2_obscured: ""
 
 # What to copy: one entry per app folder, copied one after the other in the
 # same nightly run. The full list is in group_vars/all/main.yml.
 #   name:           a short label for the log
-#   enabled:        optional, false = skip this job (e.g. Nextcloud while Crypt is parked)
-# source:         a folder on the server's disk (with encrypt_names set), or an rclone remote's already-encrypted folder (<remote>:<folder>).
-# encrypt_names:  for a plain folder on the server: base32 or base64. Files are encrypted on the way with backup_crypt_password*. Keep a folder's style once it has backups.
+#   source:         a folder on the server's disk
+#   encrypt_names:  base32 or base64. Files are encrypted on the way with backup_crypt_password*. Keep a folder's style once it has backups.
 #   dest_path:      the folder in the bucket
-# weekly_only:    optional, with encrypt_names: a subfolder (e.g. Immich's backups/) left out of the nightly copy; once a week (backup_weekly_day) only its newest file is copied, as weekly_as.
+# weekly_only:    optional: a subfolder (e.g. Immich's backups/) left out of the nightly copy; once a week (backup_weekly_day) only its newest file is copied, as weekly_as.
 #   weekly_as:      the file name for that weekly copy (e.g. latest.sql.gz)
-# skip_folders:   optional, with encrypt_names: subfolders never copied (e.g. Immich's encoded-video/).
-# only_subfolder: optional. Copy only <each top folder>/<this folder>/ (e.g. Nextcloud's <user>/files).
+# skip_folders:   optional: subfolders never copied (e.g. Immich's encoded-video/).
 # compare:        optional: size (the default, --size-only) or modtime (size and time).
-# crypt_remote:   needed with only_subfolder. The crypt remote over the source folder (in /etc/rclone/rclone.conf).
 backup_jobs:
   - name: immich
     source: /opt/immich/library

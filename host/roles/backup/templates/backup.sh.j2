@@ -9,9 +9,8 @@
 # A failed copy doesn't stop the next one, but the script ends with an error (systemctl status deep-archive-backup).
 
 failed=""
-{% for job in backup_jobs if job.enabled | default(true) | bool %}
+{% for job in backup_jobs %}
 
-{% if job.encrypt_names is defined %}
 {% set left_out = ([job.weekly_only] if job.weekly_only is defined else []) + (job.skip_folders | default([])) %}
 # {{ job.name }}: the plain files in {{ job.source }}, encrypted on the way.
 {% if job.weekly_only is defined %}
@@ -25,20 +24,6 @@ if ! /usr/bin/rclone copy {{ job.source }} archive_{{ job.name }}: \
 {% for folder in left_out %}
   --exclude '/{{ folder }}/**' \
 {% endfor %}
-{% else %}
-{% if job.only_subfolder is defined %}
-# {{ job.name }}: only each "{{ job.only_subfolder }}" folder ({{ backup_scrambled[job.name] }} is its
-# scrambled name), so versions, trash, previews and logs stay out of Deep Archive.
-{% else %}
-# {{ job.name }}: the whole folder, already encrypted on the Storage Box.
-{% endif %}
-echo "{{ job.name }}: copying {{ job.source }} to glacier:{{ backup_bucket }}/{{ job.dest_path }}"
-if ! /usr/bin/rclone copy {{ job.source }} glacier:{{ backup_bucket }}/{{ job.dest_path }} \
-  --config /etc/rclone/rclone.conf \
-{% if job.only_subfolder is defined %}
-  --include '/*/{{ backup_scrambled[job.name] }}/**' \
-{% endif %}
-{% endif %}
 {% if job.compare | default('size') == 'size' %}
   --size-only \
 {% endif %}
