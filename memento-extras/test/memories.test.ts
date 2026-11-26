@@ -1,17 +1,4 @@
 // Themed memories end to end: the real service against a fake Immich. Run: npm test
-//
-// The fake Immich checks what the real one (v3.4) checks: logins, each API key's permission on
-// each endpoint (the @Authenticated permission in Immich's controllers), the strict v3 search
-// filter, and that a memory only takes the caller's own photos. Its search, like the real
-// one, also returns a partner's photos; its timeline doesn't, and hides photos tucked in stacks.
-//
-// The library (user A, in India): home in Pune, a Goa trip 20–23 October 2026, a month
-// of October photos, Mom in many photos since 2024, and a big day on 9 March 2024. The
-// service's "today" is fixed per start (MEMORIES_TODAY), so each day is a restart.
-//
-// Creations: a fake creations container measures thumbnails (the ones listed in `blurry` come
-// out blurred) and "renders" a collage file in the shared work folder; the fake Immich takes
-// uploads, tags, albums and additions to memories.
 
 import assert from "node:assert/strict";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
@@ -28,7 +15,7 @@ const B = { id: randomUUID(), name: "B", isAdmin: false };
 const PARTNER = randomUUID();
 const MOM = randomUUID();
 const DAD = randomUUID();
-const EX = randomUUID(); // hidden by A
+const EX = randomUUID();
 const PEOPLE = [
   { id: MOM, name: "Mom", isHidden: false, birthDate: null, ownerId: A.id },
   { id: DAD, name: "Dad", isHidden: false, birthDate: null, ownerId: A.id },
@@ -45,7 +32,6 @@ type FakeAsset = {
 const assets = new Map<string, FakeAsset>();
 const stacks: Array<{ id: string; primaryAssetId: string; assets: string[] }> = [];
 
-// A photo taken at this local time in India (+05:30), e.g. "2026-10-20T09:00".
 function asset(localTime: string, over: Partial<FakeAsset> = {}): string {
   const id = randomUUID();
   const takenAt = new Date(Date.parse(`${localTime}:00Z`) - 5.5 * 3_600_000).toISOString();
@@ -59,26 +45,19 @@ const pad = (n: number) => String(n).padStart(2, "0");
 const HOME = { lat: 18.5204, lon: 73.8567, city: "Pune", state: "Maharashtra" };
 const goa = (city: string) => ({ lat: 15.5, lon: 73.83, city, state: "Goa" });
 
-// Home: photos with a location on 12 days in September.
 for (let d = 1; d <= 12; d++) asset(`2026-09-${pad(d)}T18:00`, HOME);
-// October: two ordinary photos most days, some with Mom.
 for (let d = 1; d <= 31; d++) {
   if (d >= 20 && d <= 23) continue;
   asset(`2026-10-${pad(d)}T11:00`, { people: d % 3 === 0 ? [MOM] : [] });
   asset(`2026-10-${pad(d)}T17:30`);
 }
-// The night of 30 September / 1 October in India: 01:00 on the 1st is October here (19:30 UTC
-// on the 30th). A favourite, so it's picked.
 const earlyOctober = asset("2026-10-01T01:00", { favorite: true, rating: 5, people: [MOM] });
-const earlyNovember = asset("2026-11-01T00:30", { favorite: true, rating: 5 }); // November, not October
-const blurry = new Set<string>(); // the fake container measures these as blurred
+const earlyNovember = asset("2026-11-01T00:30", { favorite: true, rating: 5 });
+const blurry = new Set<string>();
 const blurredFavourite = asset("2026-10-15T15:00", { favorite: true, rating: 5, people: [MOM] });
 blurry.add(blurredFavourite);
-for (let d = 2; d <= 26; d++) asset(`2026-11-${pad(d)}T12:00`); // the rest of November
-// 30 November: a big day of screenshots only (too few good photos: skipped, and recorded so).
+for (let d = 2; d <= 26; d++) asset(`2026-11-${pad(d)}T12:00`);
 for (let i = 0; i < 35; i++) asset(`2026-11-30T${pad(8 + Math.floor(i / 4))}:${pad((i % 4) * 15)}`, { fileName: `Screenshot_${i}.png`, mime: "image/png", make: null });
-// The trip: four days, eight photos a day, a third with a location (Goa's towns), plus things
-// that must never be picked.
 const tripIds: string[] = [];
 asset("2026-10-21T19:00", { type: "VIDEO", durationMs: 8000, mime: "video/mp4", fileName: "PXL_trip.mp4" });
 for (let d = 20; d <= 23; d++) {
@@ -96,20 +75,16 @@ const withEx = asset("2026-10-22T22:00", { people: [EX], favorite: true, rating:
 const stackedUnder = asset("2026-10-23T07:30", { favorite: true, rating: 5 });
 const stackTop = asset("2026-10-23T07:31");
 stacks.push({ id: randomUUID(), primaryAssetId: stackTop, assets: [stackTop, stackedUnder] });
-// A burst the phone stacked: five shots of Mom a second apart, the timeline showing the first.
 const stackedBurst = [0, 1, 2, 3, 4].map((s) =>
   asset("2026-10-22T16:20", { takenAt: new Date(Date.parse("2026-10-22T10:50:00Z") + s * 1000).toISOString(), people: [MOM], favorite: s === 0, fileName: `PXL_BURST_${s}.jpg` }));
 stacks.push({ id: randomUUID(), primaryAssetId: stackedBurst[0]!, assets: stackedBurst });
 const partners = asset("2026-10-22T12:30", { ownerId: PARTNER, favorite: true, rating: 5 });
 const archived = asset("2026-10-21T12:30", { visibility: "archive", favorite: true });
-asset("2026-10-24T20:00", HOME); // back home
-// Mom since 2024: about one photo a fortnight.
+asset("2026-10-24T20:00", HOME);
 const momIds: string[] = [];
 for (let i = 0; i < 45; i++) momIds.push(asset(`${new Date(Date.UTC(2024, 0, 3 + i * 14)).toISOString().slice(0, 10)}T10:00`, { people: [MOM] }));
 for (let i = 0; i < 5; i++) asset(`2025-02-${pad(i + 1)}T10:00`, { people: [DAD] });
-// Big days: 9 March 2024 and Saturday 7 November 2026, 35 photos each.
 for (const day of ["2024-03-09", "2026-11-07"]) for (let i = 0; i < 35; i++) asset(`${day}T${pad(8 + Math.floor(i / 4))}:${pad((i % 4) * 15)}`);
-// B's photos, never seen by A.
 asset("2026-10-15T10:00", { ownerId: B.id });
 
 // --- the fake Immich ---
@@ -118,11 +93,11 @@ type FakeKey = { id: string; secret: string; userId: string; permissions: string
 const keys = new Map<string, FakeKey>();
 const memories: Array<{ id: string; ownerId: string; body: any; assetIds: string[] }> = [];
 const calls: string[] = [];
-let refuseMemories = 0; // a status Immich answers new memories with (0: takes them)
-let memoryPosts = 0; // new memories asked for, taken or not
+let refuseMemories = 0;
+let memoryPosts = 0;
 let immichDelayMs = 0;
 let uploadFailures = 0;
-let originalHeld: Promise<void> = Promise.resolve(); // a video's original download: held until let go, then refused
+let originalHeld: Promise<void> = Promise.resolve();
 const uploads: Array<{ id: string; filename: string; fileCreatedAt: string; checksum: string }> = [];
 const albums = new Map<string, { id: string; albumName: string; ownerId: string; assets: Set<string> }>();
 const tags = new Map<string, { id: string; value: string; ownerId: string; assets: Set<string> }>();
@@ -213,7 +188,7 @@ async function fakeImmich(req: IncomingMessage, res: ServerResponse): Promise<vo
     const list = [...assets.values()].filter((a) => visibleInTimeline(a, userId) && local(a).startsWith(month) && (!person || a.people.includes(person)));
     return json(res, 200, {
       id: list.map((a) => a.id), ownerId: list.map((a) => a.ownerId), isFavorite: list.map((a) => a.favorite), isImage: list.map((a) => a.type === "IMAGE"),
-      fileCreatedAt: list.map((a) => a.takenAt.replace(/\.\d+Z$/, "")), // like Postgres: no zone
+      fileCreatedAt: list.map((a) => a.takenAt.replace(/\.\d+Z$/, "")),
       localOffsetHours: list.map((a) => a.offsetH), city: list.map((a) => a.city), latitude: list.map((a) => a.lat), longitude: list.map((a) => a.lon),
     });
   }
@@ -223,14 +198,14 @@ async function fakeImmich(req: IncomingMessage, res: ServerResponse): Promise<vo
     for (const flat of ["takenAfter", "takenBefore", "personIds", "page", "visibility"]) if (flat in b) return json(res, 400, { message: `flat field ${flat}` });
     const f = b.filter;
     const found = [...assets.values()]
-      .filter((a) => a.ownerId === userId || (userId === A.id && a.ownerId === PARTNER)) // partners' photos too, as Immich does
+      .filter((a) => a.ownerId === userId || (userId === A.id && a.ownerId === PARTNER))
       .filter((a) => !f.takenAt?.gte || a.takenAt >= f.takenAt.gte)
       .filter((a) => !f.takenAt?.lt || a.takenAt < f.takenAt.lt)
       .filter((a) => !f.visibility?.in || f.visibility.in.includes(a.visibility))
       .filter((a) => !f.personIds?.any || f.personIds.any.some((p: string) => a.people.includes(p)))
       .sort((x, y) => x.takenAt.localeCompare(y.takenAt));
     const offset = b.cursor ? Number(b.cursor) : 0;
-    const page = 40; // smaller than asked, so the cursor is followed
+    const page = 40;
     const items = found.slice(offset, offset + page).map((a) => assetJson(a, b.withExif === true, b.withPeople === true));
     return json(res, 200, { assets: { items, nextCursor: offset + page < found.length ? String(offset + page) : null } });
   }
@@ -250,7 +225,7 @@ async function fakeImmich(req: IncomingMessage, res: ServerResponse): Promise<vo
     assert.equal(b.type, "on_this_day");
     assert.ok(Number.isInteger(b.data.year) && b.data.year >= 1000 && b.data.year <= 9999);
     for (const field of ["memoryAt", "showAt", "hideAt"]) assert.match(b[field], /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/);
-    const owned = (b.assetIds as string[]).filter((id) => assets.get(id)?.ownerId === userId); // Immich drops the rest silently
+    const owned = (b.assetIds as string[]).filter((id) => assets.get(id)?.ownerId === userId);
     const memory = { id: randomUUID(), ownerId: userId, body: b, assetIds: owned };
     memories.push(memory);
     return json(res, 201, { id: memory.id, assets: owned.map((id) => ({ id })) });
@@ -263,7 +238,6 @@ async function fakeImmich(req: IncomingMessage, res: ServerResponse): Promise<vo
   const thumb = /^\/api\/assets\/([^/]+)\/thumbnail$/.exec(path);
   if (req.method === "GET" && thumb) {
     if (assets.get(thumb[1]!)?.ownerId !== userId) return json(res, 400, {});
-    // Face boxes are for the edited image, so creations must ask for it (Immich's default is the unedited one).
     if (url.searchParams.get("edited") !== "true") return json(res, 400, { message: "the unedited image was asked for" });
     res.writeHead(200, { "content-type": "image/webp" }).end(`${url.searchParams.get("size")}:${thumb[1]}`);
     return;
@@ -336,20 +310,19 @@ async function fakeImmich(req: IncomingMessage, res: ServerResponse): Promise<vo
 }
 
 // --- the fake creations container ---
-// Like the real one: one job at a time; a render is started (202) and then asked about.
 
 const renders: any[] = [];
-const measured: string[] = []; // asset ids, each time one is measured
+const measured: string[] = [];
 const states = new Map<string, any>();
 let containerDown = false;
 let failNextRender = false;
-let notABurst = false; // the next animation: its photos don't look alike
-let noSubject = false; // the next cinematic photo: its depth shows no clear subject
+let notABurst = false;
+let noSubject = false;
 let busy = false;
 let mostAtOnce = 0;
 
 async function fakeContainer(req: IncomingMessage, res: ServerResponse): Promise<void> {
-  if (containerDown) return void req.socket.destroy(); // no answer at all
+  if (containerDown) return void req.socket.destroy();
   if (req.method === "GET" && req.url === "/health") return json(res, 200, { ok: true, busy });
   const status = /^\/renders\/(.+)$/.exec(req.url ?? "");
   if (req.method === "GET" && status) return states.has(status[1]!) ? json(res, 200, states.get(status[1]!)) : json(res, 404, {});
@@ -447,7 +420,6 @@ function cards(): Array<{ id: number; status: string; memory_id: string | null; 
   return sqlAll("SELECT id, status, memory_id, week FROM creation_cards ORDER BY id") as any;
 }
 
-// The big day's collage job made on Sunday 8 November (the one the later tests reuse).
 function collageJob() {
   return jobs().find((j) => j.theme === "big_day" && j.kind === "collage" && j.state !== "skipped" && j.state !== "proposed")!;
 }
@@ -496,7 +468,6 @@ test("turning on makes a key with only the permissions memories need, stored enc
   const row = db.prepare("SELECT sealed FROM memory_users WHERE user_id = ?").get(A.id) as { sealed: string };
   db.close();
   assert.ok(!Buffer.from(row.sealed, "base64").toString("latin1").includes(key!.secret), "key stored in the clear");
-  // Again: the same key is kept.
   assert.equal((await call("PUT", "/memories/settings", { cookie: COOKIE.A, json: { enabled: true } })).status, 200);
   assert.equal(keysOf(A.id).length, 1);
 });
@@ -507,7 +478,6 @@ test("1 November: the Goa trip and Best of October, at most two a night", async 
   assert.deepEqual(res.body.made.map((m: any) => [m.theme, m.label]), [["trip", "Goa trip, 2026"], ["month", "Best of October"]]);
   const [trip, month] = res.body.made.map((m: any) => memoryOf(m.memoryId));
 
-  // The trip: its days only, never the things that don't belong.
   const tripAssets = trip!.assetIds.map((id: string) => assets.get(id)!);
   assert.ok(tripAssets.every((a: FakeAsset) => local(a) >= "2026-10-20" && local(a) < "2026-10-24"));
   for (const never of [screenshot, forwarded, withEx, stackedUnder, partners, archived, dupA]) {
@@ -518,24 +488,20 @@ test("1 November: the Goa trip and Best of October, at most two a night", async 
   assert.deepEqual(burst.filter((id) => trip!.assetIds.includes(id)), [burst[1]], "one of the burst: the favourite");
   assert.equal(new Set(tripAssets.map((a: FakeAsset) => local(a).slice(0, 10))).size, 4, "every day of the trip");
 
-  // Immich's date convention; "N years ago" truthful: this year's photos say 0.
   assert.deepEqual(
     [trip!.body.memoryAt, trip!.body.showAt, trip!.body.hideAt, trip!.body.data.year],
     [`${local(tripAssets[0]!).slice(0, 10)}T00:00:00.000Z`, "2026-11-01T00:00:00.000Z", "2026-11-03T23:59:59.999Z", 2026],
   );
 
-  // October by the day it was in India: 01:00 on the 1st is in, 00:30 on 1 November isn't.
   assert.ok(month!.assetIds.includes(earlyOctober), "the early-morning favourite of 1 October");
   assert.ok(!month!.assetIds.includes(earlyNovember));
   assert.equal(month!.body.memoryAt, "2026-10-01T00:00:00.000Z");
   assert.ok(month!.assetIds.every((id: string) => !trip!.assetIds.includes(id)), "trip photos not repeated in the same night");
 
-  // Labels: only A's, newest first.
   const labels = await call("GET", "/memories/labels", { cookie: COOKIE.A });
   assert.deepEqual(new Set(labels.body.memories.map((m: any) => m.label)), new Set(["Goa trip, 2026", "Best of October"]));
   assert.deepEqual((await call("GET", "/memories/labels", { cookie: COOKIE.B })).body, { memories: [] });
 
-  // Asked again straight away: not yet (one run a person in 10 minutes).
   const again = await call("POST", "/memories/run", { cookie: COOKIE.A, json: {} });
   assert.equal(again.status, 429);
   assert.match(again.body.error, /Try again in 10 minutes/);
@@ -579,8 +545,6 @@ test("Sunday 1 November: the week's best memory (the trip) gets a card: its coll
   assert.deepEqual([...[...albums.values()].find((a) => a.albumName === "Collages")!.assets], [image.id]);
   assert.deepEqual([...[...albums.values()].find((a) => a.albumName === "Recaps")!.assets], [video.id]);
 
-  // The animation: the stacked burst of Mom (the best one: a favourite, someone named), all five
-  // shots in the order taken, dated at the burst, in its own album; no face lookups for it.
   const animation = renders.find((r) => r.kind === "animation");
   assert.equal(animation.content, `animation:${stackedBurst.map((id) => `preview:${id}`).join(",")}`);
   const animationJob = jobs().find((j) => j.kind === "animation" && j.state === "done")!;
@@ -590,8 +554,6 @@ test("Sunday 1 November: the week's best memory (the trip) gets a card: its coll
   assert.ok(tag.assets.has(loop.id));
   assert.deepEqual([...[...albums.values()].find((a) => a.albumName === "Animations")!.assets], [loop.id]);
 
-  // The cinematic photo: one of the trip's photos with one or two people in it, with its faces
-  // (where the camera turns around), dated at that photo, in its own album.
   const cinematic = renders.find((r) => r.kind === "cinematic");
   const source = /^cinematic:preview:(.+)$/.exec(cinematic.content)![1]!;
   assert.ok(trip.assetIds.includes(source));
@@ -608,7 +570,6 @@ test("Sunday 1 November: the week's best memory (the trip) gets a card: its coll
     .flatMap((r) => r.kind === "cinematic" ? [r.photo] : r.photos ?? r.items.filter((i: any) => i.kind === "photo")).length;
   assert.equal(calls.filter((c) => c === "GET /api/faces").length, photosWithFaces);
 
-  // The card: a memory of its own, shown Sunday to Tuesday; the trip's memory is left as it was.
   const card = memoryOf(cards()[0]!.memory_id!);
   assert.deepEqual(card.body.assetIds.slice(0, 4), [image.id, video.id, loop.id, still.id]);
   assert.deepEqual(card.body.assetIds.slice(4).toSorted(), [...trip.assetIds].sort());
@@ -629,7 +590,6 @@ test("2 November: a Spotlight on Mom, from photos not used yesterday, and an old
   const used = memories.slice(0, 2).flatMap((m) => m.assetIds);
   assert.ok(spot.assetIds.every((id) => !used.includes(id)), "a photo from yesterday's memories again");
   assert.ok(spot.assetIds.length >= 10);
-  // The first photo is from early 2024: "3 years ago" in November 2026, rounded.
   assert.equal(spot.body.memoryAt.slice(0, 4), "2024");
   assert.equal(spot.body.data.year, 2026 - Math.round((Date.parse("2026-11-02") - Date.parse(spot.body.memoryAt)) / (365.25 * 86_400_000)));
 });
@@ -663,12 +623,10 @@ test("the container down: nothing counted, it waits; a render that fails is retr
   await new Promise((r) => setTimeout(r, 2500));
   const waiting = jobs().find((j) => j.id === bigDay.id)!;
   assert.deepEqual([waiting.state, waiting.attempts, renders.length], ["queued", 0, before], "not started, nothing counted");
-  // Back, but the render fails (out of memory): one try counted, retried after its backoff.
   containerDown = false;
   failNextRender = true;
   await until("a failed try", () => jobs().find((j) => j.id === bigDay.id)!.attempts === 1 && jobs().find((j) => j.id === bigDay.id)!.state === "queued");
   assert.match(jobs().find((j) => j.id === bigDay.id)!.last_error!, /out of memory/);
-  // The person deleted their Collages album meanwhile: a new one is made.
   for (const [id, a] of albums) if (a.albumName === "Collages") albums.delete(id);
   sql("UPDATE creation_jobs SET next_at = ? WHERE id = ?", new Date().toISOString(), bigDay.id);
   await until("the retry", () => jobs().find((j) => j.id === bigDay.id)!.state === "done");
@@ -734,7 +692,6 @@ test("an animation's photos deleted since: the rest are used, in order; fewer th
 test("an animation the container finds isn't a burst is dropped at once, not tried again", async () => {
   const job = jobs().find((j) => j.kind === "animation" && j.state === "done")!;
   notABurst = true;
-  // A first try (no folder name stored yet), so its downloaded photos must still be removed.
   sql("UPDATE creation_jobs SET state = 'queued', asset_id = NULL, rendered_at = NULL, work_id = NULL, attempts = 0, next_at = ? WHERE id = ?", new Date().toISOString(), job.id);
   const before = renders.length;
   await until("dropped", () => jobs().find((j) => j.id === job.id)!.state === "dropped");
@@ -767,7 +724,6 @@ test("a job a crash left running is picked up again after a restart, without ren
   await until("the job done again", () => jobs().find((j) => j.id === bigDay.id)!.state === "done");
   assert.equal(renders.length, before, "already uploaded: not rendered again");
   assert.deepEqual(readdirSync(workDir), [], "leftovers cleared at start");
-  // One that keeps stopping the service: dropped once its tries are used up, not started again.
   sql("UPDATE creation_jobs SET state = 'running', attempts = 3, asset_id = NULL WHERE id = ?", bigDay.id);
   await night("2026-11-04");
   await until("dropped", () => jobs().find((j) => j.id === bigDay.id)!.state === "dropped");
@@ -789,7 +745,6 @@ test("a render still going when the service restarted is waited for, its folder 
   await new Promise((r) => setTimeout(r, 2500));
   assert.equal(jobs().find((j) => j.id === bigDay.id)!.state, "queued", "waits for the container");
   assert.ok(existsSync(join(dir, "0.webp")), "the render's folder left alone");
-  // The container finishes it.
   const content = "collage:finished while the service restarted";
   writeFileSync(join(dir, "collage.jpg"), content);
   states.set(workId, { state: "done", file: "collage.jpg" });
@@ -808,7 +763,6 @@ test("a person's video being cleaned: no new render starts meanwhile, but an upl
   assert.ok(other, "a finished job of another card");
   const before = renders.length;
   const memoriesBefore = memoryPosts;
-  // A video whose original's download is held: it's being cleaned, and the container is idle.
   const video = asset("2026-10-05T10:00", { type: "VIDEO", fileName: "PXL_trip.mp4", mime: "video/mp4", durationMs: 30_000 });
   let letGo = () => {};
   originalHeld = new Promise((resolve) => (letGo = resolve));
@@ -816,7 +770,6 @@ test("a person's video being cleaned: no new render starts meanwhile, but an upl
     const started = await call("POST", `/videos/${video}/reduce-noise`, { cookie: COOKIE.A, json: {} });
     assert.equal(started.status, 202, JSON.stringify(started.body));
     await until("the video's download started", () => calls.includes(`GET /api/assets/${video}/original`));
-    // A render due first, then an upload left to retry (its file made before), whose card waits to be made.
     sql("UPDATE creation_jobs SET state = 'queued', asset_id = NULL, rendered_at = NULL, attempts = 0, next_at = ? WHERE id = ?", new Date(Date.now() - 60_000).toISOString(), other.id);
     const workId = randomUUID();
     mkdirSync(join(workDir, workId));
@@ -826,11 +779,11 @@ test("a person's video being cleaned: no new render starts meanwhile, but an upl
     await until("the upload retried", () => jobs().find((j) => j.id === bigDay.id)!.state === "done");
     await until("its card made", () => cards().find((c) => c.id === card)!.status === "created");
     assert.equal(memoryPosts, memoriesBefore + 1);
-    await new Promise((r) => setTimeout(r, 2500)); // the worker looks again, twice
+    await new Promise((r) => setTimeout(r, 2500));
     const held = jobs().find((j) => j.id === other.id)!;
     assert.deepEqual([held.state, held.attempts, renders.length], ["queued", 0, before], "the render didn't start while the video was cleaned");
   } finally {
-    letGo(); // the video's download fails: it's done with, and the render may start
+    letGo();
   }
   await until("the held render made", () => jobs().find((j) => j.id === other.id)!.state === "done");
   assert.equal(renders.length, before + 1);
@@ -840,7 +793,6 @@ test("a person's video being cleaned: no new render starts meanwhile, but an upl
 test("the night captions' hours: no render starts, nor one that wouldn't end before them; turning creations off drops what's waiting", async () => {
   const bigDay = collageJob();
   const before = renders.length;
-  // The quiet hours start in 5 minutes (India time): a collage's limit plus downloads doesn't fit.
   const at = (minutes: number) => new Date(Date.now() + 5.5 * 3_600_000 + minutes * 60_000).toISOString().slice(11, 16);
   for (const quiet of ["00:00-23:59", `${at(5)}-${at(60)}`]) {
     await service.stop();
@@ -851,7 +803,6 @@ test("the night captions' hours: no render starts, nor one that wouldn't end bef
     assert.equal(renders.length, before, quiet);
     assert.equal(jobs().find((j) => j.id === bigDay.id)!.state, "queued");
   }
-  // The person turns creations off: the waiting job is dropped, not made.
   assert.equal((await call("PUT", "/memories/settings", { cookie: COOKIE.A, json: { creations: false } })).body.creations, false);
   await night("2026-11-04");
   await until("dropped", () => jobs().find((j) => j.id === bigDay.id)!.state === "dropped");
@@ -860,16 +811,15 @@ test("the night captions' hours: no render starts, nor one that wouldn't end bef
 });
 
 test("Immich refusing a memory: nothing recorded, tried again the next time", async () => {
-  await night("2026-11-10"); // a week on: Spotlight due again, but only Dad's left and he has too few photos
+  await night("2026-11-10");
   const db = new DatabaseSync(join(dataDir, "data.db"));
-  db.prepare("DELETE FROM themed_memories WHERE theme_key = 'day:2024-03-09'").run(); // so the big day is due again
+  db.prepare("DELETE FROM themed_memories WHERE theme_key = 'day:2024-03-09'").run();
   db.close();
   refuseMemories = 500;
   const refused = await call("POST", "/memories/run", { cookie: COOKIE.A, json: {} });
   assert.deepEqual(refused.body.made, []);
   assert.deepEqual(refused.body.skipped, [{ theme: "big_day", reason: "Immich refused it" }]);
   refuseMemories = 0;
-  // The creations container down meanwhile: the photos are chosen without quality, not refused.
   containerDown = true;
   await night("2026-11-10");
   const retried = await call("POST", "/memories/run", { cookie: COOKIE.A, json: {} });
@@ -901,7 +851,6 @@ test("a card: Immich's 5xx is tried again after 30, then 60 minutes, then given 
   reopen();
   await until("refused", () => status() === "failed" && memoryPosts - asked === 4);
   refuseMemories = 0;
-  // Turned off before the card's turn: no card.
   assert.equal((await call("PUT", "/memories/settings", { cookie: COOKIE.A, json: { creations: false } })).body.creations, false);
   reopen();
   await until("closed", () => status() === "empty");
@@ -969,7 +918,7 @@ test("a key Immich rejects pauses them; turning on again makes a new key", async
   const on = await call("PUT", "/memories/settings", { cookie: COOKIE.A, json: { enabled: true } });
   assert.equal(on.body.pausedReason, null);
   assert.equal(keysOf(A.id).filter((k) => !k.revoked).length, 1);
-  await night("2027-01-01"); // its own "now" a moment ago: a fresh start for the next one
+  await night("2027-01-01");
   assert.equal((await call("POST", "/memories/run", { cookie: COOKIE.A, json: {} })).status, 200);
 });
 

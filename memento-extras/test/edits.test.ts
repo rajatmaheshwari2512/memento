@@ -1,7 +1,5 @@
-// AI edits after they're made: the result, saving it into the library, and discarding it;
-// and the routing every request goes through.
-// Runs the real service against a fake Immich and a fake Gemini, so nothing real is called
-// and no edit costs money. Run: npm test
+// AI edits after they're made: the result, saving it, discarding it, and the routing of every request.
+// Runs the real service against a fake Immich and a fake Gemini. Run: npm test
 
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -19,8 +17,7 @@ const UPLOADED = "44444444-4444-4444-8444-444444444444";
 const OWNER_COOKIE = "immich_access_token=ownertoken0123456789";
 const OTHER_COOKIE = "immich_access_token=othertoken0123456789";
 
-// What the fake Immich was asked to do with saved edits.
-const uploads: string[] = []; // file names
+const uploads: string[] = [];
 const updates: Array<{ id: string; body: Record<string, unknown> }> = [];
 const stacks: string[][] = [];
 let immich: Server;
@@ -38,7 +35,6 @@ before(async () => {
       return json(res, 200, {
         id: PHOTO, type: "IMAGE", ownerId: OWNER.id, isTrashed: false, originalFileName: "beach day.jpg",
         originalMimeType: "image/jpeg", fileCreatedAt: "2024-05-01T10:00:00.000Z", stack: { primaryAssetId: PHOTO },
-        // Taken at 15:30 in India: Immich gives the moment in UTC and the local clock time apart.
         localDateTime: "2024-05-01T15:30:00.000Z",
         exifInfo: { exifImageWidth: 1600, exifImageHeight: 1200, fileSizeInByte: JPEG.length, dateTimeOriginal: "2024-05-01T10:00:00+00:00", latitude: 15.5, longitude: 73.8 },
       });
@@ -111,7 +107,6 @@ test("saving: uploads once, copies the date and place, stacks on top; a retry do
   assert.equal(saved.status, 200, JSON.stringify(saved.body));
   assert.deepEqual(saved.body, { assetId: UPLOADED });
   assert.deepEqual(uploads, [`beach day-ai-edit-${id.slice(0, 8)}.jpg`]);
-  // The local time with its offset, so the copy keeps the original's time zone.
   assert.deepEqual(updates, [{ id: UPLOADED, body: { dateTimeOriginal: "2024-05-01T15:30:00.000+05:30", latitude: 15.5, longitude: 73.8 } }]);
   assert.deepEqual(stacks, [[UPLOADED, PHOTO]]);
 

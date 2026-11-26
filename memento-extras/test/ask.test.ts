@@ -1,13 +1,5 @@
-// Ask Photos end to end: the real service against a fake Immich, with captions in its
-// database. Run: npm test
-//
-// A fake trained reader labels each test question by hand (as the real one would); a question
-// it doesn't know gets an error, so Ask searches it as it is.
-//
-// The fake Immich checks what the real one (v3.4) checks for the v3 search shape: a strict
-// filter (unknown keys refused), no old flat fields next to `filter`, and its own access
-// rules. Its smart search returns the photos whose made-up "look" has any of the query's
-// words, most first; its other search returns newest first, with a cursor.
+// Ask Photos end to end: the real service against a fake Immich, with captions in its database.
+// Run: npm test
 
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -20,9 +12,8 @@ import { call as callService, COOKIE, freePort, json, listen, readBody, Service,
 
 const A = { id: randomUUID(), name: "Asha Rao", isAdmin: true };
 const B = { id: randomUUID(), name: "Bo", isAdmin: false };
-const PARTNER = randomUUID(); // shares their photos with A (Immich's search includes them)
+const PARTNER = randomUUID();
 
-// A's people. The fake gives 2 per page, so Zoe is only on the third page.
 const MOM = randomUUID();
 const ME = randomUUID();
 const DAD = randomUUID();
@@ -49,15 +40,13 @@ function asset(over: Partial<FakeAsset>): string {
 
 const beachMomMe = asset({ people: [MOM, ME], look: "beach sea sand", takenAt: "2023-01-10T06:00:00.000Z" });
 const beachMomOnly = asset({ people: [MOM], look: "beach sand", takenAt: "2023-01-11T06:00:00.000Z" });
-const beachDec31 = asset({ people: [MOM, ME], look: "beach", takenAt: "2022-12-31T20:00:00.000Z" }); // 1 Jan 2023 in India
+const beachDec31 = asset({ people: [MOM, ME], look: "beach", takenAt: "2022-12-31T20:00:00.000Z" });
 const beachPartner = asset({ ownerId: PARTNER, look: "beach", takenAt: "2023-02-01T06:00:00.000Z" });
-// The search model misses the boarding pass; only its caption has the words.
 const pass2023 = asset({ look: "paper hand", takenAt: "2023-03-01T06:00:00.000Z" });
 const pass2024 = asset({ look: "paper", takenAt: "2024-03-01T06:00:00.000Z" });
 const passTrashed = asset({ look: "paper", trashed: true });
 const passXmas = asset({ look: "paper", takenAt: "2022-12-25T06:00:00.000Z" });
-const bothLists = asset({ look: "airport boarding", takenAt: "2023-04-01T06:00:00.000Z" }); // found by both
-// Taken in Goa (Immich found the state from their location); one more that only looks like it.
+const bothLists = asset({ look: "airport boarding", takenAt: "2023-04-01T06:00:00.000Z" });
 const goaOld = asset({ look: "", state: "Goa", takenAt: "2019-12-28T06:00:00.000Z" });
 const goaNew = asset({ look: "", state: "Goa", takenAt: "2025-12-29T06:00:00.000Z" });
 const goaLookalike = asset({ look: "goa", takenAt: "2024-05-01T06:00:00.000Z" });
@@ -68,8 +57,6 @@ const hiddenPart = asset({ people: [ZOE], visibility: "hidden" });
 const momVideos = Array.from({ length: 260 }, (_, i) =>
   asset({ people: [MOM], type: "VIDEO", look: "video", takenAt: new Date(Date.UTC(2021, 0, 1) + i * 86_400_000).toISOString() }));
 asset({ look: "sand castle" });
-// More caption matches than one Immich search takes (2,000 IDs); the newest has the worst word
-// match, so it's cut by the caption search's usual 200 and lands in the last batch.
 const kites = Array.from({ length: 2_100 }, (_, i) => asset({ look: "", takenAt: new Date(Date.UTC(2020, 0, 1) + i * 3_600_000).toISOString() }));
 const newestKite = asset({ look: "", takenAt: "2025-06-01T06:00:00.000Z" });
 
@@ -79,7 +66,7 @@ const captions = [
   { assetId: passTrashed, ownerId: A.id, caption: "A boarding pass, crumpled.", tags: ["Ticket"] },
   { assetId: passXmas, ownerId: A.id, caption: "A boarding pass next to a Christmas tree.", tags: ["Ticket"] },
   { assetId: bothLists, ownerId: A.id, caption: "An airport gate with a boarding pass in hand.", tags: ["Plane"] },
-  { assetId: bPhoto, ownerId: B.id, caption: "Bo's boarding pass on a beach.", tags: ["Beach"] }, // B's: never shown to A
+  { assetId: bPhoto, ownerId: B.id, caption: "Bo's boarding pass on a beach.", tags: ["Beach"] },
   ...kites.map((assetId) => ({ assetId, ownerId: A.id, caption: "A kite.", tags: [] })),
   {
     assetId: newestKite, ownerId: A.id, tags: [],
@@ -149,7 +136,7 @@ function matchesBranch(a: FakeAsset, f: any): boolean {
   if (f.personIds?.all && !f.personIds.all.every((p: string) => a.people.includes(p))) return false;
   if (f.state?.eq && a.state !== f.state.eq) return false;
   if (f.city?.eq && a.city !== f.city.eq) return false;
-  if (f.country?.eq) return false; // no countries in this library
+  if (f.country?.eq) return false;
   return true;
 }
 const matches = (a: FakeAsset, f: any) => matchesBranch(a, f) && (!f.or || f.or.some((b: any) => matchesBranch(a, b)));
@@ -170,7 +157,7 @@ async function fakeImmich(req: IncomingMessage, res: ServerResponse): Promise<vo
     return json(res, 200, { people: all.slice((page - 1) * 2, page * 2), total: all.length, hidden: 0, hasNextPage: page * 2 < all.length });
   }
   const searchable = (a: FakeAsset) => a.ownerId === user.id || (user === A && a.ownerId === PARTNER);
-  if (url.pathname === "/api/search/places") { // old names and typos, as Immich's place data has them
+  if (url.pathname === "/api/search/places") {
     return json(res, 200, url.searchParams.get("name") === "bombay" ? [{ name: "Mumbai", admin1name: "Maharashtra" }] : []);
   }
   if (url.pathname === "/api/search/suggestions") {
@@ -190,7 +177,6 @@ async function fakeImmich(req: IncomingMessage, res: ServerResponse): Promise<vo
       if (!b.query) return json(res, 400, { message: "Either `query` or `queryAssetId` must be set" });
       const words = String(b.query).toLowerCase().split(/\s+/);
       const score = (a: FakeAsset) => words.filter((w) => a.look.split(" ").includes(w)).length;
-      // Only photos that look like the words, so caption-only matches can be told apart.
       const relevant = found.filter((a) => score(a) > 0).sort((x, y) => score(y) - score(x) || x.takenAt.localeCompare(y.takenAt));
       return json(res, 200, { assets: { items: relevant.slice(0, b.size).map(toJson), nextCursor: null } });
     }
@@ -208,7 +194,6 @@ let service: Service;
 const dataDir = mkdtempSync(join(tmpdir(), "memento-extras-ask-"));
 
 before(async () => {
-  // Captions go in the way they do on the server: a results file, imported.
   process.env.DATA_DIR = dataDir;
   process.env.GEMINI_API_KEY = "unused";
   const { importCaptions } = await import("../src/services/caption-records.service.ts");
@@ -248,7 +233,6 @@ test("people and dates become Immich filters, in the user's time zone", async ()
   assert.equal(body.understood.dates.label, "2023");
   assert.equal(body.understood.text, "beach");
   assert.equal(body.words, undefined);
-  // Mom and me, in 2023 India time: 31 Dec 2022 20:00 UTC is 1 Jan 2023 there.
   assert.deepEqual(ids(body), [beachDec31, beachMomMe]);
   const smart = bodies.findLast((b) => b.path === "/api/search/smart")!.body;
   assert.equal(smart.query, "beach");
@@ -280,7 +264,6 @@ test("caption matches obey the same filters", async () => {
   const { body } = await askA("boarding pass in 2023");
   assert.ok(ids(body).includes(pass2023));
   assert.ok(!ids(body).includes(pass2024));
-  // several date ranges (every Christmas): checked on each photo's date
   const xmas = await askA("boarding pass at christmas");
   assert.equal(xmas.status, 200, JSON.stringify(xmas.body));
   assert.deepEqual(ids(xmas.body).filter((id) => [pass2023, pass2024, passXmas, bothLists].includes(id)), [passXmas]);
@@ -306,12 +289,10 @@ test("the last / first time: caption matches first, sorted by date", async () =>
   assert.deepEqual(ids(last.body), [pass2024, bothLists, pass2023, passXmas]);
   const first = await askA("the first time I had a boarding pass");
   assert.deepEqual(ids(first.body), [passXmas, pass2023, bothLists, pass2024]);
-  // more matches than the caption search keeps: the newest is still found, and first
-  assert.ok(!ids((await askA("kite")).body).includes(newestKite)); // by word match, it's cut
+  assert.ok(!ids((await askA("kite")).body).includes(newestKite));
   const kite = await askA("the last time I saw a kite");
   assert.equal(ids(kite.body)[0], newestKite);
   assert.equal(ids((await askA("the first time I saw a kite")).body)[0], kites[0]);
-  // no caption matches: the AI search's best matches are sorted instead
   const beach = await askA("most recent photos of the beach");
   const dates = beach.body.assets.map((a: any) => a.fileCreatedAt);
   assert.deepEqual(dates, [...dates].sort().reverse());
@@ -365,7 +346,6 @@ test("a place in the asker's photos: taken there first, newest first for 'last t
   assert.deepEqual(res.body.understood.place, { name: "Goa", kind: "state" });
   assert.deepEqual(res.body.assets.slice(0, 2).map((a: { id: string }) => a.id), [goaNew, goaOld]);
   assert.ok(res.body.assets.some((a: { id: string }) => a.id === goaLookalike), "photos that only look like it still come after");
-  // A place that isn't in this user's photos is just a word.
   const nowhere = await askA("last time in shimla");
   assert.equal(nowhere.body.understood.place, null);
 });
@@ -379,7 +359,6 @@ test("the reader can't answer: the question goes to Immich's search as it is, no
   assert.deepEqual(smart.map((b) => b.body.query), ["Mom at the beach in 2023 please"]);
   assert.deepEqual(Object.keys(smart[0]!.body.filter).sort(), ["trashedAt", "visibility"]);
   assert.match(res.body.understood.hints[0], /Searched as typed/);
-  // A next page needs the first page's filters, which can't be rebuilt without the reader.
   const page2 = await askA("Mom at the beach in 2023 please", { cursor: "250" });
   assert.equal(page2.status, 409);
   assert.match(page2.body.error, /Search again/);
@@ -389,7 +368,6 @@ test("places: a city by its old name, Hinglish questions, and the switch", async
   const bombay = await askA("bombay ki photos");
   assert.deepEqual(bombay.body.understood.place, { name: "Mumbai", kind: "city" });
   assert.equal(ids(bombay.body)[0], mumbai);
-  // Hindi grammar words aren't search words: Goa's photos by date, newest first.
   assert.deepEqual(ids((await askA("last time goa gaye the")).body).slice(0, 2), [goaNew, goaOld]);
   assert.deepEqual(ids((await askA("2025 mein goa ki photos")).body), [goaNew]);
 

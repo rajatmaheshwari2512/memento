@@ -1,9 +1,4 @@
-// Tests the feature flags by running the real service against a fake Immich and a fake
-// Gemini, so nothing real is called and no edit costs money. Run: npm test
-//
-// The fake Immich knows two logins (an admin and a normal user) and one photo, owned by
-// the admin, 4080×3072 like a phone photo. The fake Gemini records the size it was
-// asked for and returns a tiny image.
+// Feature flags, by running the real service against a fake Immich and a fake Gemini. Run: npm test
 
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -119,7 +114,6 @@ test("bad settings are refused and change nothing", async () => {
   assert.equal((await setFlags({ gemini: { enabled: "yes" } })).status, 400);
   assert.equal((await setFlags({ gemini: { dailyLimitPerUser: -1 } })).status, 400);
   assert.equal((await setFlags({ gemini: { dailyLimitPerUser: 2.5 } })).status, 400);
-  // One bad value in a batch: the good one isn't applied either.
   assert.equal((await setFlags({ gemini: { enabled: false, monthlyLimitTotal: 99999 } })).status, 400);
   assert.equal((await call("GET", "/flags", { cookie: ADMIN_COOKIE })).body.flags.gemini.enabled, true);
 });
@@ -133,7 +127,6 @@ test("Gemini off: edits are refused before Immich or Google are asked anything",
   const res = await edit();
   assert.equal(res.status, 403);
   assert.match(res.body.error, /switched off/);
-  // Only the login check reached Immich (and it may have been cached).
   assert.deepEqual(immichCalls.filter((c) => !c.endsWith("/api/users/me")), []);
   assert.deepEqual(geminiSizes, []);
 });
@@ -155,7 +148,6 @@ test("4K allowed: a phone photo is edited at 4K; switched off: 2K, also for Edit
 });
 
 test("the daily limit comes from the flags", async () => {
-  // 3 edits made above; a limit of 4 allows one more, then refuses.
   await setFlags({ gemini: { dailyLimitPerUser: 4 } });
   assert.equal((await call("GET", "/limits", { cookie: ADMIN_COOKIE })).body.today.limit, 4);
   assert.equal((await edit()).status, 201);
@@ -165,7 +157,7 @@ test("the daily limit comes from the flags", async () => {
 });
 
 test("setting a value back to its default forgets the override", async () => {
-  await setFlags({ gemini: { dailyLimitPerUser: 3 } }); // 3 is the env default
+  await setFlags({ gemini: { dailyLimitPerUser: 3 } });
   const db = new DatabaseSync(join(dataDir, "data.db"));
   const keys = (db.prepare("SELECT key FROM flags ORDER BY key").all() as Array<{ key: string }>).map((r) => r.key);
   db.close();
@@ -184,8 +176,6 @@ test("flags survive a restart", async () => {
 test("Memento admin: everyone's AI edits, only for an admin who's logged in", async () => {
   assert.equal((await call("GET", "/admin/usage", { cookie: USER_COOKIE })).status, 403);
   assert.equal((await call("GET", "/admin/usage", { apiKey: ADMIN_API_KEY })).status, 403);
-  // Not counted: a failed attempt, and an edit last month. Counted this month, not today: one
-  // from earlier this month (or today, on the 1st).
   const db = new DatabaseSync(join(dataDir, "data.db"));
   const day = new Date().toISOString().slice(0, 10);
   const earlier = `${day.slice(0, 8)}01`;
@@ -200,7 +190,6 @@ test("Memento admin: everyone's AI edits, only for an admin who's logged in", as
 
   const { status, body } = await call("GET", "/admin/usage", { cookie: ADMIN_COOKIE });
   assert.equal(status, 200);
-  // The admin's 4 edits above: one 4K ($0.113) and three 2K ($0.0504 each).
   const admin = body.users.find((u: { userId: string }) => u.userId === ADMIN.id);
   const user = body.users.find((u: { userId: string }) => u.userId === USER.id);
   assert.deepEqual(admin, { userId: ADMIN.id, today: 4, thisMonth: 4, costUsd: 0.26, dailyLimit: 3, ownDailyLimit: null });
@@ -218,20 +207,17 @@ test("a daily limit set for one person applies to them; null goes back to everyo
   for (const bad of [-1, 2.5, "10", 1001, undefined]) assert.equal((await limits({ dailyEdits: bad })).status, 400, String(bad));
   assert.equal((await limits({ dailyEdits: 10 }, ADMIN_COOKIE, "not-a-person")).status, 400);
 
-  // Everyone's default is 3 and the admin has made 4 today; with their own 10 they can go on.
   assert.equal((await edit()).status, 429);
   const set = await limits({ dailyEdits: 10 });
   assert.equal(set.status, 200);
   assert.equal(set.body.users.find((u: { userId: string }) => u.userId === ADMIN.id).ownDailyLimit, 10);
   assert.equal((await call("GET", "/limits", { cookie: ADMIN_COOKIE })).body.today.limit, 10);
   assert.equal((await edit()).status, 201);
-  // A person with their own limit and no edits is listed too; 0 stops them even though the default is 3.
   const stopped = await limits({ dailyEdits: 0 }, ADMIN_COOKIE, "44444444-4444-4444-8444-444444444444");
   assert.deepEqual(
     stopped.body.users.find((u: { userId: string }) => u.userId === "44444444-4444-4444-8444-444444444444"),
     { userId: "44444444-4444-4444-8444-444444444444", today: 0, thisMonth: 0, costUsd: 0, dailyLimit: 0, ownDailyLimit: 0 },
   );
-  // The month's limit, for everyone together, still applies (7: 5 above, plus this one and one more).
   assert.equal((await edit()).status, 201);
   const monthly = await edit();
   assert.equal(monthly.status, 429);

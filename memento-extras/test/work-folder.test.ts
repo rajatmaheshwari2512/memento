@@ -1,7 +1,4 @@
-// What the extras service takes from the folder it shares with the creations container, and what
-// it believes of the container's answers: nothing planted there (a link, a pipe, a file still
-// growing) can make it read the wrong file, hang, or fill the disk; a folder it can't remove never
-// stops it starting; and odd answers are refused. Run: npm test
+// What the extras service takes from the folder it shares with the creations container. Run: npm test
 
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -19,9 +16,8 @@ const data = join(root, "data");
 mkdirSync(work);
 mkdirSync(data);
 
-// A fake container that answers quality checks badly in the ways a broken one might.
 let answer: () => unknown = () => ({});
-let cutShort = false; // the reply starts, then the connection drops
+let cutShort = false;
 let fake: Server;
 
 let lib: typeof import("../src/utils/work-folder.ts");

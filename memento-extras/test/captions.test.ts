@@ -1,5 +1,4 @@
-// Captions: the checks (captions.schema.ts), storage and search (captions.repository.ts), and the
-// backlog script (caption-backlog.ts) against a fake llama-server.
+// Captions: the checks, storage and search, and the backlog script against a fake llama-server.
 
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -12,7 +11,6 @@ import { after, before, describe, test } from "node:test";
 import { TAGS } from "../src/constants/captions.constants.ts";
 import { fakeLlama, listen } from "./helpers.ts";
 
-// database.ts reads the settings when it's first imported.
 const dataDir = mkdtempSync(join(tmpdir(), "memento-captions-"));
 process.env.DATA_DIR = dataDir;
 process.env.GEMINI_API_KEY = "test";
@@ -115,9 +113,9 @@ describe("storage and search", () => {
   });
 
   test("the backup copy's index still points at the right photos", () => {
-    database().prepare("DELETE FROM captions WHERE asset_id = ?").run(asset(2)); // leaves a gap in the row IDs
-    assert.deepEqual(searchCaptions(OWNER, "boarding"), []); // gone from the index too
-    assert.deepEqual(searchCaptions(OWNER, "ticket"), []); // and its tags
+    database().prepare("DELETE FROM captions WHERE asset_id = ?").run(asset(2));
+    assert.deepEqual(searchCaptions(OWNER, "boarding"), []);
+    assert.deepEqual(searchCaptions(OWNER, "ticket"), []);
     const orphans = database().prepare("SELECT count(*) AS n FROM caption_tags WHERE caption_id NOT IN (SELECT id FROM captions)").get() as { n: number };
     assert.equal(orphans.n, 0);
     snapshotDatabase();
@@ -138,8 +136,6 @@ describe("the backlog script", () => {
   const servers: Server[] = [];
   const urls: string[] = [];
 
-  // Two fake llama-servers. The photo whose bytes are "bad" always gets an unusable reply;
-  // "thinker" gets a reply with thinking in it.
   const llama = (n: number): Server =>
     fakeLlama({
       reply: (image) => {
@@ -193,19 +189,19 @@ describe("the backlog script", () => {
     assert.deepEqual(results.map((r) => r.assetId).sort(), [asset(1), asset(2), asset(4)]);
     const first = results.find((r) => r.assetId === asset(1));
     assert.equal(first.model, "fake-vl.gguf");
-    assert.deepEqual(first.tags, ["Pet"]); // "Unknown" isn't on the list
+    assert.deepEqual(first.tags, ["Pet"]);
     assert.equal(first.promptTokens, 300);
     const errors = lines(`${out}.errors.jsonl`);
     assert.deepEqual(errors.map((e) => e.assetId).sort(), [asset(3), asset(5), asset(6)]);
     assert.match(errors.find((e) => e.assetId === asset(5)).error, /thought/);
-    assert.equal(requests.filter((r) => r.image === "bad").length, 2); // tried twice
+    assert.equal(requests.filter((r) => r.image === "bad").length, 2);
     assert.ok(requests.some((r) => r.server === 0) && requests.some((r) => r.server === 1));
     assert.match(output, /"event":"finished"/);
   });
 
   test("a second run only retries the failures, and its results import", async () => {
     const before = requests.length;
-    writeFileSync(out, readFileSync(out, "utf8") + '{"assetId": "half a li'); // a crash mid-line
+    writeFileSync(out, readFileSync(out, "utf8") + '{"assetId": "half a li');
     await run();
     const tried = requests.slice(before).map((r) => r.image);
     assert.ok(!tried.includes("one") && !tried.includes("two") && !tried.includes("three"));

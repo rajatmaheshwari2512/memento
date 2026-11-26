@@ -1,19 +1,10 @@
-// How much memory AI edits take in the service: its peak memory (RSS) while N edits are asked for
-// at once, whole-photo (Immich's original) and highlighted (the app's photo and mark), with
-// realistic sizes. Runs the real service against a fake Immich and a fake Gemini (as the tests
-// do), so nothing real is called and nothing costs money. A fresh service for each run.
-//
+// Peak memory (RSS) of the service while N AI edits are asked for at once, against a fake Immich and a fake Gemini.
 // Run: npm run bench:edits            (or: node test/edits-memory.bench.ts [N ...])
 // For the numbers in constants/edits.constants.ts, run it on Linux in the service's own image:
 //   docker run --rm -v "$PWD":/app:ro -w /app node:24.22.2-alpine node test/edits-memory.bench.ts
 // Settings: ORIGINAL_MB, RESULT_MB, PHOTO_MB, MARK_MB (sizes); GEMINI_MS (how long the fake
 // Gemini takes, so the edits overlap); PROD_HEAP=0 for Node's own heap sizes on this machine;
 // SERVICE_NODE_OPTIONS for more of Node's options for the service.
-//
-// The service runs with the heap V8 chooses inside the production container's 512 MB cap (a
-// 259 MB heap with a 1 MB young generation: V8 picks these from the cap, and collects garbage
-// sooner than with a big machine's sizes). Peak: Linux's own record (VmHWM); elsewhere, sampled
-// with ps every few milliseconds.
 
 import { execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
@@ -25,16 +16,15 @@ import { freePort, json, listen, Service } from "./helpers.ts";
 
 const MB = 1024 * 1024;
 const setting = (name: string, fallback: number) => Number(process.env[name] ?? fallback);
-const ORIGINAL_BYTES = Math.round(setting("ORIGINAL_MB", 12) * MB); // MAX_ORIGINAL_BYTES is 14 MB
-const RESULT_BYTES = Math.round(setting("RESULT_MB", 8) * MB); // a 4K JPEG is usually 3–8 MB
-const PHOTO_BYTES = Math.round(setting("PHOTO_MB", 5) * MB); // the app's upright photo (at most 6 MB)
-const MARK_BYTES = Math.round(setting("MARK_MB", 0.5) * MB); // the marked copy (at most 3 MB)
+const ORIGINAL_BYTES = Math.round(setting("ORIGINAL_MB", 12) * MB);
+const RESULT_BYTES = Math.round(setting("RESULT_MB", 8) * MB);
+const PHOTO_BYTES = Math.round(setting("PHOTO_MB", 5) * MB);
+const MARK_BYTES = Math.round(setting("MARK_MB", 0.5) * MB);
 const GEMINI_MS = setting("GEMINI_MS", 1500);
 const PROD_HEAP = process.env.PROD_HEAP !== "0";
 const COUNTS = process.argv.slice(2).map(Number).filter((n) => n > 0);
 const RUNS = COUNTS.length > 0 ? COUNTS : [1, 2, 4, 8, 16];
 
-// A "JPEG": its first bytes, then random ones (which don't compress, like a real photo's).
 const fakeJpeg = (bytes: number) => {
   const out = randomBytes(bytes);
   out.set([0xff, 0xd8, 0xff, 0xe0]);
@@ -72,8 +62,6 @@ function fakeImmich(): Server {
   });
 }
 
-// Reads the request and drops it (only the service's memory is measured), then answers with a
-// 4K "image" after GEMINI_MS.
 function fakeGemini(): Server {
   return createServer(async (req, res) => {
     geminiNow++;
@@ -85,8 +73,6 @@ function fakeGemini(): Server {
   });
 }
 
-// The process's memory now and at its peak so far (Linux only; elsewhere the peak is the caller's
-// to sample), in bytes.
 function memory(pid: number): { now: number; peak: number | null } {
   try {
     const status = readFileSync(`/proc/${pid}/status`, "utf8");
@@ -119,7 +105,6 @@ async function oneRun(kind: "whole" | "area", n: number, immichUrl: string, gemi
   try {
     await new Promise((resolve) => setTimeout(resolve, 500));
     const fresh = memory(pid).now;
-    // A first edit loads every code path.
     const first = await edit();
     if (first !== 201) throw new Error(`warm-up edit failed: ${first}\n${service.logs.slice(-2000)}`);
     await new Promise((resolve) => setTimeout(resolve, 500));
@@ -152,7 +137,6 @@ console.log(
   `Node ${process.version}, ${PROD_HEAP ? "the production container's heap" : "this machine's heap"}. Original ${f(ORIGINAL_BYTES)} MB; ` +
     `Gemini's result ${f(RESULT_BYTES)} MB (${f(RESULT_REPLY.length)} MB reply); app's photo ${f(PHOTO_BYTES)} MB + mark ${f(MARK_BYTES)} MB.`,
 );
-// fresh: the service just started, before any edit. per edit: (peak - fresh) / edits at Google at once.
 console.log("kind   asked  at Google  fresh MB  peak MB  peak-fresh  per edit");
 try {
   for (const kind of ["whole", "area"] as const) {

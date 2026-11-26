@@ -1,6 +1,4 @@
-// Reading JSON as it arrives (utils/json-stream.ts), base64 to and from files a piece at a time
-// (utils/base64-file.ts), and reading Gemini's reply that way (clients/gemini.client.ts): the
-// same results as reading everything whole, however the bytes are split. Run: npm test
+// Reading JSON as it arrives, base64 to and from files, and Gemini's reply that way. Run: npm test
 
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
@@ -11,13 +9,12 @@ import { after, test } from "node:test";
 import { Base64ToFile, base64Length, base64OfFile } from "../src/utils/base64-file.ts";
 import { readJsonStream, type JsonPath, type JsonRoute, type JsonStreamOptions, type StringSink } from "../src/utils/json-stream.ts";
 
-process.env.GEMINI_API_KEY ??= "test-key-not-real"; // config.ts needs one; nothing is sent
+process.env.GEMINI_API_KEY ??= "test-key-not-real";
 const { readReply, resultOf } = await import("../src/clients/gemini.client.ts");
 
 const folder = mkdtempSync(join(tmpdir(), "memento-extras-json-stream-"));
 after(() => rmSync(folder, { recursive: true, force: true }));
 
-// The bytes in pieces of `size` (0: one piece; -1: random sizes from 1 to 50).
 async function* pieces(bytes: Buffer, size: number): AsyncGenerator<Buffer> {
   for (let at = 0; at < bytes.length; ) {
     const n = size === 0 ? bytes.length : size > 0 ? size : 1 + Math.floor(Math.random() * 50);
@@ -27,7 +24,6 @@ async function* pieces(bytes: Buffer, size: number): AsyncGenerator<Buffer> {
 }
 const SPLITS = [0, 1, 2, 3, 7, 64, -1];
 
-// A web stream of the pieces (a fetch Response's body).
 function streamOf(source: AsyncGenerator<Buffer>): ReadableStream<Uint8Array> {
   return new ReadableStream({
     async pull(controller) {
@@ -54,7 +50,6 @@ const read = (json: string | Buffer, split: number, options: Partial<JsonStreamO
     ...options,
   });
 
-// A sink that keeps what it's given.
 class Collect implements StringSink {
   text = "";
   ended = false;
@@ -151,7 +146,6 @@ test("limits: the whole JSON, and what's kept (skipped and streamed bytes don't 
     sink: () => new Collect(),
   });
   assert.deepEqual(kept, { a: "x".repeat(1000) });
-  // Cut at 10 bytes: whatever escape the cut falls in is dropped, never broken.
   for (const text of ["0123456789abc", "012345678\\nabc", "0123456\\u00e9abc", "01234567\\\\abc", "012345678\\\"abc"]) {
     for (const split of [0, 1, 3]) {
       const cut = (await read(`{"t":"${text}"}`, split, { maxStringBytes: 10 })) as { t: string };
@@ -185,7 +179,6 @@ test("a file in base64, a piece at a time: the same as all at once, for every si
   }
 });
 
-// Decodes `text` into a file with Base64ToFile, in pieces of `split` characters.
 async function decode(text: string, split: number, options: { strict: boolean; maxBytes?: number }) {
   const sink = new Base64ToFile(join(folder, `out-${Math.random()}`), { maxBytes: Infinity, ...options });
   try {
@@ -221,7 +214,6 @@ test("base64 into a file, a piece at a time: strict takes exactly what /^[A-Za-z
       }
     }
   }
-  // Past its limit, nothing more is written, but it's still counted.
   const { sink, bytes } = await decode(photo.toString("base64"), 7, { strict: true, maxBytes: 100 });
   assert.ok(bytes.length <= 108 && sink.chars === photo.toString("base64").length);
 });
@@ -238,7 +230,6 @@ test("base64 into a file, leniently (Gemini's reply): line breaks and the like a
   assert.deepEqual((await decode(urlSafe, 7, { strict: false })).bytes, Buffer.from(urlSafe, "base64"));
 });
 
-// What the reply gave, read the old way: the whole JSON parsed at once.
 function readWhole(json: string) {
   const result = JSON.parse(json) as { status?: string; steps?: Array<{ content?: Array<{ type?: string; text?: string; data?: string }> }> };
   const contents = (result.steps ?? []).flatMap((step) => step.content ?? []);

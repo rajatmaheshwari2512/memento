@@ -1,5 +1,4 @@
-// The database's versions (migrations.ts, database.ts): a database from before versions is
-// brought up to date with its data intact, and the new rules hold afterwards.
+// The database's versions (migrations.ts, database.ts): an old database is brought up to date with its data intact.
 
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync } from "node:fs";
@@ -18,7 +17,6 @@ const LIVE = "aaaaaaaa-0000-4000-8000-000000000001";
 const P = (n: number) => `bbbbbbbb-0000-4000-8000-00000000000${n}`;
 const A = (n: number) => `cccccccc-0000-4000-8000-00000000000${n}`;
 
-// A database exactly as the service left it before versions: the old tables, version 0.
 {
   const old = new DatabaseSync(join(dataDir, "data.db"));
   MIGRATIONS[0]!.run(old);
@@ -83,7 +81,6 @@ test("refuses values outside the allowed ones", () => {
   assert.throws(() => db.prepare("UPDATE live_albums SET match = 'some'").run(), /CHECK/);
   assert.throws(() => db.prepare("UPDATE live_albums SET since = 'last year'").run(), /CHECK/);
   assert.throws(() => db.prepare("INSERT INTO live_album_people VALUES (?, ?, 'maybe')").run(LIVE, P(4)), /CHECK/);
-  // Someone both included and left out:
   assert.throws(() => db.prepare("INSERT INTO live_album_people VALUES (?, ?, 'exclude')").run(LIVE, P(1)), /UNIQUE|PRIMARY/);
 });
 
@@ -99,7 +96,7 @@ test("deleting a live album deletes its people and seen photos with it", () => {
 
 test("animations (step 9): the creations queue is rebuilt with every job as it was, and takes the new kind", () => {
   const live = new DatabaseSync(":memory:");
-  migrate(live, MIGRATIONS.slice(0, 8)); // as deployed on 22 November
+  migrate(live, MIGRATIONS.slice(0, 8));
   live.exec(`
     INSERT INTO memory_users (user_id, creations, created_at, updated_at, collages_album_id, recaps_album_id) VALUES ('u1', 1, 't', 't', 'album-c', 'album-r');
     INSERT INTO themed_memories (id, user_id, theme, theme_key, memory_id, status, label, made_on, created_at) VALUES
@@ -131,7 +128,7 @@ test("animations (step 9): the creations queue is rebuilt with every job as it w
 
 test("extra cards (step 11): the cards are rebuilt as they were; a second card in a week only if made by hand", () => {
   const live = new DatabaseSync(":memory:");
-  migrate(live, MIGRATIONS.slice(0, 10)); // as deployed with cinematic photos on 22 November
+  migrate(live, MIGRATIONS.slice(0, 10));
   live.exec(`
     INSERT INTO memory_users (user_id, creations, created_at, updated_at) VALUES ('u1', 1, 't', 't');
     INSERT INTO themed_memories (id, user_id, theme, theme_key, memory_id, status, label, made_on, created_at) VALUES
@@ -155,7 +152,7 @@ test("extra cards (step 11): the cards are rebuilt as they were; a second card i
 
 test("cinematic photos (step 10): the creations queue is rebuilt with every job as it was, and takes the new kind", () => {
   const live = new DatabaseSync(":memory:");
-  migrate(live, MIGRATIONS.slice(0, 9)); // as deployed with animations on 22 November
+  migrate(live, MIGRATIONS.slice(0, 9));
   live.exec(`
     INSERT INTO memory_users (user_id, creations, created_at, updated_at, collages_album_id, recaps_album_id, animations_album_id)
       VALUES ('u1', 1, 't', 't', 'album-c', 'album-r', 'album-a');

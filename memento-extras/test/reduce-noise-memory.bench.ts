@@ -1,15 +1,6 @@
-// How much memory Reduce noise takes in the extras service: its peak memory (RSS) while one job
-// moves a video at the 2 GB limit in (Immich's original, downloaded to the work folder) and a
-// ~2.1 GB copy out (uploaded to Immich straight from the work folder). Runs the real service
-// against a fake Immich (it streams zeros, and drains the upload without keeping it) and a fake
-// creations container (it writes a sparse copy, so no real disk), with the production heap limit.
-// Needs ~2.5 GB of free disk for the download (the copy is sparse), and ~9 GB free for the
-// service's own disk check.
-//
+// Peak memory (RSS) of the service while Reduce noise moves a 2 GB video in and a ~2.1 GB copy out.
+// Needs ~2.5 GB of free disk (the copy is sparse), and ~9 GB free for the service's own disk check.
 // Run: npm run bench:reduce-noise
-// Measured on the Mac (2026-11-23): 180–190 MB peak for 2 GB in and 2.1 GB out, ~4 s; 174 MB,
-// ~3 s, once the copy was uploaded from the work folder (no second copy). Uploading with fetch
-// instead of node:http (immich.client.ts uploadFile) peaked at ~1.6 GB.
 import { execFileSync } from "node:child_process";
 import { closeSync, ftruncateSync, mkdtempSync, openSync, rmSync, writeSync } from "node:fs";
 import { createServer } from "node:http";
@@ -18,8 +9,8 @@ import { join } from "node:path";
 import { freePort, json, listen, Service } from "./helpers.ts";
 
 const MiB = 1024 ** 2;
-const ORIGINAL = 2048 * MiB - MiB; // just under the 2 GB limit
-const COPY = 2048 * MiB + 100 * MiB; // just over 2 GiB (the cap is 2.25 GiB)
+const ORIGINAL = 2048 * MiB - MiB;
+const COPY = 2048 * MiB + 100 * MiB;
 const VIDEO = "00000001-0000-4000-8000-000000000000";
 const COOKIE = "immich_access_token=ownertoken0123456789";
 const OWNER = { id: "11111111-1111-4111-8111-111111111111", name: "Owner", isAdmin: true };
@@ -51,7 +42,7 @@ const immich = createServer(async (req, res) => {
     };
     return pump();
   }
-  for await (const c of req) if (path === "/api/assets") uploaded += (c as Buffer).length; // drained, never held
+  for await (const c of req) if (path === "/api/assets") uploaded += (c as Buffer).length;
   if (req.method === "POST" && path === "/api/assets") return json(res, 201, { id: "22222222-2222-4222-8222-222222222222", status: "created" });
   return json(res, 200, {});
 });
@@ -65,7 +56,7 @@ const creations = createServer(async (req, res) => {
     const job = JSON.parse(body) as { id: string };
     const fd = openSync(join(workDir, job.id, "reduce-noise.video"), "w");
     writeSync(fd, "ftyp");
-    ftruncateSync(fd, COPY); // sparse: no real disk
+    ftruncateSync(fd, COPY);
     closeSync(fd);
     states.set(job.id, { state: "done", file: "reduce-noise.video", bytes: COPY, ms: 1 });
     return json(res, 202, { state: "running" });
@@ -78,7 +69,7 @@ const creations = createServer(async (req, res) => {
 const service = new Service(await freePort(), {
   IMMICH_URL: `http://127.0.0.1:${await listen(immich)}`, CREATIONS_URL: `http://127.0.0.1:${await listen(creations)}`,
   CREATIONS_WORK_DIR: workDir, DATA_DIR: dataDir, GEMINI_API_KEY: "x", RENDER_QUIET_HOURS: "", CREATIONS_CHECK_SECONDS: "0", MEMORIES_CHECK_SECONDS: "0",
-  NODE_OPTIONS: "--max-old-space-size=384", // as docker-compose.yml.j2 (memento_extras_node_heap_mb)
+  NODE_OPTIONS: "--max-old-space-size=384",
 });
 await service.start();
 const rss = () => Number(execFileSync("ps", ["-o", "rss=", "-p", String(service.pid)]).toString().trim()) * 1024;

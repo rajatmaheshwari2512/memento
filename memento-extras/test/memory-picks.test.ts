@@ -1,6 +1,4 @@
-// Themed memories' pure parts: choosing photos (memory-picks.service.ts), what's due and the
-// labels and dates (memory-themes.service.ts), and the calendar helpers (local-date.ts).
-// Run: npm test
+// Themed memories' pure parts: choosing photos, what's due, labels and dates, calendar helpers. Run: npm test
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -67,7 +65,6 @@ test("one per burst and one per duplicate group, the best of each", () => {
 
 test("picks spread across the event, best first in each part", () => {
   const base = Date.parse("2026-10-20T00:00:00Z");
-  // Day 1 has 30 great photos, days 2-4 have 3 ordinary ones each.
   const day1 = Array.from({ length: 30 }, (_, i) => photo({ takenAt: base + i * 600_000, isFavorite: true, rating: 5 }));
   const later = [1, 2, 3].flatMap((d) => [0, 1, 2].map((i) => photo({ takenAt: base + d * 86_400_000 + i * 3_600_000 })));
   const all = [...day1, ...later];
@@ -103,9 +100,9 @@ test("an animation's frames: the best burst, in the order taken, of one shape, f
   const at = (s: number) => Date.parse("2026-10-21T02:30:00Z") + s * 1000;
   const burst = (from: number, count: number, gap: number, over: Partial<Candidate> = {}) =>
     Array.from({ length: count }, (_, i) => photo({ takenAt: at(from + i * gap), fileName: `IMG_${from + i}.jpg`, ...over }));
-  const plain = burst(0, 4, 2); // 0–6 s
+  const plain = burst(0, 4, 2);
   const favourite = burst(100, 5, 1, { isFavorite: true });
-  const sameSecond = [2, 0, 1].map((i) => photo({ takenAt: at(200), fileName: `BURST_${i}.jpg` })); // a phone's burst: one second, named in order
+  const sameSecond = [2, 0, 1].map((i) => photo({ takenAt: at(200), fileName: `BURST_${i}.jpg` }));
   const none = new Set<string>();
   assert.deepEqual(animationFrames([...plain, ...favourite], 0, none).map((c) => c.id), favourite.map((c) => c.id), "the favourite's burst");
   assert.deepEqual(animationFrames(sameSecond, 0, none).map((c) => c.fileName), ["BURST_0.jpg", "BURST_1.jpg", "BURST_2.jpg"]);
@@ -114,7 +111,7 @@ test("an animation's frames: the best burst, in the order taken, of one shape, f
   assert.equal(animationFrames(burst(300, 4, 1), at(301), none).length, 3, "three is enough");
   assert.deepEqual(animationFrames(burst(400, 4, 6), 0, none), [], "more than 5 s apart: not a burst");
   const mixed = burst(500, 4, 1);
-  mixed[2] = { ...mixed[2]!, shape: "3000x4000" }; // turned the other way
+  mixed[2] = { ...mixed[2]!, shape: "3000x4000" };
   assert.deepEqual(animationFrames(mixed, 0, none), [], "two and one and one");
   const withEx = burst(600, 6, 1);
   withEx[3] = { ...withEx[3]!, hiddenPerson: true };
@@ -134,15 +131,12 @@ test("an animation never shows an edited copy or the original it was saved from;
   const at = (s: number) => Date.parse("2026-10-21T02:30:00Z") + s * 1000;
   const none = new Set<string>();
   const shot = (s: number, fileName: string, over: Partial<Candidate> = {}) => photo({ takenAt: at(s), fileName, ...over });
-  // Adjust saved a copy of B (same time, stacked on it): A, B and C would be a burst, but B shows twice.
   const [a, b, c, d] = [shot(0, "IMG_1.jpg"), shot(1, "IMG_2.jpg"), shot(2, "IMG_3.jpg"), shot(3, "IMG_4.jpg")];
   const bEdited = shot(1, "IMG_2-edited.jpg");
   assert.deepEqual(animationFrames([a, bEdited, b, c, d], 0, none).map((x) => x.fileName), ["IMG_1.jpg", "IMG_3.jpg", "IMG_4.jpg"]);
-  // One photo edited twice (Adjust, then an AI edit): nothing left to animate.
   const twice = [shot(10, "IMG_9.jpg"), shot(10, "IMG_9-edited.jpg"), shot(10, "IMG_9-ai-edit-1a2b3c4d.jpg")];
   assert.deepEqual(animationFrames(twice, 0, none), []);
   assert.deepEqual(animationFrames([shot(20, "x-ai-edit-1a2b3c4d.jpg"), shot(21, "y.jpg"), shot(22, "z.jpg")], 0, none), [], "a copy is never a frame");
-  // 36 shots 3.5 s apart (two minutes): the best 12 seconds of it, not a slideshow.
   const series = Array.from({ length: 36 }, (_, i) => shot(100 + i * 3.5, `S_${String(i).padStart(2, "0")}.jpg`, { isFavorite: i === 20 }));
   const frames = animationFrames(series, 0, none);
   assert.ok(frames.length >= 3 && frames.at(-1)!.takenAt - frames[0]!.takenAt <= 12_000, `${frames.length} over ${(frames.at(-1)!.takenAt - frames[0]!.takenAt) / 1000} s`);
@@ -160,7 +154,6 @@ test("Spotlight: photos where the person is the subject score higher", () => {
   assert.ok(chosen.filter((c) => c.people.length === 1).length >= 8);
 });
 
-// A made-up library: home in Pune (photos with a location on 12 days), a trip to Goa.
 const PUNE = { lat: 18.5204, lon: 73.8567 };
 const GOA = { lat: 15.4989, lon: 73.8278 };
 function item(day: string, at: { lat: number; lon: number } | null, hour = 10, id = `i${n++}`): LibraryItem {
@@ -182,7 +175,6 @@ test("a trip: far-away days, with location-less days in between, over once back 
   const found = findTrips([...homeDays(), ...trip, back], PUNE, "2026-10-25");
   assert.equal(found.length, 1);
   assert.deepEqual([found[0]!.first, found[0]!.last, found[0]!.over], ["2026-10-20", "2026-10-23", true]);
-  // Still away (the last far photo yesterday, nothing at home since): not over.
   assert.equal(findTrips([...homeDays(), ...trip], PUNE, "2026-10-24")[0]!.over, false);
 });
 

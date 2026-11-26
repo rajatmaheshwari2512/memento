@@ -1,6 +1,4 @@
-// Night captions (src/scripts/caption-night.ts), run as the timer runs it, against a fake caption
-// model: which photos it picks, in what order, where captions go, and when it stops.
-// Run: npm test
+// Night captions (caption-night.ts) run as the timer runs it, against a fake caption model. Run: npm test
 
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
@@ -18,8 +16,6 @@ const dataDir = mkdtempSync(join(tmpdir(), "memento-extras-night-"));
 const env = { ...process.env, DATA_DIR: dataDir, GEMINI_API_KEY: "unused" };
 const OWNER = randomUUID();
 
-// Four photos: one captioned already, one whose preview is missing, two to caption. Upload
-// times as Immich's database prints them.
 type Photo = { id: string; path: string; uploadedAt: string };
 const photo = (name: string, uploadedAt: string, write = true): Photo => {
   const path = join(dataDir, `${name}.jpg`);
@@ -33,7 +29,6 @@ const missing = photo("missing", "2026-11-05 10:00:00.5+00", false);
 const photos = join(dataDir, "photos.tsv");
 writeFileSync(photos, [done, older, newer, missing].map((p) => [p.id, OWNER, "IMAGE", p.path, p.uploadedAt].join("\t")).join("\n") + "\n");
 
-// The fake model: a caption naming the photo, except for the ones it "can't read".
 const unreadable = new Set<string>();
 let healthy = true;
 const seen: string[] = [];
@@ -69,7 +64,6 @@ const cwd = join(import.meta.dirname, "..");
 const night = (...extra: string[]) =>
   run(process.execPath, ["--disable-warning=ExperimentalWarning", "src/scripts/caption-night.ts", "--photos", photos, ...extra], { env, cwd });
 const later = () => new Date(Date.now() + 3_600_000).toISOString();
-// One night: its log, and the summary line. A failing exit still has its log.
 async function tonight(until = later()): Promise<{ stdout: string; summary: Record<string, unknown>; code: number }> {
   seen.length = 0;
   const result = await night("--llama", llamaUrl, "--until", until).then(
@@ -122,25 +116,22 @@ test("a model that stops answering ends the night, and no photo is blamed for it
 });
 
 test("a photo the model can't read is skipped, goes last, and is left alone after 3 nights; captions never reach the log", async () => {
-  // Night 1: "newer" can't be read, "older" is captioned, "missing" has no preview.
   unreadable.add("newer");
   const first = await tonight();
-  assert.deepEqual(seen, ["newer", "older"]); // newest first; the missing one never reaches the model
+  assert.deepEqual(seen, ["newer", "older"]);
   assert.deepEqual([first.summary.captioned, first.summary.failed, first.summary.stopped], [1, 2, "all done"]);
   assert.doesNotMatch(first.stdout, /SECRET/);
   assert.match(first.stdout, /"error":"unusable reply"/);
   assert.match(first.stdout, /"error":"ENOENT"/);
 
-  // Night 2: "newer" can be read now and is captioned, ahead of the photo that failed too.
   unreadable.clear();
   await tonight();
   assert.deepEqual(seen, ["newer"]);
   const saved = await captions();
   assert.equal(saved.get(newer.id)?.caption, "A photo called newer.");
   assert.equal(saved.get(newer.id)?.model, "Qwen3.5-2B-GGUF:Q4_K_M");
-  assert.equal(saved.get(done.id)?.caption, "Already captioned."); // untouched
+  assert.equal(saved.get(done.id)?.caption, "Already captioned.");
 
-  // Night 3: the missing preview fails a third time; after that it's left alone.
   assert.equal(await count(), "1");
   await tonight();
   assert.equal(await count(), "0");
@@ -152,10 +143,9 @@ test("clean-up: only photos gone from Immich for good lose their caption; a brok
     const { stdout } = await night("--clean-up", "--existing", existing, ...extra);
     return JSON.parse(stdout.trim().split("\n").at(-1)!) as Record<string, unknown>;
   };
-  // "older" is gone for good; every other photo is still in Immich (some trashed or locked: still listed).
   const kept = [done, newer, missing].map((p) => p.id);
 
-  writeFileSync(existing, ""); // a failed export
+  writeFileSync(existing, "");
   const empty = await cleanUp();
   assert.deepEqual([empty.removed, empty.skipped], [false, "the photo list is empty"]);
   writeFileSync(existing, kept.join("\n") + "\n");
@@ -173,8 +163,8 @@ test("clean-up: only photos gone from Immich for good lose their caption; a brok
   const fts = db.prepare("SELECT count(*) AS n FROM captions_fts WHERE captions_fts MATCH 'older'").get() as { n: number };
   const failure = db.prepare("SELECT nights FROM caption_failures WHERE asset_id = ?").get(missing.id) as { nights: number } | undefined;
   db.close();
-  assert.equal(fts.n, 0); // gone from the search index too
-  assert.equal(failure?.nights, 3); // the missing preview's photo is still in Immich: its record stays
+  assert.equal(fts.n, 0);
+  assert.equal(failure?.nights, 3);
 });
 
 test("Memento's own collages and recap videos are never captioned", async () => {

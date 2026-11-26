@@ -1,8 +1,5 @@
-// AI edits without holding images in memory: Gemini's reply read as it arrives, in any shape it
-// comes in; the cap on how big it may get; each edit's files removed whatever happens (and any a
-// crash left, at start); edits refused when the disk is nearly full; the result sent from disk.
-// Runs the real service against a fake Immich and a fake Gemini, so nothing real is called and
-// no edit costs money. Run: npm test
+// AI edits without holding images in memory: streamed replies, size cap, file cleanup, disk-full refusal.
+// Runs the real service against a fake Immich and a fake Gemini. Run: npm test
 
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
@@ -20,17 +17,13 @@ const jpeg = (bytes: number) => {
 };
 const ORIGINAL = jpeg(300_000);
 const PREVIEW = jpeg(100_000);
-const RAW = Buffer.concat([Buffer.from("II*\0"), randomBytes(200_000)]); // a TIFF-based RAW: not for Gemini
+const RAW = Buffer.concat([Buffer.from("II*\0"), randomBytes(200_000)]);
 const HEIC = Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from("ftypheic"), randomBytes(200_000)]);
-const BIG = jpeg(15 * 1024 * 1024); // over MAX_ORIGINAL_BYTES (14 MB)
+const BIG = jpeg(15 * 1024 * 1024);
 const RESULT_A = jpeg(200_000);
 const RESULT_B = jpeg(150_000);
 const OWNER = { id: "11111111-1111-4111-8111-111111111111", name: "Owner", isAdmin: false };
 const PHOTO = "33333333-3333-4333-8333-333333333333";
-// Originals Gemini doesn't get: Immich's preview goes instead. RAW_PHOTO's isn't an image Gemini
-// reads; BIG_PHOTO is over 14 MB by Immich's details, SAYS_SMALL is too but Immich's details say
-// it's small (its size is declared when sent), and SENT_UNDECLARED the same, sent without a
-// declared size (found only as it arrives). HEIC_PHOTO's original goes, by its declared type.
 const RAW_PHOTO = "44444444-4444-4444-8444-444444444444";
 const BIG_PHOTO = "55555555-5555-4555-8555-555555555555";
 const SAYS_SMALL = "66666666-6666-4666-8666-666666666666";
@@ -48,7 +41,7 @@ const immichCalls: string[] = [];
 const COOKIE = "immich_access_token=ownertoken0123456789";
 const b64 = (bytes: Buffer) => bytes.toString("base64");
 
-const sentImages: Buffer[][] = []; // what each request to Gemini carried
+const sentImages: Buffer[][] = [];
 const sentTypes: string[][] = [];
 let immich: Server;
 let gemini: Server;
@@ -57,7 +50,6 @@ let lowDisk: Service;
 const dataDir = mkdtempSync(join(tmpdir(), "memento-extras-stream-"));
 const lowDiskDir = mkdtempSync(join(tmpdir(), "memento-extras-lowdisk-"));
 
-// Writes `body` in small pieces, letting each go before the next.
 async function trickle(res: ServerResponse, body: string, piece = 1000): Promise<void> {
   res.writeHead(200, { "content-type": "application/json" });
   for (let at = 0; at < body.length; at += piece) {
@@ -67,7 +59,6 @@ async function trickle(res: ServerResponse, body: string, piece = 1000): Promise
   res.end();
 }
 
-// Gemini's answer, by a word in the instruction.
 async function answer(text: string, res: ServerResponse): Promise<void> {
   const image = (bytes: Buffer) => ({ type: "image", mime_type: "image/jpeg", data: b64(bytes) });
   if (text.includes("ODDORDER")) {
@@ -86,7 +77,6 @@ async function answer(text: string, res: ServerResponse): Promise<void> {
   if (text.includes("NOTDONE")) return json(res, 200, { status: "in_progress", steps: [{ content: [image(RESULT_A)] }] });
   if (text.includes("NOTJSON")) return void res.writeHead(200).end(`{"status":"completed","steps":[{"content":[{"type":"image","data":"${b64(RESULT_A)}"`);
   if (text.includes("HUGE")) {
-    // Over the cap (100 MB), in a field the service skips: refused, whatever comes after.
     res.writeHead(200, { "content-type": "application/json" });
     res.on("error", () => {});
     res.write(`{"status":"completed","steps":[{"type":"thought","signature":"`);
@@ -142,7 +132,6 @@ before(async () => {
     LIMITS_TIMEZONE: "UTC",
   };
   service = new Service(await freePort(), { ...env, DATA_DIR: dataDir });
-  // Files a crash left behind: gone at start.
   mkdirSync(join(lowDiskDir, "edit-files", "left-by-a-crash"), { recursive: true });
   writeFileSync(join(lowDiskDir, "edit-files", "left-by-a-crash", "result-0"), "x");
   lowDisk = new Service(await freePort(), { ...env, DATA_DIR: lowDiskDir, ADJUST_MIN_FREE_BYTES: String(10 ** 15) });

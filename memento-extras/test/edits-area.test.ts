@@ -1,8 +1,5 @@
-// AI tools: an edit of a highlighted area (the app sends the photo upright and a copy with the
-// area tinted red), sizes, the AI tools switch, edits taking turns, what's logged, and saving
-// the photo the app pasted together (only the highlighted area of the result, on the original).
-// Runs the real service against a fake Immich and a fake Gemini, so nothing real is called
-// and no edit costs money. Run: npm test
+// AI tools: edit of a highlighted area, sizes, the AI tools switch, turns, logging, saving the pasted photo.
+// Runs the real service against a fake Immich and a fake Gemini. Run: npm test
 
 import assert from "node:assert/strict";
 import { mkdtempSync, readdirSync, rmSync } from "node:fs";
@@ -13,7 +10,6 @@ import { after, before, test } from "node:test";
 import { EDITS_AT_ONCE } from "../src/constants/edits.constants.ts";
 import { call as callService, freePort, json, listen, readBody, Service, type CallOptions } from "./helpers.ts";
 
-// A JPEG whose frame header says width × height (all the service reads of it).
 const jpeg = (width: number, height: number, fill = 7) =>
   Buffer.from([
     0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00,
@@ -21,21 +17,21 @@ const jpeg = (width: number, height: number, fill = 7) =>
     ...new Array<number>(60).fill(fill), 0xff, 0xd9,
   ]);
 const ORIGINAL = jpeg(4080, 3072, 1);
-const PHOTO = jpeg(3072, 2313, 2); // the app's upright copy
+const PHOTO = jpeg(3072, 2313, 2);
 const MARK = jpeg(1536, 1157, 3);
 const RESULT = jpeg(4096, 3088, 4);
 const OWNER = { id: "11111111-1111-4111-8111-111111111111", name: "Owner", isAdmin: true };
 const OTHER = { id: "22222222-2222-4222-8222-222222222222", name: "Other", isAdmin: false };
-const PHONE_PHOTO = "33333333-3333-4333-8333-333333333333"; // 4080×3072
-const SMALL_PHOTO = "55555555-5555-4555-8555-555555555555"; // 1600×1200
-const CROPPED_PHOTO = "66666666-6666-4666-8666-666666666666"; // 4080×3072, cropped in Immich to 2000×1500
-const UNSIZED_PHOTO = "77777777-7777-4777-8777-777777777777"; // 4080×3072, stored sideways; Immich gives no shown size
-const HUGE_PHOTO = "88888888-8888-4888-8888-888888888888"; // 10,001×10,000: over 100 MP
-const LONG_PHOTO = "99999999-9999-4999-8999-999999999999"; // 12,001×1,000: over 12,000 px on the longer side
-const UNSIZED_HUGE = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"; // 11,000×10,000, and Immich gives no shown size
-const LIMIT_PHOTO = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"; // 12,000×8,333: just inside both
-const CROPPED_HUGE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"; // 20,000×15,000, cropped in Immich to 4000×3000
-const RAW_PHOTO = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"; // 6000×4000, a RAW file
+const PHONE_PHOTO = "33333333-3333-4333-8333-333333333333";
+const SMALL_PHOTO = "55555555-5555-4555-8555-555555555555";
+const CROPPED_PHOTO = "66666666-6666-4666-8666-666666666666";
+const UNSIZED_PHOTO = "77777777-7777-4777-8777-777777777777";
+const HUGE_PHOTO = "88888888-8888-4888-8888-888888888888";
+const LONG_PHOTO = "99999999-9999-4999-8999-999999999999";
+const UNSIZED_HUGE = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const LIMIT_PHOTO = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const CROPPED_HUGE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+const RAW_PHOTO = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const COPY = "44444444-4444-4444-8444-444444444444";
 const OWNER_COOKIE = "immich_access_token=ownertoken0123456789";
 const OTHER_COOKIE = "immich_access_token=othertoken0123456789";
@@ -171,15 +167,12 @@ test("a highlighted edit: Gemini gets the app's upright photo, then the marked c
   assert.match(sent!.text, /second attached image .* tinted red/);
   assert.match(sent!.text, /change only the highlighted area/);
   assert.match(sent!.text, /Instruction: remove the car$/);
-  // Immich's original (possibly stored sideways with a rotation tag) isn't what's sent.
   assert.deepEqual(immichCalls.filter((c) => c.endsWith("/original")), []);
 
-  // "Edit more" with a highlight: the earlier result (upright already) and the new mark.
   const more = await areaEdit({ fromEditId: made.body.editId, photo: undefined });
   assert.equal(more.status, 201, JSON.stringify(more.body));
   assert.deepEqual(geminiCalls[1]!.images.map((i) => i.bytes), [RESULT, MARK]);
 
-  // Without a mark (POST /edits): Immich's original, one image, the usual guidance.
   await edit({});
   assert.deepEqual(geminiCalls[2]!.images.map((i) => i.bytes), [ORIGINAL]);
   assert.doesNotMatch(geminiCalls[2]!.text, /tinted red/);
@@ -194,7 +187,6 @@ test("sizes are automatic, by the photo: 4K over ~5 MP, else 2K, for every edit;
   assert.equal(await size(areaEdit({})), "4K");
   assert.equal(await size(edit({ assetId: SMALL_PHOTO })), "2K");
   assert.equal(await size(areaEdit({ assetId: SMALL_PHOTO })), "2K");
-  // By the photo as shown (Immich's crop), as the apps price it: 2000×1500 is 2K.
   assert.equal(await size(edit({ assetId: CROPPED_PHOTO })), "2K");
   await setFlags({ gemini: { allow4k: false } });
   assert.equal(await size(areaEdit({})), "2K");
@@ -260,11 +252,7 @@ test("a highlighted edit needs its mark, and its photo unless it's Edit more; ba
   };
   assert.equal((await areaEdit({ mark: big(3.1) })).status, 413);
   assert.equal((await areaEdit({ photo: big(6.1) })).status, 413);
-  // Over the request's cap: refused from the declared size (headers only, the body never sent),
-  // and also when only found while reading.
   assert.equal(await headersOnly("/edits/area", { cookie: OWNER_COOKIE }), 413);
-  // Found only while reading: 413, though the connection may be closed under the upload before
-  // the reply arrives (a refused upload isn't kept open; errors.middleware.ts).
   const chunked = await fetch(`${service.base}/edits/area`, {
     method: "POST",
     headers: { cookie: OWNER_COOKIE, "content-type": "application/json" },
@@ -277,15 +265,12 @@ test("a highlighted edit needs its mark, and its photo unless it's Edit more; ba
     duplex: "half",
   } as RequestInit).then((r) => r.status, () => "reset");
   assert.ok(chunked === 413 || chunked === "reset", `got ${chunked}`);
-  // An app from before /edits/area sends a highlighted edit's images to /edits: told to update.
   const old = await edit({ mark: big(1) });
   assert.equal(old.status, 426);
   assert.match(old.body.error, /update/);
-  // Its type, size and login are checked before any of it is read.
   assert.equal(await headersOnly("/edits", {}, 1024 * 1024), 401);
   assert.equal(await headersOnly("/edits", { cookie: OWNER_COOKIE, "content-type": "text/plain" }, 1024 * 1024), 415);
   assert.equal(await headersOnly("/edits", { cookie: OWNER_COOKIE }), 413);
-  // Besides the images, a /edits request's few fields: no room for a body of brackets.
   const brackets = (junk: string) =>
     fetch(`${service.base}/edits/area`, {
       method: "POST",
@@ -298,8 +283,6 @@ test("a highlighted edit needs its mark, and its photo unless it's Edit more; ba
   assert.deepEqual(readdirSync(join(dataDir, "edit-files")), [], "a refused request's files are removed");
 });
 
-// The reply to a request whose headers declare `length` bytes of JSON that are never sent:
-// refused from the headers alone.
 function headersOnly(path: string, headers: Record<string, string>, length = 13 * 1024 * 1024): Promise<number> {
   return new Promise<number>((resolve, reject) => {
     const sent = request(`${service.base}${path}`, {
@@ -320,7 +303,6 @@ test("AI tools switched off: highlighted edits (before their body is read), pres
   assert.equal(made.status, 201);
   assert.equal((await setFlags({ gemini: { tools: false } })).status, 200);
   geminiCalls.length = 0;
-  // Its headers only, the body never sent: refused first.
   const refused = await new Promise<{ status: number; body: string }>((resolve, reject) => {
     const sent = request(`${service.base}/edits/area`, {
       method: "POST",
@@ -360,7 +342,6 @@ test("an edit whose request was closed while it waited its turn isn't made: no c
   const before = (await call("GET", "/limits", { cookie: OWNER_COOKIE })).body.today.used as number;
   const running = Array.from({ length: EDITS_AT_ONCE }, () => edit({}));
   await new Promise((resolve) => setTimeout(resolve, 50));
-  // One more waits its turn; the person leaves before it comes.
   await new Promise<void>((resolve) => {
     const body = JSON.stringify({ assetId: PHONE_PHOTO, prompt: "left before its turn" });
     const sent = request(`${service.base}/edits`, {
@@ -408,12 +389,10 @@ test("saving a highlighted edit: only the photo the app pasted together, at the 
   assert.equal((await saveArea(id, Buffer.from("not a jpeg at all"))).status, 415);
   assert.deepEqual(readdirSync(join(dataDir, "adjust-uploads")), [], "a refused upload's file is removed");
   assert.equal((await saveArea("not-an-id", PASTED)).status, 404);
-  // Not this photo at its full size (e.g. made from the preview): refused, nothing uploaded.
   uploads.length = 0;
   const small = await saveArea(id, jpeg(1920, 1446));
   assert.equal(small.status, 400);
   assert.equal(uploads.length, 0, "nothing uploaded");
-  // A whole-photo edit isn't pasted.
   const whole = await edit({});
   assert.equal((await saveArea(whole.body.editId, PASTED)).status, 400);
   stacks.length = 0;
@@ -468,7 +447,6 @@ test("very large photos aren't AI-edited: over 100 MP or 12,000 px on the longer
   assert.ok(immichCalls.every((c) => /^GET \/api\/assets\/[0-9a-f-]+$/.test(c)), `only the photos' details were read: ${immichCalls.join(", ")}`);
   assert.deepEqual(geminiCalls, []);
   assert.equal(await usedToday(), before);
-  // Just inside both, or cropped in Immich to well inside them (as the size is chosen): edited.
   assert.equal((await edit({ assetId: LIMIT_PHOTO })).status, 201);
   assert.equal((await areaEdit({ assetId: CROPPED_HUGE })).status, 201);
 });
@@ -484,7 +462,6 @@ test("saving a highlighted edit of a RAW photo: its full-size picture may be up 
     const each = (await areaEdit({ assetId: RAW_PHOTO })).body.editId as string;
     assert.equal((await saveArea(each, jpeg(width, height))).status, 200, `${width}×${height}`);
   }
-  // No shown size from Immich: the original's, either way round, with the same allowance.
   const unsized = (await areaEdit({ assetId: UNSIZED_PHOTO })).body.editId as string;
   assert.equal((await saveArea(unsized, jpeg(3600, 2700))).status, 400, "a little smaller, but sideways and the wrong shape");
   assert.equal((await saveArea(unsized, jpeg(2765, 3672))).status, 200, "upright, 90% of the original");

@@ -1,5 +1,4 @@
-// The creations queue's rules, run in this process against a database of its own: the weekly
-// pick and its limits, the night captions' hours, and the date a creation carries.
+// The creations queue's rules against a database of its own: weekly pick, night hours, a creation's date.
 // Run: npm test
 
 import assert from "node:assert/strict";
@@ -19,7 +18,6 @@ const { itemsFor, proposalFor, proposeCreations, queueWeekly, stampFor } = await
 const { creationsNow } = await import("../src/services/creations-now.service.ts");
 const { cardAssets, propose, queueExtraCard } = await import("../src/services/repositories/creations.repository.ts");
 const { THEME_RANK } = await import("../src/constants/creations.constants.ts");
-// One kind proposed for a memory, as a themed memory's run would.
 const proposeKind = (userId: string, themedMemoryId: number, kind: "collage" | "recap" | "animation" | "cinematic", memory: Parameters<typeof proposalFor>[1], score: number) =>
   propose(userId, themedMemoryId, kind, proposalFor(kind, memory, "trip")!, score);
 const { fitsBeforeQuiet, inQuietHours, markRunDone, rendersMayStart, today } = await import("../src/services/schedule.service.ts");
@@ -61,7 +59,7 @@ test("the night captions' hours, across midnight; a job starts only if it ends b
   assert.equal(inQuietHours(new Date("2026-11-21T00:30:00Z")), true, "06:00");
   assert.equal(inQuietHours(new Date("2026-11-21T01:30:00Z")), false, "07:00");
   assert.equal(inQuietHours(new Date("2026-11-21T12:00:00Z")), false, "17:30");
-  const at2130 = new Date("2026-11-21T16:00:00Z"); // 21:30, half an hour before 22:00
+  const at2130 = new Date("2026-11-21T16:00:00Z");
   assert.equal(fitsBeforeQuiet(26 * 60_000, at2130), true);
   assert.equal(fitsBeforeQuiet(31 * 60_000, at2130), false);
   assert.equal(fitsBeforeQuiet(60_000, new Date("2026-11-21T17:00:00Z")), false, "inside them");
@@ -157,7 +155,6 @@ test("a cinematic photo: the memory's best photo of one or two people (else its 
   assert.deepEqual(inputs.items, [{ id: best.id, image: true }]);
   assert.equal(inputs.stamp.utc, new Date(best.takenAt).toISOString(), "at its photo, among the memory's photos");
   assert.deepEqual(inputs.stamp.gps, { lat: 15.5, lon: 73.8 });
-  // Its place is its own photo's only: another of the memory's photos can be another city.
   const nowhere = photo({ people: [mom] });
   const m2 = memory_(user);
   proposeCreations(user, m2, "trip", { chosen: [photo({ lat: 48.85, lon: 2.35 }), nowhere], quality: new Map() }, 0);
@@ -213,11 +210,9 @@ test("by hand, once: this week's missing kinds in one extra card of their own; t
   const chosen = Array.from({ length: 6 }, (_, i) => photo({ people: i === 2 ? [mom] : [] }));
   const burst = Array.from({ length: 4 }, (_, i) => photo({ takenAt: chosen[1]!.takenAt + 60_000 + i * 1000 }));
   const memoryOf = { chosen, quality: new Map(), library: [...chosen, ...burst], never: new Set<string>() };
-  // This morning's card: made before animations and cinematic photos existed (a collage only).
   const trip = memory(user, `trip:${randomUUID()}`, day, "trip", 5);
   proposeKind(user, trip, "collage", memoryOf, 5);
   assert.equal(queueWeekly(user, day), 1);
-  // A memory made since, its cinematic photo waiting for next Sunday's pick: left alone.
   const later = memory(user, `day:${randomUUID()}`, day, "big_day", 1);
   const waiting = proposeKind(user, later, "cinematic", memoryOf, 1)!;
   const reads: number[] = [];
@@ -294,7 +289,6 @@ test("by hand: a memory that got a job of that kind meanwhile passes its turn to
   const trip = memory(user, `trip:${randomUUID()}`, day, "trip", 5);
   const bigDay = memory(user, `day:${randomUUID()}`, day, "big_day", 1);
   const inputs = proposalFor("animation", memoryOf, "trip")!;
-  // Between reading and saving, the trip (the best-ranked) got an animation of its own.
   proposeKind(user, trip, "animation", memoryOf, 5);
   const made = queueExtraCard(user, [
     { memory: { id: trip, theme: "trip", score: 5 } as any, kind: "animation", inputs },

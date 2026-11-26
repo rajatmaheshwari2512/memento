@@ -1,5 +1,4 @@
-// Adjust's save: the apps send the adjusted photo, and it's saved as a copy with the
-// original's date and place, stacked on top (the same save path as AI edits).
+// Adjust's save: the adjusted photo is saved as a copy with the original's date and place, stacked on top.
 // Runs the real service against a fake Immich. Run: npm test
 
 import assert from "node:assert/strict";
@@ -23,12 +22,10 @@ const OWNER_COOKIE = "immich_access_token=ownertoken0123456789";
 const OTHER_COOKIE = "immich_access_token=othertoken0123456789";
 
 const immichCalls: string[] = [];
-let holdUploads: Promise<void> | null = null; // while set, the fake Immich waits before answering uploads
+let holdUploads: Promise<void> | null = null;
 const uploads: Array<{ filename: string; bytes: Buffer; type: string }> = [];
 const updates: Array<{ id: string; body: Record<string, unknown> }> = [];
 const stacks: string[][] = [];
-// The copy as Immich has it: answered as a "duplicate" (the same bytes saved before), in the
-// trash, and whether Immich refuses to restore it.
 const copy = { duplicate: false, trashed: false, refuseRestore: false };
 let immich: Server;
 let service: Service;
@@ -38,7 +35,6 @@ const dataDir = mkdtempSync(join(tmpdir(), "memento-extras-adjust-"));
 const asset = (id: string, extra: Record<string, unknown> = {}) => ({
   id, type: "IMAGE", ownerId: OWNER.id, isTrashed: false, originalFileName: "beach day.jpg",
   originalMimeType: "image/jpeg", fileCreatedAt: "2024-05-01T10:00:00.000Z", stack: null,
-  // Taken at 02:00 in India: the UTC moment is the evening before.
   localDateTime: "2024-05-02T02:00:00.000Z",
   exifInfo: { exifImageWidth: 8160, exifImageHeight: 6120, dateTimeOriginal: "2024-05-01T20:30:00+00:00", latitude: 15.5, longitude: 73.8 },
   ...extra,
@@ -122,7 +118,6 @@ test("saving: uploads the photo as sent, copies the original's date and place, s
   assert.equal(uploads[0]!.filename, "beach day-edited.jpg");
   assert.equal(uploads[0]!.type, "image/jpeg");
   assert.deepEqual(uploads[0]!.bytes, JPEG);
-  // The original's local time and offset, so the copy is in its time zone and on its day.
   assert.deepEqual(updates, [{ id: COPY, body: { dateTimeOriginal: "2024-05-02T02:00:00.000+05:30", latitude: 15.5, longitude: 73.8 } }]);
   assert.deepEqual(stacks, [[COPY, PHOTO]]);
 });
@@ -164,7 +159,7 @@ test("too large: refused from the declared size, before the photo is read", asyn
       req.destroy();
     });
     req.on("error", reject);
-    req.write(JPEG); // the rest never comes
+    req.write(JPEG);
   });
   assert.equal(status, 413);
   assert.deepEqual(immichCalls, []);
@@ -190,7 +185,7 @@ test("twenty saves at once; the next waits its turn and then saves; no upload fi
   const uploading = () => immichCalls.filter((c) => c === "POST /api/assets").length;
   while (uploading() < 20) await new Promise((resolve) => setTimeout(resolve, 10));
   await new Promise((resolve) => setTimeout(resolve, 100));
-  assert.equal(uploading(), 20); // the 21st is waiting, not refused
+  assert.equal(uploading(), 20);
   release();
   holdUploads = null;
   assert.ok((await Promise.all(saves)).every((r) => r.status === 200));
@@ -204,7 +199,7 @@ test("refused, before the photo is read, when the disk is nearly full", async ()
     IMMICH_URL: immichUrl,
     GEMINI_API_KEY: "test-key-not-real",
     DATA_DIR: lowDir,
-    ADJUST_MIN_FREE_BYTES: String(10 ** 18), // more than any disk has free
+    ADJUST_MIN_FREE_BYTES: String(10 ** 18),
   });
   await low.start();
   try {

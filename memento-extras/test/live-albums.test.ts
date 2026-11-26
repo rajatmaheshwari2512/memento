@@ -1,10 +1,4 @@
-// Tests live albums by running the real service against a fake Immich, so nothing real is
-// touched. Run: npm test
-//
-// The fake Immich has two users (A, an admin, and B), their people, albums and photos,
-// and checks what the real one checks: logins, each API key's permissions, who owns what,
-// and the strict search filter (unknown keys are refused). Search results come 1,000 at a
-// time with a cursor; adding to an album reports per-photo results like Immich does.
+// Live albums, by running the real service against a fake Immich. Run: npm test
 
 import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
@@ -24,15 +18,15 @@ type FakeKey = { id: string; secret: string; userId: string; permissions: string
 const A = { id: randomUUID(), name: "A", isAdmin: true };
 const B = { id: randomUUID(), name: "B", isAdmin: false };
 const [P1, P2, P3, P4, P5] = [randomUUID(), randomUUID(), randomUUID(), randomUUID(), randomUUID()];
-const P9 = randomUUID(); // B's person
+const P9 = randomUUID();
 
 const people = new Map<Person, string>([[P1, A.id], [P2, A.id], [P3, A.id], [P4, A.id], [P5, A.id], [P9, B.id]]);
 const assets = new Map<string, FakeAsset>();
 const albums = new Map<string, FakeAlbum>();
-const keys = new Map<string, FakeKey>(); // by secret
-const forbidden = new Set<string>(); // photos Immich refuses to add (no_permission)
+const keys = new Map<string, FakeKey>();
+const forbidden = new Set<string>();
 const addAttempts = new Map<string, number>();
-const fullAccessKey = "fullaccesskeyfora0123456789"; // a normal API key of A's, for the "not with an API key" test
+const fullAccessKey = "fullaccesskeyfora0123456789";
 
 function asset(owner: string, peopleIn: Person[], takenAt: string, visibility = "timeline"): string {
   const id = randomUUID();
@@ -43,7 +37,7 @@ const a1 = asset(A.id, [P1], "2023-05-01");
 const a2 = asset(A.id, [P2], "2024-03-01");
 const a3 = asset(A.id, [P1, P2], "2024-06-01");
 const a4 = asset(A.id, [P1, P2, P3], "2024-07-01");
-asset(A.id, [P1], "2025-01-01", "hidden"); // a motion photo's video part: never added
+asset(A.id, [P1], "2025-01-01", "hidden");
 const a6 = asset(A.id, [P1, P2], "2023-01-01");
 asset(A.id, [P3], "2024-01-02");
 asset(B.id, [P9], "2024-01-01");
@@ -61,7 +55,6 @@ async function body(req: IncomingMessage): Promise<any> {
 }
 
 
-// Who's calling, and with what: a session (cookie) has every permission, a key only its own.
 function caller(req: IncomingMessage): { userId: string; key?: FakeKey } | null | "revoked" {
   const cookie = req.headers.cookie;
   if (cookie === COOKIE.A) return { userId: A.id };
@@ -85,7 +78,6 @@ function matches(a: FakeAsset, f: any): boolean {
   return true;
 }
 
-// Like Immich v3: no ownerId; the owner is the album user with role "owner".
 const albumJson = (album: FakeAlbum) => ({
   id: album.id, albumName: album.albumName, albumUsers: [{ role: "owner", user: { id: album.ownerId } }],
 });
@@ -185,7 +177,6 @@ after(async () => {
 
 const call = (method: string, path: string, opts: CallOptions = {}) => callService(service.base, method, path, opts);
 
-// Saving starts a fill in the background; wait for a run that finished after `since`.
 async function settled(id: string, since = ""): Promise<any> {
   for (let i = 0; i < 100; i++) {
     const list = (await call("GET", "/live-albums", { cookie: COOKIE.A })).body as any[];
@@ -210,7 +201,6 @@ test("a new live album: creates the album and a limited key, then fills with mat
   assert.deepEqual(keysOf(A.id).map((k) => k.permissions), [["asset.read", "album.read", "albumAsset.create"]]);
   const done = await settled(family);
   assert.equal(done.pausedReason, null);
-  // Any of P1/P2, timeline only: not the hidden one, not B's.
   assert.deepEqual([...album.assets].sort(), [a1, a2, a3, a4, a6].sort());
   assert.equal(done.totalAdded, 5);
 });
@@ -220,13 +210,13 @@ test("all of them in the same photo, minus someone, since a date, on an existing
   assert.equal(res.status, 201, JSON.stringify(res.body));
   coupleLive = res.body.id;
   await settled(coupleLive);
-  assert.deepEqual([...albums.get(couple)!.assets], [a3]); // a4 has P3; a6 is from 2023
+  assert.deepEqual([...albums.get(couple)!.assets], [a3]);
   assert.equal(keysOf(A.id).length, 1, "the same key is reused");
 });
 
 test("a photo removed from the album stays removed; new photos are added", async () => {
   const album = albums.get((await call("GET", "/live-albums", { cookie: COOKIE.A })).body.find((l: any) => l.id === family).albumId)!;
-  album.assets.delete(a1); // the user removes it
+  album.assets.delete(a1);
   const a8 = asset(A.id, [P1], "2025-06-01");
   const res = await call("POST", `/live-albums/${family}/check`, { cookie: COOKIE.A, json: {} });
   assert.equal(res.status, 200);
@@ -274,8 +264,6 @@ test("a photo Immich refuses isn't tried again", async () => {
 test("other users can't see or change your live albums", async () => {
   assert.deepEqual((await call("GET", "/live-albums", { cookie: COOKIE.B })).body, []);
   assert.equal((await call("PUT", `/live-albums/${family}`, { cookie: COOKIE.B, json: { include: [P9] } })).status, 404);
-  // A badly formed change is refused before the album is looked up, whoever's it is: says
-  // nothing about the album.
   const bad = await call("PUT", `/live-albums/${family}`, { cookie: COOKIE.B, json: { include: [] } });
   assert.deepEqual([bad.status, bad.body.error], [400, "Choose at least one person."]);
   assert.equal((await call("DELETE", `/live-albums/${family}`, { cookie: COOKIE.B, json: {} })).status, 404);
@@ -323,13 +311,12 @@ test("the stored key is encrypted, bound to its user, and a tampered one pauses"
   const row = db.prepare("SELECT sealed FROM user_keys WHERE user_id = ?").get(A.id) as { sealed: string };
   for (const k of keysOf(A.id)) assert.ok(!Buffer.from(row.sealed, "base64").toString("latin1").includes(k.secret), "key stored in the clear");
   const bytes = Buffer.from(row.sealed, "base64");
-  bytes[bytes.length - 1]! ^= 0xff; // flip a bit in the ciphertext
+  bytes[bytes.length - 1]! ^= 0xff;
   db.prepare("UPDATE user_keys SET sealed = ? WHERE user_id = ?").run(bytes.toString("base64"), A.id);
   db.close();
   const check = await call("POST", `/live-albums/${coupleLive}/check`, { cookie: COOKIE.A, json: {} });
   assert.equal(check.body.skipped, "key unreadable");
 
-  // Bound to the user: A's sealed key opened as B's fails.
   Object.assign(process.env, { MEMENTO_SECRET: secret, GEMINI_API_KEY: "unused", DATA_DIR: dataDir });
   const box = await import("../src/utils/crypto-box.ts");
   const sealed = box.seal("live-albums api-keys", A.id, "secret-key");

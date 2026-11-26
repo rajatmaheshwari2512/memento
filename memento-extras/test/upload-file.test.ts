@@ -1,8 +1,5 @@
-// A cleaned video's upload to Immich (immich.client.ts uploadFile), sent from its open file in the
-// work folder, against fake Immich servers that answer, refuse before reading it all, drop the
-// connection, or stop reading and never answer. Each must end promptly with the right error, send
-// no more than the file's checked size, read nothing from the file afterwards (it's closed at
-// once), and leave nothing unhandled. Runs in this process. Run: npm test
+// A cleaned video's upload to Immich (uploadFile) against fake Immich servers that answer, refuse, drop or stall.
+// Run: npm test
 
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
@@ -17,15 +14,12 @@ import { listen } from "./helpers.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "upload-file-test-"));
 const VIDEO = join(dir, "reduce-noise.video");
-const SIZE = 32 * 1024 * 1024; // well over what the sockets buffer, so a server that stops reading really stops the upload
+const SIZE = 32 * 1024 * 1024;
 writeFileSync(VIDEO, randomBytes(SIZE));
 
-// Each fake Immich, by how it treats the upload; `received` counts what it read.
 let mode: "answer" | "refuse" | "drop" | "stall" = "answer";
 let received = 0;
 const sockets = new Set<Socket>();
-// A raw server, to control exactly what's read: Node's own HTTP server reads the rest of a body
-// it has answered.
 const raw: Server = createNetServer((socket) => {
   sockets.add(socket);
   socket.on("error", () => {});
@@ -34,15 +28,14 @@ const raw: Server = createNetServer((socket) => {
     if (mode === "refuse" && received === chunk.length) {
       const body = JSON.stringify({ message: "storage full" });
       socket.write(`HTTP/1.1 500 Internal Server Error\r\ncontent-type: application/json\r\ncontent-length: ${body.length}\r\n\r\n${body}`);
-      socket.pause(); // and reads no more
+      socket.pause();
     } else if (mode === "drop" && received > 1024 * 1024) {
       socket.destroy();
     } else if (mode === "stall" && received > 1024 * 1024) {
-      socket.pause(); // never reads more, never answers
+      socket.pause();
     }
   });
 });
-// A real one for the upload that works, checking what arrived.
 let form: { filename: string; type: string; bytes: number } | null = null;
 const http = createHttpServer((req, res) => {
   void (async () => {
@@ -78,9 +71,6 @@ after(() => {
 
 const COOKIE = { name: "cookie", value: "immich_access_token=abc" };
 
-// Uploads the test video to `base` (config.immichUrl is read once, so it's set per call through
-// the module's own copy), `size` of it, giving up after `timeoutMs`. Returns what it threw (or
-// the answer) and how long it took; the file is closed straight after, as the service does.
 async function upload(base: string, size: number, timeoutMs: number): Promise<{ result: unknown; ms: number }> {
   const { config } = await import("../src/config.ts");
   const { uploadFile } = await import("../src/clients/immich.client.ts");
@@ -96,7 +86,7 @@ async function upload(base: string, size: number, timeoutMs: number): Promise<{ 
     await handle.close();
   }
   const ms = Date.now() - started;
-  await new Promise((resolve) => setTimeout(resolve, 200)); // anything left to go wrong, now
+  await new Promise((resolve) => setTimeout(resolve, 200));
   return { result, ms };
 }
 
@@ -109,7 +99,6 @@ test("Immich answering: the whole file sent, as a form Immich reads, and no more
   const whole = await upload(httpUrl, SIZE, 30_000);
   assert.deepEqual(whole.result, { id: "copy-1", status: "created" });
   assert.deepEqual(form, { filename: "trip-reduce-noise.mp4", type: "video/mp4", bytes: SIZE });
-  // A file grown since it was checked: only the checked size goes.
   const part = await upload(httpUrl, 1000, 30_000);
   assert.deepEqual(part.result, { id: "copy-1", status: "created" });
   assert.equal(form!.bytes, 1000);

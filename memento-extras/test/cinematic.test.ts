@@ -1,13 +1,10 @@
-// Cinematic photos' own maths (memento-extras/creations/src/parallax.ts, cinematic.ts): finding
-// the subject in a depth map, filling in behind it, and the 3D move. The depth model and the
-// encoding are checked by building the image and rendering samples (docs/runbooks.md, "Creations").
+// Cinematic photos' own maths (parallax.ts, cinematic.ts): the subject, the fill behind it, and the 3D move.
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { modelSize } from "../creations/src/cinematic.ts";
 import { analyse, drawFrame, fill, layers, marginFor, type Plan, type Plane, readDepth, type Rgb } from "../creations/src/parallax.ts";
 
-// A depth map: far (0.2) everywhere, with a near (0.9) square in the middle.
 function square(w: number, h: number): Plane {
   const data = new Float32Array(w * h);
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) data[y * w + x] = x >= w / 3 && x < (2 * w) / 3 && y >= h / 3 && y < (2 * h) / 3 ? 0.9 : 0.2;
@@ -34,10 +31,8 @@ test("the subject is what's in front of the sharpest depth edges; a flat scene h
   assert.ok(Math.abs(scene.subject - 0.9) < 0.1, `subject ${scene.subject}`);
   assert.ok(Math.abs(scene.focus.x - 0.5) < 0.05 && Math.abs(scene.focus.y - 0.5) < 0.05, "its outline's middle");
   assert.ok(scene.edges > 0.35 && Math.abs(scene.area - 1 / 9) < 0.03);
-  // Faces say where the subject is.
   const withFaces = analyse(square(90, 60), [[0.1, 0.1, 0.2, 0.3]])!.focus;
   assert.ok(Math.abs(withFaces.x - 0.15) < 1e-9 && Math.abs(withFaces.y - 0.2) < 1e-9);
-  // A wall, or a smooth slope (a floor, a landscape): no depth edges.
   assert.equal(analyse({ w: 40, h: 30, data: new Float32Array(1200).fill(0.5) }), null);
   const slope = { w: 40, h: 30, data: Float32Array.from({ length: 1200 }, (_, i) => Math.floor(i / 40) / 30) };
   assert.equal(analyse(slope), null);
@@ -57,7 +52,6 @@ test("the move: the background slides behind a still subject, with no holes and 
   const w = 120;
   const h = 80;
   const depthMap = square(60, 40);
-  // A photo: a red ramp across the background, a blue subject.
   const data = new Uint8Array(w * h * 3);
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
@@ -88,8 +82,6 @@ test("the move: the background slides behind a still subject, with no holes and 
     for (let i = 0; i < w * h; i++) assert.ok(f[i * 3]! + f[i * 3 + 1]! + f[i * 3 + 2]! > 60, "no black holes or torn edges");
   }
   assert.ok(Math.abs(blueMiddle(first) - blueMiddle(last)) < 4, "the subject stays (about) where it is");
-  // The background slides against the drift (to the left: at the frame's left edge, a higher
-  // part of the red ramp comes into view).
   const left = (f: Uint8Array) => f[(40 * w + 5) * 3]!;
   assert.ok(left(last) - left(first) > 3, `the background slides: ${left(first)} → ${left(last)}`);
 });

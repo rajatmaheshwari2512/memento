@@ -1,7 +1,5 @@
-// Reduce noise for videos: the API, the checks before a job, the line (one at a time, a few
-// waiting), the copy saved and stacked like an edited photo, and that it's not a creation. Runs
-// the real service against a fake Immich and a fake creations container (the real container's
-// cleaning is checked by creations/check-reduce-noise.sh). Run: npm test
+// Reduce noise for videos: the API, checks, the line, the saved copy. Runs the real service against a fake
+// Immich and a fake creations container. Run: npm test
 
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
@@ -19,7 +17,6 @@ const OWNER_COOKIE = "immich_access_token=ownertoken0123456789";
 const OTHER_COOKIE = "immich_access_token=othertoken0123456789";
 const id = (n: number) => `${String(n).padStart(8, "0")}-0000-4000-8000-000000000000`;
 
-// The fake library: the owner's videos (and a photo), as Immich v3 describes them.
 const VIDEO = id(1);
 const QUEUE = [id(11), id(12), id(13), id(14), id(15)];
 const SILENT = id(20);
@@ -32,7 +29,7 @@ const ASSETS: Record<string, Record<string, unknown>> = {
   [id(30)]: { type: "IMAGE", originalFileName: "beach.jpg", duration: null },
   [id(31)]: { isTrashed: true },
   [id(32)]: { visibility: "locked" },
-  [id(33)]: { visibility: "hidden" }, // a live photo's video half
+  [id(33)]: { visibility: "hidden" },
   [id(34)]: { ownerId: OTHER.id },
   [id(35)]: { duration: 600_001 },
   [id(36)]: { exifInfo: { fileSizeInByte: 2 * 1024 ** 3 + 1 } },
@@ -49,18 +46,13 @@ const asset = (assetId: string) => ({
 
 const immichCalls: string[] = [];
 const uploads: Array<{ id: string; filename: string; type: string; bytes: Buffer; status: string }> = [];
-// Every copy uploaded, kept across tests as Immich keeps them: the same bytes again are a
-// "duplicate" of the first (even in the trash), as Immich answers.
 const copies = new Map<string, { checksum: string; trashed: boolean }>();
-let uploadFailures = 0; // the next uploads Immich refuses (500)
-let refuseRestore = false; // Immich refuses to restore from the trash
-let assetDelayMs = 0; // Immich slow to describe a video (requests at the same moment)
+let uploadFailures = 0;
+let refuseRestore = false;
+let assetDelayMs = 0;
 const updates: Array<{ id: string; body: Record<string, unknown> }> = [];
 const stacks: string[][] = [];
 
-// The fake creations container: one render at a time (429 otherwise), the copy written as
-// "CLEANED " + the original's bytes. `hold` keeps a render running until released; `unsuitable`
-// answers so for these videos; `busy` makes it say it's busy (a creation rendering).
 const renders: Array<{ id: string; kind: string; video: string; format: string; original: string }> = [];
 const states = new Map<string, Record<string, unknown>>();
 let rendering = 0;
@@ -68,7 +60,7 @@ let mostAtOnce = 0;
 let busy = false;
 let hold: Promise<void> | null = null;
 let release = () => {};
-const unsuitable = new Map<string, string>(); // video → the container's reason
+const unsuitable = new Map<string, string>();
 
 let immich: Server;
 let creations: Server;
@@ -156,7 +148,7 @@ before(async () => {
           states.set(job.id, { state: "done", file: "reduce-noise.video", bytes: 10, ms: 5 });
         }
       } catch {
-        states.set(job.id, { state: "failed", error: "its folder went" }); // the service restarted and cleared it
+        states.set(job.id, { state: "failed", error: "its folder went" });
       } finally {
         rendering--;
       }
@@ -173,7 +165,7 @@ before(async () => {
     CREATIONS_WORK_DIR: workDir,
     GEMINI_API_KEY: "test-key-not-real",
     DATA_DIR: dataDir,
-    RENDER_QUIET_HOURS: "", // none, except in the test of them
+    RENDER_QUIET_HOURS: "",
     CREATIONS_CHECK_SECONDS: "0",
     MEMORIES_CHECK_SECONDS: "0",
   };
@@ -206,7 +198,6 @@ const call = (method: string, path: string, cookie: string | null = OWNER_COOKIE
 const start = (assetId: string, cookie: string | null = OWNER_COOKIE, base = service.base) => call("POST", `/videos/${assetId}/reduce-noise`, cookie, base);
 const status = (jobId: string, cookie = OWNER_COOKIE) => call("GET", `/videos/jobs/${jobId}`, cookie);
 
-// Asks how the job is going until it's done or failed, as the apps do.
 async function finished(jobId: string): Promise<Record<string, unknown>> {
   for (let i = 0; i < 200; i++) {
     const { body } = await status(jobId);
@@ -243,7 +234,6 @@ test("cleans a video: its original to the container, the copy uploaded as the sa
   assert.deepEqual(updates, [{ id: uploads[0]!.id, body: { dateTimeOriginal: "2024-05-01T15:30:00.000+05:30", latitude: 30.1, longitude: 78.2 } }]);
   assert.deepEqual(stacks, [[uploads[0]!.id, VIDEO]]);
   assert.ok(immichCalls.includes(`GET /api/assets/${VIDEO}/original`), "the original, never the playback copy");
-  // The job's folder is gone, and the copy was uploaded from it, never copied anywhere else.
   assert.deepEqual(readdirSync(workDir), []);
   assert.ok(!existsSync(join(dataDir, "outgoing")));
 });
@@ -326,7 +316,6 @@ test("one at a time, three waiting, then busy (503); asking again for a video in
   assert.match(full.body.error, /cleaning other videos/);
   assert.equal(full.body.code, "busy", "for the apps' own words");
   assert.equal((await start(QUEUE[2]!)).body.jobId, jobs[2], "a second tap: the same job");
-  // The first is being cleaned once the container has it; the rest wait.
   for (let i = 0; i < 50 && renders.length === 0; i++) await new Promise((resolve) => setTimeout(resolve, 100));
   assert.deepEqual((await status(jobs[0]!)).body, { jobId: jobs[0], state: "running" });
   for (const jobId of jobs.slice(1)) assert.deepEqual((await status(jobId)).body, { jobId, state: "queued" });
@@ -368,7 +357,6 @@ test("a restart: what was in the line comes back as failed, asking to try again"
 });
 
 test("the night captions' hours: refused at once, saying when to try again", async () => {
-  // Quiet hours from an hour ago to an hour from now (UTC, the limits' default time zone).
   const hhmm = (offsetMinutes: number) => new Date(Date.now() + offsetMinutes * 60_000).toISOString().slice(11, 16);
   const nightData = mkdtempSync(join(tmpdir(), "memento-extras-noise-night-"));
   const night = new Service(await freePort(), { ...env, RENDER_QUIET_HOURS: `${hhmm(-60)}-${hhmm(60)}`, DATA_DIR: nightData });
@@ -384,7 +372,6 @@ test("the night captions' hours: refused at once, saying when to try again", asy
   }
 });
 
-// Asks a service (`base`) about a job until it's done or failed.
 async function finishedOn(base: string, jobId: string): Promise<Record<string, unknown>> {
   for (let i = 0; i < 200; i++) {
     const { body } = await call("GET", `/videos/jobs/${jobId}`, OWNER_COOKIE, base);
@@ -401,14 +388,13 @@ test("cleaned again after its copy was deleted: Immich's duplicate is taken out 
   const first = await finished((await start(video)).body.jobId);
   assert.equal(first.state, "done");
   const copy = first.assetId as string;
-  copies.get(copy)!.trashed = true; // the person deleted the copy
+  copies.get(copy)!.trashed = true;
   stacks.length = 0;
   const again = await finished((await start(video)).body.jobId);
   assert.deepEqual({ state: again.state, assetId: again.assetId }, { state: "done", assetId: copy }, "the same copy, as Immich answers");
   assert.equal(uploads.at(-1)!.status, "duplicate");
   assert.equal(copies.get(copy)!.trashed, false, "restored from the trash");
   assert.deepEqual(stacks, [[copy, video]], "and stacked on top again");
-  // Deleted again, and Immich won't restore it this time: failed, in plain words.
   copies.get(copy)!.trashed = true;
   refuseRestore = true;
   const refused = await finished((await start(video)).body.jobId);
@@ -462,7 +448,7 @@ test("the database failing mid-job: the job ends failed (even if that can't be w
 
 test("requests at the same moment: one job for one video, and never more than one being cleaned and three waiting", async () => {
   holdRenders();
-  assetDelayMs = 200; // each request waits on Immich, so they overlap
+  assetDelayMs = 200;
   const same = await Promise.all([1, 2, 3].map(() => start(MORE[7]!)));
   assert.deepEqual(same.map((r) => r.status), [202, 202, 202]);
   assert.equal(new Set(same.map((r) => r.body.jobId)).size, 1, "one job, whoever asked first");

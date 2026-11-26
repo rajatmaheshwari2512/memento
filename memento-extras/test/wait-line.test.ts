@@ -6,7 +6,6 @@ import { WaitLine } from "../src/utils/wait-line.ts";
 const line = (running: number, waiting: number, timeoutMs = 1000) =>
   new WaitLine({ running, waiting, timeoutMs, tooMany: () => new Error("too many"), tooLong: () => new Error("too long") });
 
-// A job that runs until released.
 function gate() {
   let open!: () => void;
   const opened = new Promise<void>((resolve) => (open = resolve));
@@ -67,7 +66,7 @@ test("waiting too long fails, and the one that gave up doesn't take a place late
   await running;
   const g2 = gate();
   const next = saves.run(() => g2.opened.then(() => "next"));
-  const after = saves.run(async () => "after"); // waits behind `next`, not behind a ghost
+  const after = saves.run(async () => "after");
   g2.open();
   assert.deepEqual(await Promise.all([next, after]), ["next", "after"]);
 });

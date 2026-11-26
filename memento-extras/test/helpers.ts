@@ -16,11 +16,8 @@ export async function freePort(): Promise<number> {
   return port;
 }
 
-// Logins of the two test users, A and B, as a fake Immich sees them.
 export const COOKIE = { A: "immich_access_token=usera0123456789abcdef", B: "immich_access_token=userb0123456789abcdef" };
 
-// A fake llama-server (the caption model). `reply` gets the photo's bytes as text and gives
-// the model's message, or null for a 500. `healthy` false makes /health fail too.
 export function fakeLlama(opts: {
   reply: (image: string) => Record<string, unknown> | null;
   healthy?: () => boolean;
@@ -39,7 +36,6 @@ export function fakeLlama(opts: {
   });
 }
 
-// A fake server's JSON reply.
 export function json(res: ServerResponse, status: number, data?: unknown): void {
   res.writeHead(status, { "content-type": "application/json" }).end(data === undefined ? "" : JSON.stringify(data));
 }
@@ -50,14 +46,11 @@ export async function readBody(req: IncomingMessage): Promise<string> {
   return Buffer.concat(chunks).toString("utf8");
 }
 
-// The real service (src/server.ts) on `port`, with these settings. stop() then start()
-// again restarts it on the same port and data folder.
 export class Service {
   private child: ChildProcess | undefined;
   private readonly port: number;
   private readonly env: Record<string, string>;
   readonly base: string;
-  // Everything it has logged, for the tests that check what's logged (and what isn't).
   logs = "";
 
   constructor(port: number, env: Record<string, string>) {
@@ -66,7 +59,6 @@ export class Service {
     this.base = `http://127.0.0.1:${port}`;
   }
 
-  // The running service's process ID (the memory bench reads its memory).
   get pid(): number | undefined {
     return this.child?.pid;
   }

@@ -1,7 +1,4 @@
-// The creations container's pure parts (memento-extras/creations/src): collage layouts and
-// face-keeping crops, the EXIF block collages carry, the checks on a job, and the quality maths.
-// The rendering itself (vips, ffmpeg) is checked by building the image and rendering samples
-// (docs/runbooks.md, "Creations").
+// The creations container's pure parts: collage layouts and crops, the EXIF block, job checks, quality maths.
 
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -53,7 +50,6 @@ test("crops keep faces in, with a little headroom; without faces, the middle", (
   assert.ok(Math.abs(crop.w / crop.h - 0.5) < 0.01);
   const plain = cropFor(photo, [], tallCell);
   assert.equal(plain.x, Math.round((4000 - plain.w) / 2));
-  // Two faces too far apart for the crop: the bigger one is kept whole.
   const big: Box = [0.05, 0.3, 0.25, 0.6];
   const small: Box = [0.9, 0.3, 0.95, 0.35];
   const both = cropFor(photo, [big, small], tallCell);
@@ -73,7 +69,6 @@ test("the EXIF block: date, time zone and place as Immich reads them", () => {
   assert.ok(text.includes("Exif\0\0II*\0"));
   assert.ok(text.includes("2026:10:20 08:59:59\0") && text.includes("+05:30\0") && text.includes("Memento\0"));
   assert.ok(text.includes("W\0"), "west of Greenwich");
-  // GPS latitude 15° 29' 56.04": three rationals.
   const tiff = block.subarray(10);
   const at = tiff.indexOf(Buffer.from([15, 0, 0, 0, 1, 0, 0, 0]));
   assert.ok(at > 0);
@@ -144,7 +139,7 @@ test("jobs name only files in their own folder, and only sensible values", () =>
   assert.deepEqual(parseJob(noise), noise);
   for (const bad of [
     { ...noise, video: "../video.mov" },
-    { ...noise, video: "video.mp4" }, // not the format it says
+    { ...noise, video: "video.mp4" },
     { ...noise, format: "avi", video: "video.avi" },
     { ...noise, video: undefined },
     { ...noise, video: "video.jpg", format: "jpg" },
@@ -160,7 +155,6 @@ test("reduce noise: the sound in pieces of ~2 minutes whose kept parts crossfade
   for (const seconds of [125, 240, 359.5, 600, 600.4]) {
     const total = Math.round(seconds * rate);
     const pieces = noisePieces(total);
-    // Kept lengths add up to the whole once each join's 2,400-sample crossfade overlaps.
     const kept = pieces.reduce((n, p) => n + p.keepTo - p.keepFrom, 0) - 2_400 * (pieces.length - 1);
     assert.equal(kept, total, `${seconds} s`);
     for (const [i, p] of pieces.entries()) {
@@ -204,7 +198,7 @@ test("reduce noise: what ffprobe says decides the copy's sound; no sound, no pic
 });
 
 test("reduce noise: the sound's WAV is capped a little over 605 s, so a longer sound (whatever its header said) always comes out too long", () => {
-  const limit = 605 * 48_000; // samples: 10 minutes and the leeway
+  const limit = 605 * 48_000;
   for (const channels of [1, 2] as const) {
     const cap = soundCapBytes(channels);
     const header = 64 * 1024;
@@ -270,9 +264,8 @@ function pgm(w: number, h: number, pixel: (x: number, y: number) => number): Uin
 test("an animation keeps only near-identical photos: shaken, brighter or darker is alike; another scene isn't", () => {
   const scene = (seed: number, dx = 0, gain = 1, offset = 0) =>
     parsePnm(pgm(16, 12, (x, y) => Math.max(0, Math.min(255, Math.round(offset + gain * (128 + 90 * Math.sin((x + dx) / (1.5 + seed)) * Math.cos(y / (1 + seed * 0.7) + seed)))))));
-  const burst = [0, 0.3, 0.6, 0.4, 0.8].map((dx, i) => scene(1, dx, 1 - i * 0.05, i * 6)); // a hand's shake, the exposure drifting
+  const burst = [0, 0.3, 0.6, 0.4, 0.8].map((dx, i) => scene(1, dx, 1 - i * 0.05, i * 6));
   for (let i = 1; i < burst.length; i++) assert.ok(alike(burst[i - 1]!, burst[i]!), `frame ${i}`);
-  // Unrelated photos: each its own pattern of light and dark (made up, but fixed).
   const other = (seed: number) => {
     let s = seed * 7919;
     return parsePnm(pgm(16, 12, () => (s = (s * 1103515245 + 12345) % 2147483648) % 256));
@@ -295,7 +288,6 @@ test("quality: sharp edges score high, flat or blurred low; dark and blown out b
   assert.ok(dark.p98 < 70 && dark.brightness < 20);
   const blown = measure(parsePnm(pgm(32, 32, (x) => 240 + (x % 10))));
   assert.ok(blown.p2 > 185);
-  // Colour (P6) is turned to grey by luma.
   const rgb = Buffer.concat([Buffer.from("P6\n2 2\n255\n", "latin1"), Buffer.from([255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255])]);
   assert.deepEqual([...parsePnm(rgb).pixels], [76, 150, 29, 255]);
   assert.throws(() => parsePnm(Buffer.from("P3\n1 1\n255\n0 0 0")));
@@ -310,7 +302,6 @@ test("a tool stopped for time says so; one killed by the system says it most lik
 
 test("a pipeline hands each command's output to the next, and stops them all for time or when one fails", async () => {
   assert.equal((await pipeline([["sh", ["-c", "echo hello"]], ["tr", ["a-z", "A-Z"]]], new Deadline(10_000))).trim(), "HELLO");
-  // An endless producer: stopped with its consumer, never left running or blocked on a full pipe.
   const started = Date.now();
   await assert.rejects(pipeline([["sh", ["-c", "yes"]], ["sleep", ["5"]]], new Deadline(10_000), 300), /took too long/);
   await assert.rejects(pipeline([["sh", ["-c", "yes"]], ["sh", ["-c", "head -c 10 >/dev/null; echo gave up >&2; exit 4"]]], new Deadline(10_000)), /failed \(4\): gave up/);
