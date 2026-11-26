@@ -72,6 +72,8 @@ if [ -n "$bundle_id" ]; then
       echo "MEMENTO_RUNNER_ENTITLEMENTS = Runner/RunnerFreeSigning.entitlements"
     fi
   } > "$src/mobile/ios/Signing.local.xcconfig"
+else
+  rm -f "$src/mobile/ios/Signing.local.xcconfig"
 fi
 
 save_build_inputs
