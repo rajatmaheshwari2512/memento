@@ -6,8 +6,6 @@ immich_dir: /opt/immich
 
 # Originals, uploads, encoded videos, profile pictures, DB dumps.
 immich_upload_location: /opt/immich/library
-# true = refuse to start unless immich_upload_location is really a mount (e.g. a network disk).
-immich_require_mount: false
 # Thumbnails and previews: on the VM's disk, so scrolling is fast.
 immich_thumb_location: /opt/immich/thumbs
 # Postgres: must be on local disk, never a network mount.

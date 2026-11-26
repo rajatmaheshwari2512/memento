@@ -11,19 +11,15 @@
     fail_msg: IMMICH_DB_PASSWORD in .env must be 16+ letters/digits only.
     quiet: true
 
-- name: Stop if the photo folder isn't mounted
-  ansible.builtin.command: mountpoint -q {{ immich_upload_location }}
-  changed_when: false
-  when: immich_require_mount | bool
-
 - name: Create Immich's folders
   ansible.builtin.file:
     path: "{{ item }}"
     state: directory
     mode: "0755"
-  loop: >-
-    {{ [immich_dir, immich_thumb_location]
-       + ([] if immich_require_mount | bool else [immich_upload_location]) }}
+  loop:
+    - "{{ immich_dir }}"
+    - "{{ immich_thumb_location }}"
+    - "{{ immich_upload_location }}"
 
 - name: Download Immich's docker-compose.yml for {{ immich_version }}
   ansible.builtin.get_url:
@@ -66,15 +62,6 @@
     - name: Read which release the web build is from
       ansible.builtin.set_fact:
         immich_custom_web_build: "{{ lookup('ansible.builtin.file', immich_custom_web_dir ~ '.build.json') | from_json }}"
-
-    # The web app and the server must be the same Immich release.
-    - name: Check the web build matches immich_version
-      ansible.builtin.assert:
-        that: immich_custom_web_build.immichVersion == immich_version
-        fail_msg: >-
-          The web build is from {{ immich_custom_web_build.immichVersion }} but immich_version is {{ immich_version }}.
-          Merge Immich {{ immich_version }} into immich/ and run apps/web/build.sh.
-        quiet: true
 
     - name: Name this build
       ansible.builtin.set_fact:

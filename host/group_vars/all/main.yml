@@ -27,7 +27,6 @@ caddy_sites:
 # --- immich ---
 # Photos and videos: a folder on the server's disk.
 immich_upload_location: /opt/immich/library
-immich_require_mount: false
 immich_timezone: "{{ base_timezone }}"
 immich_db_password: "{{ dotenv.IMMICH_DB_PASSWORD | default('') }}"
 # Our build of the web app (AI Edit, Memento Features; apps/web/build.sh). "" = official.
