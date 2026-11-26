@@ -1,6 +1,4 @@
-// People's own Immich keys for work done in the background (live albums, themed memories):
-// made from their login, stored encrypted (crypto-box.ts), and replaced when Immich no longer
-// accepts them. Each feature keeps its own key, with only the permissions it needs.
+// People's own Immich keys for work done in the background (live albums, themed memories): made from their login, stored encrypted (crypto-box.ts), and replaced when Immich no longer accepts them.
 
 import { createApiKey, deleteApiKey } from "../clients/immich.client.ts";
 import type { Credential, User } from "../types/immich.types.ts";
@@ -19,16 +17,13 @@ export function openKey(spec: KeySpec, userId: string, sealed: string): Credenti
   return { name: "x-api-key", value: open(spec.purpose, userId, sealed) };
 }
 
-// Keeps the stored key if it's `current` (made with today's permissions), opens, and Immich
-// still accepts it; else deletes it in Immich (best effort) and makes a new one from the
-// person's login. Returns the new key to store, or null when the old one stays.
+// Keeps the stored key if it's `current` and Immich still accepts it; else replaces it. Returns the new key to store, or null when the old one stays.
 export async function renewKey(user: User, cred: Credential, spec: KeySpec, stored: StoredKey | undefined, current: boolean): Promise<StoredKey | null> {
   if (stored && current) {
     try {
       await spec.check(openKey(spec, user.id, stored.sealed));
       return null;
     } catch {
-      // replaced below
     }
   }
   if (stored) await deleteApiKey(cred, stored.keyId, spec.what).catch(() => {});

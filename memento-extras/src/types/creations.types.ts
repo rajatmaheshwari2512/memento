@@ -1,17 +1,13 @@
-// Creations: collages, recap videos, animations and cinematic photos (services/creations.service.ts,
-// creation-render.service.ts).
+// Creations: collages, recap videos, animations and cinematic photos.
 
 import type { Mood } from "../../creations/src/job.ts";
 
 export type CreationKind = "collage" | "recap" | "animation" | "cinematic";
 
-// Where and when a creation belongs: a collage or recap just before its memory's first photo,
-// so it shows first in the memory and sits at the event in the timeline; an animation at its
-// burst. `local` is the wall-clock time there.
+// Where and when a creation belongs. `local` is the wall-clock time there.
 export type CreationStamp = { local: string; offset: string; utc: string; gps: { lat: number; lon: number } | null };
 
-// What a job makes, chosen when its memory is made (a recap also its music's moods; none in jobs
-// proposed before moods existed).
+// What a job makes, chosen when its memory is made.
 export type JobItem = { id: string; image: boolean; durationMs?: number };
 export type JobInputs = { items: JobItem[]; stamp: CreationStamp; moods?: Mood[] };
 

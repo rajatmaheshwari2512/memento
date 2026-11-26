@@ -1,24 +1,14 @@
-// Calls to the creations container (memento-extras/creations/): its health, rendering a job, and
-// measuring photos' quality, from files already in the job's folder of the shared work folder.
-//
-// A render takes up to minutes, longer than an HTTP request should stay open (Node's fetch gives
-// up waiting for an answer after 300 s), so it's started with one request and then asked about
-// until it's done, failed, or past its time limit.
-//
-// The container is trusted no further than it must be: an answer is read up to 64 KB, its
-// numbers must be numbers, and its error text is cut short before it's logged or stored.
+// Calls to the creations container (memento-extras/creations/): its health, rendering a job, and measuring photos' quality.
 
 import { config } from "../config.ts";
 import type { Quality } from "../types/creations.types.ts";
 import type { RenderJob } from "../../creations/src/job.ts";
 
-// The container is busy with another job (it does one at a time): try later.
+// The container is busy with another job: try later.
 export class CreationsBusy extends Error {}
-// The container didn't answer (down or restarting): try later.
+// The container didn't answer: try later.
 export class CreationsUnreachable extends Error {}
-// The container can't make this job from what it was given (an animation whose photos aren't
-// one burst, a cinematic photo with no clear subject, a video with no sound): trying again won't
-// help. `reason` is the container's own (job.ts NOISE_UNSUITABLE for a video).
+// The container can't make this job from what it was given: trying again won't help. `reason` is the container's own.
 export class RenderUnsuitable extends Error {
   readonly reason: string;
   constructor(reason: string) {
@@ -64,7 +54,7 @@ async function request(method: string, path: string, body: unknown, timeoutMs: n
       method, headers: body === undefined ? {} : { "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body),
       signal: AbortSignal.timeout(timeoutMs),
     });
-    json = await readAnswer(res); // a reply cut short (a reset, the time limit) is no answer either
+    json = await readAnswer(res);
   } catch (error) {
     throw new CreationsUnreachable(`the creations container didn't answer (${error instanceof Error ? error.name : "error"})`);
   }
@@ -93,27 +83,23 @@ export async function renderState(id: string): Promise<"running" | "done" | "fai
   return state === "running" || state === "done" || state === "failed" ? state : "unknown";
 }
 
-// Renders a job and waits for it, for at most `limitMs` (the container stops its own tools at
-// its own limit, a little earlier).
+// Renders a job and waits for it, for at most `limitMs`.
 export async function render(job: RenderJob, limitMs: number): Promise<void> {
   const started = await request("POST", "/render", job, 30_000);
   if (started.status !== 202) throw failed(started);
   const end = Date.now() + limitMs;
   for (let polls = 0; Date.now() < end; polls++) {
-    // Asked after 1 s, 2 s, then every POLL_MS: a collage is done in a second or two.
     await new Promise((resolve) => setTimeout(resolve, Math.min(POLL_MS, 1000 * 2 ** polls)));
     let answer: Answer;
     try {
       answer = await request("GET", `/renders/${job.id}`, undefined, 10_000);
     } catch (error) {
-      if (error instanceof CreationsUnreachable) continue; // a moment's hiccup; asked again until the limit
+      if (error instanceof CreationsUnreachable) continue;
       throw error;
     }
     if (answer.status === 404) throw new Error("the creations container lost the render (it restarted)");
     if (answer.json.state === "done") return;
     if (answer.json.state === "failed") throw failed(answer);
-    // Only an animation (its photos aren't one burst), a cinematic photo (no clear subject) or a
-    // video to clean (no sound, too long…) can be unsuitable; from any other kind it's a failure.
     if (answer.json.state === "unsuitable" && !MAY_BE_UNSUITABLE.has(job.kind)) throw failed(answer);
     if (answer.json.state === "unsuitable") throw new RenderUnsuitable(String(answer.json.error ?? "").slice(0, 300));
   }

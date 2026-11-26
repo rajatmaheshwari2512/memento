@@ -22,8 +22,7 @@ export function send(res: ServerResponse, status: number, body?: unknown): void 
   res.writeHead(status, { "content-type": "application/json; charset=utf-8", "content-length": Buffer.byteLength(json) }).end(json);
 }
 
-// A JSON request's declared type and size, checked before anything else (the login, the body):
-// the type is the cross-site guard (routes/index.ts).
+// A JSON request's declared type and size, checked before anything else.
 export function jsonRequest(req: IncomingMessage, maxBytes = MAX_JSON_BYTES): void {
   const type = (req.headers["content-type"] ?? "").split(";")[0]!.trim().toLowerCase();
   if (type !== "application/json") throw new HttpError(415, "Send the request as JSON (Content-Type: application/json).");
@@ -51,9 +50,7 @@ export async function readJson(req: IncomingMessage, maxBytes = MAX_JSON_BYTES):
   }
 }
 
-// Like readJson, but the top-level strings named in `streamed` (an image in base64, say) go to
-// their sinks as they arrive instead of into memory, and the rest is kept only up to
-// MAX_JSON_BYTES. Streamed strings aren't in the object returned.
+// Like readJson, but the top-level strings named in `streamed` (an image in base64, say) go to their sinks as they arrive instead of into memory. Streamed strings aren't in the object returned.
 export async function readJsonStreamed(
   req: IncomingMessage, maxBytes: number, streamed: ReadonlySet<string>, sink: (name: string) => StringSink,
 ): Promise<Record<string, unknown>> {
@@ -72,8 +69,7 @@ export async function readJsonStreamed(
   return body as Record<string, unknown>;
 }
 
-// An image upload's declared type, if it's one of `allowed`. Checked before anything else,
-// with the declared size, so a wrong or oversized upload is refused before it's read.
+// An image upload's declared type, if it's one of `allowed`.
 export function imageType<T extends ImageMime>(req: IncomingMessage, allowed: readonly T[], maxBytes: number): T {
   const type = (req.headers["content-type"] ?? "").split(";")[0]!.trim().toLowerCase();
   const mime = allowed.find((a) => a === type);
@@ -97,10 +93,8 @@ export async function receiveImage(req: IncomingMessage, mime: ImageMime, maxByt
       }
       yield chunk;
     }
-    if (sniffImage(head) !== mime) throw notType(mime); // shorter than SNIFF_BYTES
+    if (sniffImage(head) !== mime) throw notType(mime);
   };
-  // Created before anything is read: a stream opening the file itself could create it after a
-  // refusal on the first bytes, once the caller had already removed `path`.
   const file = await open(path, "wx", 0o600);
   await pipeline(req, checked, file.createWriteStream());
 }

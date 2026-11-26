@@ -1,14 +1,4 @@
-// The folder shared with the creations container (config.creationsWorkDir). Each creations job
-// has its own folder, named by a UUID, kept until the job's file is uploaded (so a failed upload
-// doesn't throw a finished video away) and removed when the job ends; photo-quality checks get
-// a folder of their own for a moment. Anything else found there at start is a leftover.
-//
-// The container shares the folder (same user), so nothing in it is trusted: a job's folder is
-// checked to be a real folder (not a link the container put in its place) before anything is
-// downloaded into it or taken out of it, downloads never write over what's there
-// (immich.client.ts), and a finished file is taken out through a handle that doesn't follow
-// links and checked to be a plain file of a sane size; a creation's is copied to a private folder
-// the container can't reach before it's uploaded, a cleaned video uploaded from that open file.
+// The folder shared with the creations container (config.creationsWorkDir). Each creations job has its own folder, named by a UUID, removed when the job ends. Anything else found there at start is a leftover.
 
 import { randomUUID } from "node:crypto";
 import { constants, createWriteStream } from "node:fs";
@@ -48,8 +38,7 @@ export async function freshJobFolder(workId: string): Promise<string> {
   return dir;
 }
 
-// Where to download `name` into the work folder `dir`, once `dir` is checked to be a real
-// folder: a link there would send the download somewhere else.
+// Where to download `name` into the work folder `dir`, once `dir` is checked to be a real folder.
 export async function inFolder(dir: string, name: string): Promise<string> {
   if (!(await lstat(dir)).isDirectory()) throw new Error("a work folder isn't a plain folder");
   return join(dir, name);
@@ -61,8 +50,7 @@ export async function removeJobFolder(workId: string | null): Promise<void> {
 
 const outgoing = () => join(config.dataDir, "outgoing");
 
-// Removes every entry of `dir` not in `keep`, one at a time: one that can't be removed is
-// reported and skipped, never a reason to stop. Returns how many went.
+// Removes every entry of `dir` not in `keep`, one at a time. Returns how many went.
 async function clearOut(dir: string, keep: Set<string>, onError: (name: string, error: unknown) => void): Promise<number> {
   const entries = await readdir(dir).catch(() => [] as string[]);
   let removed = 0;
@@ -83,15 +71,13 @@ export async function clearWorkFolder(keep: Set<string>, onError: (name: string,
   return removed + await clearOut(outgoing(), new Set(), onError);
 }
 
-// A job's finished file, opened for reading, and its size, or null if it isn't there as a plain
-// file of at most `maxBytes`. Opened without following a link or waiting on a pipe; only the size
-// it had when opened is ever read (a file still growing can't fill the disk). The caller closes it.
+// A job's finished file, opened for reading, and its size, or null if it isn't there as a plain file of at most `maxBytes`. The caller closes it.
 export async function openOutput(workId: string, name: string, maxBytes: number): Promise<{ handle: FileHandle; size: number } | null> {
   let handle: FileHandle;
   try {
     handle = await open(await inFolder(jobFolder(workId), name), constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   } catch {
-    return null; // missing, or a link (the file, or its folder)
+    return null;
   }
   try {
     const info = await handle.stat();
@@ -104,9 +90,7 @@ export async function openOutput(workId: string, name: string, maxBytes: number)
   return null;
 }
 
-// A job's finished file (openOutput), copied out to a private folder (a creation's: small enough
-// to copy; a cleaned video is uploaded straight from its open file instead). The caller removes
-// the copy.
+// A job's finished file (openOutput), copied out to a private folder. The caller removes the copy.
 export async function takeOutput(workId: string, name: string, maxBytes: number): Promise<string | null> {
   const file = await openOutput(workId, name, maxBytes);
   if (!file) return null;

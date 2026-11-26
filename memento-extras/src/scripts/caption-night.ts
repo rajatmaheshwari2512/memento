@@ -1,8 +1,4 @@
-// Captions for new photos, at night on the main server (FEATURES.md, section 3; DECISIONS.md,
-// "Captions for new photos"; docs/runbooks.md, "Night captions"). Started each night by a
-// timer (host/roles/memento_extras: caption-night.sh), which first lists every photo and its
-// preview from Immich's database and starts the caption model at the lowest CPU priority,
-// with a memory cap.
+// Captions for new photos, at night on the main server. Started each night by a timer (host/roles/memento_extras: caption-night.sh).
 //
 //   node src/scripts/caption-night.ts --photos /work/photos.tsv --clean-up --existing /work/existing.txt [--max-removals N]
 //       removes captions of photos gone from Immich for good (not in the list of every photo
@@ -11,12 +7,7 @@
 //       how many photos wait for a caption, or "off" when switched off
 //   node src/scripts/caption-night.ts --photos /work/photos.tsv --llama http://127.0.0.1:8090 --until <time>
 //       caption them one at a time until <time> (e.g. 2026-11-21T07:00:00+05:30)
-//
-// Order: newest uploads first, but photos that failed on earlier nights go last, and after
-// FAILED_NIGHTS they're left alone (a model that can't read a photo won't on night four).
-// Each caption goes into the database straight away, so Ask finds it and a stopped run loses
-// nothing. Stops at --until, when an admin switches it off (Administration → Settings →
-// Memento Features), or when the model stops answering. Captions are never logged.
+// Order: newest uploads first; photos that failed on earlier nights go last, and after FAILED_NIGHTS are left alone. Each caption goes into the database straight away. Stops at --until, when an admin switches it off (Memento Features), or when the model stops answering.
 
 import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
@@ -54,8 +45,6 @@ if (!args.photos) fail("Usage: node src/scripts/caption-night.ts --photos <tsv> 
 
 const switchedOn = () => getFlags().captions.enabled;
 
-// Photos without a caption: fewest failed nights first, then newest uploads. Never Memento's
-// own creations: collages, recap videos, animations and cinematic photos (creations.service.ts).
 function waiting(): PhotoToCaption[] {
   const done = captionedAssetIds();
   const creations = creationAssetIds();
@@ -73,7 +62,6 @@ if (args["clean-up"]) {
     ? Number(args["max-removals"])
     : Math.max(MIN_REMOVALS, Math.ceil(captionedAssetIds().size * MAX_REMOVED_SHARE));
   if (!Number.isInteger(max) || max < 0) fail("--max-removals must be a whole number");
-  // An empty list means the export failed, not that every photo is gone.
   if (existing.size === 0) {
     log({ event: "captions_cleanup", gone: 0, removed: false, skipped: "the photo list is empty" });
   } else {
@@ -100,7 +88,6 @@ let failed = 0;
 const on = switchedOn();
 const queue = on ? waiting() : [];
 
-// The night's summary, the last line of the log (docs/runbooks.md, "Night captions").
 function finish(stopped: string, exitCode = 0): never {
   const hours = (performance.now() - started) / 3_600_000;
   log({
@@ -111,7 +98,6 @@ function finish(stopped: string, exitCode = 0): never {
   process.exit(exitCode);
 }
 
-// Stopped from outside (systemctl stop): the photo in progress is tried again next night.
 process.on("SIGTERM", () => finish("stopped"));
 
 async function modelAnswers(): Promise<boolean> {
@@ -128,10 +114,8 @@ for (const photo of queue) {
     captioned++;
   } catch (error) {
     failed++;
-    // Only the kind of failure; the error's cause can quote the caption.
     const kind = error instanceof Error ? ((error as { code?: string }).code ?? error.message) : "failed";
     log({ event: "caption_failed", assetId: photo.id, error: kind });
-    // A photo the model can't read is skipped; a model that stopped answering ends the night.
     if (!(await modelAnswers())) finish("the model stopped answering", 1);
     recordCaptionFailure(photo.id, kind);
   }

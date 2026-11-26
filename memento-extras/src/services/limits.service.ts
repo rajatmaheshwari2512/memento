@@ -1,9 +1,4 @@
-// Limits on AI edits: a slot is reserved BEFORE Google is called, in one write-locked
-// transaction, so two edits at the same moment can't both slip under the limit. Failed
-// attempts don't count. The limits themselves are feature flags (flags.service.ts), so an
-// admin can change them in the admin panel; DAILY_LIMIT_PER_USER and MONTHLY_LIMIT_TOTAL are
-// their defaults. An admin can also set one person's daily limit (Memento admin in the app).
-// The edit log is kept by repositories/limits.repository.ts.
+// Limits on AI edits: a slot is reserved before Google is called, in one write-locked transaction; failed attempts don't count. The limits are feature flags (flags.service.ts); DAILY_LIMIT_PER_USER and MONTHLY_LIMIT_TOTAL are their defaults.
 
 import { config } from "../config.ts";
 import { immediately } from "../db/database.ts";

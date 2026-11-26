@@ -1,5 +1,4 @@
-// The record of videos whose noise was reduced, in data.db (noise_jobs: db/migrations.ts, step
-// 12). What it's for: services/reduce-noise.service.ts.
+// The record of videos whose noise was reduced (noise_jobs: db/migrations.ts).
 
 import { database } from "../../db/database.ts";
 import type { NoiseJobRow, NoiseStep } from "../../types/reduce-noise.types.ts";
@@ -32,7 +31,6 @@ export function failNoiseJob(id: string, error: string): void {
   database().prepare("UPDATE noise_jobs SET state = 'failed', step = NULL, error = ?, finished_at = ? WHERE id = ?").run(error, now(), id);
 }
 
-// At start: the line was in memory, so whatever was in it is gone. Returns how many.
 export function failUnfinishedNoiseJobs(error: string): number {
   return Number(database().prepare(
     "UPDATE noise_jobs SET state = 'failed', step = NULL, error = ?, finished_at = ? WHERE state IN ('queued', 'running')",

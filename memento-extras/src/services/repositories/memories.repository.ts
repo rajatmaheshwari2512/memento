@@ -64,9 +64,7 @@ export function recordRunDay(userId: string, day: string): void {
 
 // --- themed memories ---
 
-// What's been made (or skipped) before, for deciding what's due. A theme skipped for too few
-// good photos counts for its cooldown (the same person, the same older big day), but not for
-// the night's limit or the week's Spotlight.
+// What's been made (or skipped) before, for deciding what's due.
 export function history(userId: string, today: string): History {
   const rows = database().prepare(
     "SELECT theme, theme_key, status, person_id, first_day, last_day, made_on FROM themed_memories WHERE user_id = ?",

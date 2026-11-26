@@ -6,7 +6,6 @@ import type { Handler } from "../types/http.types.ts";
 import { readJson, send } from "../utils/http.ts";
 
 export const videosController = {
-  // No body is needed, but it must be sent as JSON: the cross-site guard (routes/index.ts).
   async reduceNoise(req, res, { assetId }) {
     await readJson(req);
     const { user, cred } = await requireUser(req);

@@ -1,5 +1,4 @@
-// Memento's extras service (was ai-edit): starts everything up and shuts it down. The routes
-// are in routes/, what each does in controllers/ and services/.
+// Memento's extras service: starts everything up and shuts it down. Routes are in routes/.
 
 import { createServer } from "node:http";
 import { config } from "./config.ts";
@@ -23,16 +22,15 @@ const server = createServer((req, res) => {
 });
 server.requestTimeout = REQUEST_TIMEOUT_MS;
 
-await initStore(); // also makes DATA_DIR, which the database file needs
-await clearUploads(); // uploads of copies (Adjust, AI edits of an area) a crash left behind
-await clearEditFiles(); // and AI edits' files (the photo, its mark, Gemini's result)
-database(); // opened (and brought up to date) now, so a problem stops the start
-recoverNoiseJobs(); // videos whose noise was being reduced: the line was in memory
+await initStore();
+await clearUploads();
+await clearEditFiles();
+database();
+recoverNoiseJobs();
 startLiveAlbumChecks();
 startThemedMemories();
 startCreationWorker();
 
-// The database copy the nightly backup picks up (db/database.ts).
 function snapshot(): void {
   try {
     snapshotDatabase();
@@ -42,7 +40,6 @@ function snapshot(): void {
 }
 setTimeout(snapshot, config.snapshotFirstSeconds * 1000).unref();
 setInterval(snapshot, 60 * 60_000).unref();
-// Unsaved edit results are deleted after RESULT_TTL_MINUTES (an hour).
 setInterval(() => {
   removeExpiredEdits()
     .then((n) => n > 0 && log({ event: "cleanup", removed: n }))

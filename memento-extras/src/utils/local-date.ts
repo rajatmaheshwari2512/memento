@@ -32,7 +32,6 @@ export function daysBetween(a: string, b: string): number {
 // The instant local midnight starts `day` in `timeZone` (for searches by time taken).
 export function startOfDay(day: string, timeZone: string): number {
   const guess = utcMs(day);
-  // The zone's offset at that moment: what the wall clock reads there, minus UTC.
   const offset = (at: number) => {
     const p = new Intl.DateTimeFormat("en-CA", {
       timeZone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
@@ -41,7 +40,7 @@ export function startOfDay(day: string, timeZone: string): number {
     return Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"), get("second")) - at;
   };
   const first = guess - offset(guess);
-  return guess - offset(first); // a second pass settles days when the offset changes (summer time)
+  return guess - offset(first);
 }
 
 // "2026-10" for any day in October 2026.
@@ -74,7 +73,6 @@ export function previousMonth(day: string): string {
 // How far apart two days' dates are within a year, ignoring the year (0–183): the distance
 // to an anniversary. 29 February counts as 28 February.
 export function daysFromAnniversary(day: string, other: string): number {
-  // Both dates placed in the same ordinary year (2001), compared both ways round the year end.
   const inCommonYear = (d: string) => utcMs(`2001-${d.slice(5) === "02-29" ? "02-28" : d.slice(5)}`);
   const diff = Math.abs(inCommonYear(day) - inCommonYear(other)) / DAY_MS;
   return Math.round(Math.min(diff, 365 - diff));

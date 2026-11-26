@@ -1,21 +1,4 @@
-// Ask Photos: a question in plain English → matching photos (FEATURES.md section 4).
-//
-//   1. The trained reader (ask-reader.service.ts) picks out people, dates, places, videos and
-//      favourites. If it's off, slow or down, the question goes to Immich's search as it is.
-//   2. Immich's own search runs with those as filters, plus the leftover words for its
-//      search model ("beach"), as the asking user. So it sees exactly what the user's own
-//      Immich search would: their photos and their timeline partners', never trashed,
-//      archived or hidden ones.
-//   3. The captions (repositories/captions.repository.ts) are searched for the leftover
-//      words too. Only the user's own photos' captions are searched, and every match goes
-//      back through Immich with the same filters, so a deleted or filtered-out photo never
-//      shows up.
-//   4. The two lists are merged: a photo found by both ranks first.
-//   5. A place in the asker's own photos ("last time in goa", ask-places.service.ts): the
-//      photos taken there come first, searched the same way (or by date when nothing else is
-//      asked), then the usual matches, so photos without a location aren't lost.
-//
-// Nothing is sent outside our servers, and the question isn't logged.
+// Ask Photos: a question in plain English → matching photos. The trained reader picks out people, dates, places, videos and favourites; Immich's search and the captions are searched for the rest, and the two lists are merged. Nothing is sent outside our servers, and the question isn't logged.
 
 import { listPeople, searchMetadata, searchSmart } from "../clients/immich.client.ts";
 import { ASK_OFF, CAPTION_RESULTS, DATED_CAPTIONS, DATE_SORTED_SMART, IDS_PER_SEARCH, PAGE, PEOPLE_CACHE_MS, RRF_K, SMART_RESULTS } from "../constants/ask.constants.ts";
@@ -30,8 +13,7 @@ import type { AssetJson, Credential, User } from "../types/immich.types.ts";
 import { HttpError } from "../utils/http-error.ts";
 import { log } from "../utils/http.ts";
 
-// The user's people, for a minute, so typing a few questions in a row doesn't re-read
-// 800 face groups each time.
+// The user's people, cached for a minute.
 const peopleCache = new Map<string, { people: Person[]; expires: number }>();
 
 async function peopleOf(cred: Credential, userId: string): Promise<Person[]> {
@@ -52,8 +34,6 @@ function filterOf(plan: Plan): Filter {
   return filter;
 }
 
-// Plus the dates: one range is a plain condition; several (every Christmas) become `or`
-// branches.
 function withDates(filter: Filter, ranges: Instants[]): Filter {
   if (ranges.length === 1) return { ...filter, takenAt: ranges[0] };
   if (ranges.length > 1) return { ...filter, or: ranges.map((takenAt) => ({ takenAt })) };
@@ -69,10 +49,7 @@ function dateOrder(order: "newest" | "oldest") {
   };
 }
 
-// Caption matches, through Immich with the plan's other filters. The list of IDs takes
-// Immich's only `or`, so several date ranges (every Christmas) are checked here, on each
-// photo's date; one range goes to Immich as usual. Best word match first, or with `order`,
-// by date: then every match is asked for, and Immich sorts each batch.
+// Caption matches, through Immich with the plan's other filters. Best word match first, or with `order`, by date.
 async function captionMatches(
   cred: Credential, userId: string, words: string[], filter: Filter, ranges: Instants[], order: Plan["order"],
 ): Promise<AssetJson[]> {
@@ -92,15 +69,11 @@ async function captionMatches(
   const batches: string[][] = [];
   for (let i = 0; i < ids.length; i += IDS_PER_SEARCH) batches.push(ids.slice(i, i + IDS_PER_SEARCH));
   const { compare, orderBy } = dateOrder(order);
-  // Each batch's first page holds its newest (or oldest); local date checks need a longer page.
   const pages = await Promise.all(batches.map((batch) => search(batch, { orderBy, size: local.length > 0 ? 1000 : SMART_RESULTS })));
   return pages.flatMap((p) => p.items).filter(inRange).sort(compare).slice(0, SMART_RESULTS);
 }
 
-// Asked for the latest or earliest ("the last time I was at the beach"): the confident
-// matches come first, sorted by date. Those are the photos whose caption has every word or,
-// when none does, the AI search's best 50 (further down, its matches stop being reliable).
-// The rest follow, best match first.
+// Asked for the latest or earliest ("the last time I was at the beach"): the confident matches come first, sorted by date, then the rest, best match first.
 function byDate(order: "newest" | "oldest", merged: AssetJson[], smart: AssetJson[], captions: AssetJson[]): AssetJson[] {
   const confident = new Set((captions.length > 0 ? captions : smart.slice(0, DATE_SORTED_SMART)).map((a) => a.id));
   const sorted = merged.filter((a) => confident.has(a.id)).sort(dateOrder(order).compare);
@@ -119,18 +92,15 @@ export function fuse(lists: AssetJson[][]): AssetJson[] {
   return [...scores.values()].sort((a, b) => b.score - a.score || a.first - b.first).map((e) => e.asset);
 }
 
-// Checked first by the route: when off, nothing is read from Immich.
 export function requireAskPhotos(): void {
   if (!getFlags().askPhotos.enabled) throw new HttpError(403, ASK_OFF);
 }
 
-// One search: `text` for the search model, `words` for the captions, `filter` with the dates
-// and `base` without them (captionMatches checks several date ranges itself).
+// One search: `text` for the search model, `words` for the captions, `filter` with the dates and `base` without them.
 type Search = { text: string; words: string[]; filter: Filter; base: Filter; ranges: Instants[]; order: Plan["order"]; language: string };
 type Ranked = { assets: AssetJson[]; counts: { smart?: number; captions?: number } };
 
-// Ranked by the search model and the captions. One page: further down, matches stop being
-// relevant.
+// Ranked by the search model and the captions. One page.
 async function ranked(cred: Credential, userId: string, s: Search): Promise<Ranked> {
   const [smart, captions] = await Promise.all([
     searchSmart(cred, { query: s.text, language: s.language, filter: s.filter, size: SMART_RESULTS }),
@@ -154,23 +124,19 @@ async function byDateOnly(cred: Credential, plan: Plan, filter: Filter): Promise
 
 export async function ask(user: User, cred: Credential, { question, timeZone, language, cursor }: AskRequest): Promise<AskResult> {
   const started = Date.now();
-  // The asker's places are read alongside everything else; null if Immich is slow or can't.
   const places = getFlags().askPhotos.places ? placesOf(cred, user.id) : null;
 
   const ctx = { people: await peopleOf(cred, user.id), accountName: user.name, today: todayIn(timeZone) };
   // The trained reader when it's switched on and answers in time.
   const readerOn = getFlags().askPhotos.trainedReader;
   const fromModel = readerOn ? await readWithModel(question, ctx) : null;
-  // A next page needs the same filters as the first; without the reader they can't be rebuilt.
   if (!fromModel && cursor) throw new HttpError(409, "These results have changed. Search again.");
   const plan = fromModel ?? asItIs(question, readerOn);
   const ranges = (plan.dates?.ranges ?? []).map((r) => rangeInstants(r, timeZone));
   const base = filterOf(plan);
   const filter = withDates(base, ranges);
 
-  // A place in the asker's own photos ("in goa"). Captions rarely name places, so the
-  // place's words leave the caption search.
-  // One that finished after placesOf stopped waiting, while the question was read, still counts.
+  // A place in the asker's own photos ("in goa").
   const index = places ? ((await places) ?? cachedPlaces(user.id)) : null;
   const match = index && plan.places.length > 0 ? await findPlace(cred, plan, index) : null;
   const words = match ? withoutOnce(plan.words, match.words) : plan.words;
@@ -179,8 +145,7 @@ export async function ask(user: User, cred: Credential, { question, timeZone, la
   let nextCursor: string | null = null;
   let counts: Record<string, number | undefined>;
   if (match) {
-    // Taken there first: searched for what else was asked ("beach" in "goa beach pics"), or
-    // with nothing else, by date ("last time in goa" is the newest photo taken there).
+    // Taken there first: searched for what else was asked, or with nothing else, by date.
     const at = { [match.place.kind]: { eq: match.place.name } };
     const rest = withoutOnce(wordsOf(plan.text), match.words).join(" ");
     const thereFilter = { ...filter, ...at };

@@ -1,5 +1,4 @@
-// Ask Photos: what a question is read as, and what /ask answers (services/ask.service.ts,
-// ask-parser.service.ts).
+// Ask Photos: what a question is read as, and what /ask answers.
 
 import type { AssetJson, PersonEntry } from "./immich.types.ts";
 
@@ -30,8 +29,7 @@ export type Person = PersonEntry;
 // Calendar dates in the user's own time zone, both days included, YYYY-MM-DD.
 export type DateRange = { from: string; to: string };
 
-// What code reads in one phrase the trained reader marked (services/ask-parser.service.ts,
-// readPhrase): its dates, the People-page names in it, the other words, and hints.
+// What code reads in one phrase the trained reader marked: its dates, the People-page names in it, the other words, and hints.
 export type PhraseReading = Pick<Plan, "people" | "dates" | "words" | "hints">;
 
 export type Plan = {

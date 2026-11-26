@@ -1,36 +1,5 @@
-// Reduce noise for videos (DECISIONS.md, "Videos: Reduce noise"): a video's sound cleaned up on
-// our own server, saved as a copy like an edited photo (copies.service.ts): named after the
-// original ("trip-reduce-noise.mp4"), with its date and place, stacked on top of it. Not a
-// creation: no album, tag, memory or card. The cleaning is the creations container's
-// (creations/src/noise.ts: DeepFilterNet; the picture copied as it is); this decides who may,
-// when, and in what order.
-//
-//   - Asked for (POST /videos/:assetId/reduce-noise), it's checked at once: the switch, your own
-//     video (not in the trash, the locked folder, or a live photo's hidden half), at most 10
-//     minutes and 2 GB as Immich describes it, a kind of file the copy can be, not the night
-//     captions' hours, free disk, room in the line. It answers with the job's id at once, and
-//     the apps ask how it's going (GET /videos/jobs/:id) while the person keeps browsing.
-//   - One video at a time for everyone, NOISE_LINE.waiting more in line (503 beyond). The line
-//     is in memory, with the person's login, which is never stored: a restart ends what was in
-//     it, and its record (noise_jobs) says so, so the app tells them to try again. Whether the
-//     same video is already in line, and whether there's room, are decided at the moment a job
-//     is added, with nothing awaited in between, so requests at the same moment can't add one
-//     video twice or overfill the line.
-//   - Whatever goes wrong with a job (even its record failing to be written), it ends as failed
-//     and the line moves on; a job its record says is still going but that isn't in the line any
-//     more is answered as failed.
-//   - The night captions' hours: refused, saying when to try again, rather than kept until the
-//     morning (the app asking would be long gone, and the line full all night). One that would
-//     run into them is refused too; so is one still waiting when they come.
-//   - A job waits while the container is busy (a creation being made) or the morning's memories
-//     run is going (schedule.service.ts), up to REDUCE_NOISE_WAIT_SECONDS; no new creation's
-//     render starts while a video waits or is cleaned (creations.service.ts), as a person is
-//     waiting for it.
-//   - When its turn comes the video is checked again (it may have been deleted meanwhile), its
-//     original downloaded into the job's work folder (never into memory), cleaned, and the copy
-//     uploaded straight from the folder, opened as creations' files are (the container isn't
-//     trusted: no link followed, its size checked and never more read), and stacked. The job's
-//     folder and files go whatever happens.
+// Reduce noise for videos: a video's sound cleaned up on our own server, saved as a copy like an edited photo (copies.service.ts), named after the original ("trip-reduce-noise.mp4"). Not a creation: no album, tag, memory or card. The cleaning is the creations container's (creations/src/noise.ts); this decides who may, when, and in what order.
+// Asked for with POST /videos/:assetId/reduce-noise, it answers with the job's id at once, and the apps ask how it's going (GET /videos/jobs/:id). One video at a time for everyone; refused in the night captions' hours.
 
 import { randomUUID } from "node:crypto";
 import { statfs } from "node:fs/promises";
@@ -67,14 +36,12 @@ export function videosWaiting(): boolean {
   return current !== null || line.length > 0;
 }
 
-// At start: the line was in memory, so whatever was in it is gone; its records say so.
 export function recoverNoiseJobs(): void {
   const failed = failUnfinishedNoiseJobs(RESTARTED);
   if (failed > 0) log({ event: "reduce_noise_recovered", failed });
 }
 
-// Starts cleaning one of the person's videos (or, asked again while it's waiting or being
-// cleaned, answers about that job). Everything is checked before it's queued.
+// Starts cleaning one of the person's videos (or, asked again while it's waiting or being cleaned, answers about that job).
 export async function requestReduceNoise(user: User, cred: Credential, assetId: string): Promise<NoiseStatus> {
   requireReduceNoise();
   if (!isUuid(assetId)) throw new HttpError(404, NOT_FOUND);
@@ -86,8 +53,6 @@ export async function requestReduceNoise(user: User, cred: Credential, assetId: 
   if ((video.fileSize ?? 0) > VIDEO_LIMITS.videoBytes) throw new HttpError(413, TOO_BIG);
   requireDaytime();
   await requireSpace(video.fileSize);
-  // From here to the job in line, nothing is awaited: another request for the same video (asked
-  // at the same moment) finds this job, and the line can't fill up meanwhile.
   const same = inLine(user, assetId);
   if (same) return noiseStatus(user, same.id);
   if ((current ? 1 : 0) + line.length >= 1 + NOISE_LINE.waiting) throw new HttpError(503, BUSY, { code: BUSY_CODE });
@@ -104,9 +69,7 @@ function inLine(user: User, assetId: string): QueuedNoiseJob | undefined {
   return [current, ...line].find((job) => job?.user.id === user.id && job.assetId === assetId) ?? undefined;
 }
 
-// How the person's job is going (only theirs). One its record says is still going but that's
-// neither in line nor being cleaned ended without its record being written (the database
-// failing): it failed.
+// How the person's job is going (only theirs).
 export function noiseStatus(user: User, id: string): NoiseStatus {
   const row = isUuid(id) ? noiseJobRow(id) : undefined;
   if (!row || row.user_id !== user.id) throw new HttpError(404, JOB_NOT_FOUND);
@@ -162,8 +125,6 @@ function kick(): void {
   drain().catch((error: unknown) => log({ event: "reduce_noise_worker_failed", error: error instanceof Error ? error.message : String(error) }));
 }
 
-// One job at a time, first come first served. Whatever goes wrong with one (its record failing to
-// be written included), it's failed and the next one's turn comes.
 async function drain(): Promise<void> {
   if (draining) return;
   draining = true;
@@ -189,9 +150,7 @@ async function drain(): Promise<void> {
   }
 }
 
-// Waits until the container may take the job: free, no memories run going, not the night (see
-// rendersMayStart). Throws what to tell the person if the switch went off, the night came, or
-// it waited too long.
+// Waits until the container may take the job. Throws what to tell the person if the switch went off, the night came, or it waited too long.
 async function waitForTurn(job: QueuedNoiseJob): Promise<void> {
   for (;;) {
     requireReduceNoise();
@@ -209,8 +168,7 @@ async function waitForTurn(job: QueuedNoiseJob): Promise<void> {
   }
 }
 
-// Cleans one job's video and saves the copy; its folder is gone by the time it's marked done or
-// failed. Throws what went wrong (drain fails the job).
+// Cleans one job's video and saves the copy. Throws what went wrong.
 async function clean(job: QueuedNoiseJob): Promise<void> {
   const started = Date.now();
   let copyId: string;
@@ -246,8 +204,6 @@ async function cleanAndSave(job: QueuedNoiseJob): Promise<string> {
   }
 }
 
-// The container cleans it; if another job took the container while this one downloaded (the
-// memories run's photo checks), it waits its turn again.
 async function renderInTurn(job: QueuedNoiseJob, request: NoiseJob): Promise<void> {
   for (;;) {
     await waitForTurn(job);
@@ -259,8 +215,7 @@ async function renderInTurn(job: QueuedNoiseJob, request: NoiseJob): Promise<voi
   }
 }
 
-// Records the job as failed, with what the person is told. Never throws: if even that can't be
-// written, it's logged, and noiseStatus answers "failed" from the line.
+// Records the job as failed, with what the person is told. Never throws.
 function fail(job: QueuedNoiseJob, error: unknown, ms?: number): void {
   const text = (e: unknown) => (e instanceof Error ? e.message : String(e));
   log({ event: "reduce_noise_failed", job: job.id, user: job.user.id, asset: job.assetId, ...(ms === undefined ? {} : { ms }), error: text(error) });
@@ -271,8 +226,7 @@ function fail(job: QueuedNoiseJob, error: unknown, ms?: number): void {
   }
 }
 
-// What the person is told: the container's reason in their words, a refusal's own message
-// (a download over the limit says so), or that it failed.
+// What the person is told: the container's reason in their words, a refusal's own message, or that it failed.
 function messageFor(error: unknown): string {
   if (error instanceof RenderUnsuitable) return Object.hasOwn(UNSUITABLE, error.reason) ? UNSUITABLE[error.reason]! : FAILED;
   if (error instanceof HttpError) return error.status === 413 ? TOO_BIG : error.message;

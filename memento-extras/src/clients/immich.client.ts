@@ -1,7 +1,4 @@
-// Talks to Immich's API as the calling user, with that user's own login.
-// Every request is built here from scratch: only the login credential is passed on,
-// never the caller's other headers or query strings (Immich also accepts share-link
-// keys and API keys in query strings, and those must not ride along).
+// Calls Immich's API as the calling user, with that user's own login.
 
 import { randomUUID } from "node:crypto";
 import { createWriteStream } from "node:fs";
@@ -32,17 +29,15 @@ async function call(
     headers["content-type"] = "application/json";
     payload = JSON.stringify(body.json);
   } else if (body) {
-    payload = body.form; // fetch sets the multipart content-type itself
+    payload = body.form;
   }
   let res: Response;
   try {
     res = await fetch(config.immichUrl + path, { method, headers, body: payload, signal: AbortSignal.timeout(timeoutMs) });
   } catch (error) {
-    // Never the query: it can hold what the user typed (a place's name).
     console.error(JSON.stringify({ event: "immich_unreachable", path: path.split("?")[0], error: String(error) }));
     throw new ImmichUnreachable(502, "Couldn't reach Immich. Try again in a moment.");
   }
-  // A stored key (background work) that Immich no longer accepts, or that lacks a permission.
   if (cred.name === "x-api-key" && (res.status === 401 || res.status === 403)) {
     await res.body?.cancel();
     throw new KeyRejected();
@@ -50,11 +45,10 @@ async function call(
   return res;
 }
 
-// Immich didn't answer (down, restarting, or too slow): nothing was refused.
+// Immich didn't answer (down, restarting, or too slow).
 export class ImmichUnreachable extends HttpError {}
 
-// Thrown when Immich refuses a stored key (deleted in Immich, its owner removed, or a
-// permission missing). Sessions get Immich's own answer instead.
+// Thrown when Immich refuses a stored key.
 export class KeyRejected extends Error {}
 
 // Logs Immich's answer and throws a message the user can read (`message`, when given, with
@@ -78,7 +72,6 @@ export async function whoAmI(cred: Credential): Promise<User | null> {
 
 export async function getAsset(cred: Credential, id: string): Promise<Asset> {
   const res = await call(cred, "GET", `/api/assets/${encodeURIComponent(id)}`);
-  // Immich answers 400 for an ID the user can't access, so both mean "not found" here.
   if (res.status === 400 || res.status === 404) throw new HttpError(404, "Photo not found.");
   if (!res.ok) await failed(res, "read the photo's details");
   const a = (await res.json()) as {
@@ -116,10 +109,7 @@ export async function getAsset(cred: Credential, id: string): Promise<Asset> {
   };
 }
 
-// The image that goes to Gemini, downloaded into the edit's folder (never whole in memory).
-// `edited=true` means: with Immich's own crop/rotate applied, if the user made any (otherwise
-// Immich returns the unedited file). The original is preferred; the preview is the fallback (see
-// SOURCE in config.ts).
+// Downloads the image that goes to Gemini into the edit's folder. `edited=true` applies the user's crop/rotate; the original is preferred, the preview is the fallback.
 export async function getSourceImage(cred: Credential, asset: Asset, folder: string): Promise<SourceImage> {
   if (config.source === "auto" && (asset.fileSize ?? 0) <= config.maxOriginalBytes) {
     const original = await tryOriginal(cred, asset, join(folder, "original"));
@@ -147,16 +137,14 @@ async function tryOriginal(cred: Credential, asset: Asset, path: string): Promis
   } catch (error) {
     if (error instanceof HttpError && error.status === 413) {
       await rm(path, { force: true });
-      return null; // too large: use the preview
+      return null;
     }
     throw error;
   }
-  // Trust the bytes, not the header. HEIC can't be sniffed simply, so for it the type
-  // Immich declares is used, but only HEIC/HEIF (on Gemini's list) is accepted that way.
   const mime = sniffImage(await fileHead(path)) ?? (declared === "image/heic" || declared === "image/heif" ? declared : null);
   if (!mime || !GEMINI_INPUT_TYPES.has(mime)) {
     await rm(path, { force: true });
-    return null; // e.g. RAW: use the preview
+    return null;
   }
   return { path, mime, bytes, from: "original" };
 }
@@ -180,7 +168,6 @@ async function saveBody(res: Response, file: string, maxBytes: number, tooLarge:
   return size;
 }
 
-// A file's first bytes: enough to tell an image's type (utils/image-type.ts).
 async function fileHead(path: string): Promise<Buffer> {
   const file = await open(path, "r");
   try {
@@ -192,8 +179,7 @@ async function fileHead(path: string): Promise<Buffer> {
   }
 }
 
-// A new photo or video of the calling user from `data` (bytes in memory, or a file on disk via
-// fs.openAsBlob, which fetch streams without reading it all in).
+// A new photo or video of the calling user from `data` (bytes, or a file on disk).
 export async function uploadBlob(cred: Credential, data: Blob, filename: string, fileCreatedAt: string, what: string, timeoutMs?: number): Promise<Uploaded> {
   const form = new FormData();
   form.set("assetData", data, filename);
@@ -205,15 +191,7 @@ export async function uploadBlob(cred: Credential, data: Blob, filename: string,
   return (await res.json()) as { id: string; status: string };
 }
 
-// The same for a big file on disk (a cleaned video, up to ~2 GB), streamed with Node's own HTTP
-// client: fetch keeps what it sends in memory until it's gone (a 1 GB upload held ~1.1 GB, which
-// would stop this service at its 512 MB cap); node:http reads the next piece only once the last
-// has gone (~90 MB; measured 2026-11-23). The form is written as fetch writes it (the file's name
-// escaped the same way), so Immich reads it the same. `file` is an open file and the size it had
-// when checked (work-folder.ts openOutput): exactly that much is sent, never more. Whatever
-// happens, nothing is read from the file any more once this returns (the caller closes it):
-// Immich refusing (perhaps before it has read it all; the rest isn't sent), the connection
-// dropping, or no answer within `timeoutMs`.
+// The same for a big file on disk, streamed. `file` is an open file and the size it had when checked: exactly that much is sent.
 export async function uploadFile(
   cred: Credential, file: { handle: FileHandle; size: number }, mime: string, filename: string, fileCreatedAt: string, what: string, timeoutMs: number,
 ): Promise<Uploaded> {
@@ -244,10 +222,9 @@ export async function uploadFile(
     },
     signal: AbortSignal.timeout(timeoutMs),
   });
-  req.on("error", () => {}); // reported by `answered` or `sent`; a late one (Immich closing after refusing) is no crash
+  req.on("error", () => {});
   const answered = new Promise<IncomingMessage>((resolve, reject) => req.once("response", resolve).once("error", reject));
-  const sent = pipeline(Readable.from(body()), req).catch((error: unknown) => error); // settles once nothing more is read
-  // Stops sending, and waits until nothing more is read from the file.
+  const sent = pipeline(Readable.from(body()), req).catch((error: unknown) => error);
   const stop = async () => {
     req.destroy();
     await sent;
@@ -270,7 +247,7 @@ export async function uploadFile(
       }
       return await failed(res, what);
     } finally {
-      await stop(); // refused, perhaps before it was all sent: the rest isn't sent
+      await stop();
     }
   }
   await sent;
@@ -288,8 +265,7 @@ export async function restoreFromTrash(cred: Credential, ids: string[]): Promise
   return true;
 }
 
-// Edited copies have no photo metadata, so the original's date (with its time zone) and place
-// are copied over. Without this the copy would show up under today's date.
+// Copies the original's date, time zone and place onto an edited copy.
 export async function copyDateAndPlace(cred: Credential, id: string, from: Asset): Promise<void> {
   const date = from.dateTimeOriginal === null ? from.fileCreatedAt : localDateWithOffset(from.dateTimeOriginal, from.localDateTime);
   const update: Record<string, unknown> = { dateTimeOriginal: date };
@@ -301,21 +277,15 @@ export async function copyDateAndPlace(cred: Credential, id: string, from: Asset
   if (!res.ok) await failed(res, "copy the date and place");
 }
 
-// Stacks the edit on top of the original. If the original is already in a stack (an
-// earlier edit), the stack's top photo is used instead: Immich then merges the whole
-// old stack into the new one. Passing the original itself would pull it out of the old
-// stack and leave the earlier edit on its own (tested against Immich v3.4.1).
+// Stacks the edit on top of the original.
 export async function stackOnTop(cred: Credential, editId: string, original: Asset): Promise<void> {
   const other = original.stackPrimaryAssetId ?? original.id;
-  if (other === editId) return; // already done by an earlier attempt
+  if (other === editId) return;
   const res = await call(cred, "POST", "/api/stacks", { json: { assetIds: [editId, other] } });
   if (!res.ok) await failed(res, "stack the edit with the original");
 }
 
-// --- Live albums (services/live-albums.service.ts) ---
-
-// An Immich API key for the user whose login is `cred`. Immich returns the secret only once.
-// `what` names its use in the message the user sees if Immich refuses.
+// An Immich API key for the user whose login is `cred`. `what` names its use in the message shown if Immich refuses.
 export async function createApiKey(cred: Credential, name: string, permissions: string[], what = "live albums"): Promise<NewApiKey> {
   const res = await call(cred, "POST", "/api/api-keys", { json: { name, permissions } });
   if (!res.ok) await failed(res, `create a key for ${what}`);
@@ -323,7 +293,6 @@ export async function createApiKey(cred: Credential, name: string, permissions: 
   return { id: body.id, secret: body.secret };
 }
 
-// Best effort: a key that's already gone is fine.
 export async function deleteApiKey(cred: Credential, id: string, what = "live albums"): Promise<void> {
   const res = await call(cred, "DELETE", `/api/api-keys/${encodeURIComponent(id)}`);
   if (!res.ok && res.status !== 400 && res.status !== 404) await failed(res, `delete the ${what} key`);
@@ -363,8 +332,7 @@ export async function addToAlbum(cred: Credential, albumId: string, ids: string[
 
 // --- Ask Photos (services/ask.service.ts) ---
 
-// The user's people (not hidden ones), in Immich's order: favourites and the biggest face
-// groups first. Follows Immich's pages.
+// The user's people (not hidden ones), in Immich's order.
 export async function listPeople(cred: Credential): Promise<PersonEntry[]> {
   const people: PersonEntry[] = [];
   for (let page = 1; page <= 50; page++) {
@@ -377,25 +345,21 @@ export async function listPeople(cred: Credential): Promise<PersonEntry[]> {
   return people;
 }
 
-// The cities, states or countries in the user's photos (and their timeline partners'), as
-// Immich names them: its search suggestions.
+// The cities, states or countries in the user's photos, as Immich names them.
 export async function placeNames(cred: Credential, kind: PlaceKind): Promise<string[]> {
   const res = await call(cred, "GET", `/api/search/suggestions?type=${kind}&includeNull=false`);
   if (!res.ok) await failed(res, "read your places");
   return ((await res.json()) as Array<string | null>).filter((name): name is string => typeof name === "string" && name.trim() !== "");
 }
 
-// Places anywhere in the world whose name, other names ("Bombay") or a close spelling
-// ("banglore") match, best first (Immich's own place data; up to 20). Given up after `timeoutMs`.
+// Places worldwide matching a name, other name or close spelling, best first (up to 20). Given up after `timeoutMs`.
 export async function searchPlaces(cred: Credential, name: string, timeoutMs: number): Promise<PlaceFound[]> {
   const res = await call(cred, "GET", `/api/search/places?name=${encodeURIComponent(name)}`, undefined, timeoutMs);
   if (!res.ok) await failed(res, "look up a place");
   return (await res.json()) as PlaceFound[];
 }
 
-// Immich v3's search with a `filter` object (v3.2+). Smart search ranks by the search
-// model, best first, and has no further pages. `withExif` adds the details the apps' photo
-// grid shows.
+// Immich v3's search with a `filter` object. Smart search returns best first, with no further pages. `withExif` adds the details the apps' photo grid shows.
 export async function searchSmart(cred: Credential, body: SmartSearch): Promise<AssetJson[]> {
   const res = await call(cred, "POST", "/api/search/smart", { json: { ...body, withExif: true } });
   if (!res.ok) await failed(res, "search for photos");
@@ -408,17 +372,13 @@ export async function searchMetadata(
   body: MetadataSearch,
 ): Promise<SearchPage> {
   const res = await call(cred, "POST", "/api/search/metadata", { json: body });
-  // A cursor from an earlier search that no longer fits (the photos changed meanwhile).
   if (res.status === 400 && body.cursor) await failed(res, "search for photos", "These results have changed. Search again.");
   if (!res.ok) await failed(res, "search for photos");
   const out = (await res.json()) as { assets: { items: AssetJson[]; nextCursor?: string | null } };
   return { items: out.assets.items, nextCursor: out.assets.nextCursor ?? null };
 }
 
-// --- Themed memories (services/memories.service.ts, memory-library.service.ts) ---
-
-// Thrown when Immich answered a request with an error: it was refused, so nothing was made
-// (unlike no answer at all, when it may or may not have been).
+// Thrown when Immich answered with an error (the request was refused).
 export class ImmichRefused extends Error {
   readonly status: number;
   constructor(status: number) {
@@ -427,8 +387,7 @@ export class ImmichRefused extends Error {
   }
 }
 
-// Months with photos in the user's own timeline, as Immich's timeline counts them: stacks as
-// one photo, nothing archived, hidden or trashed. With `personId`, that person's photos only.
+// Months with photos in the user's own timeline. With `personId`, that person's photos only.
 export async function timelineMonths(cred: Credential, personId?: string): Promise<Array<{ month: string; count: number }>> {
   const query = new URLSearchParams({ visibility: "timeline", withStacked: "true", ...(personId ? { personId } : {}) });
   const res = await call(cred, "GET", `/api/timeline/buckets?${query}`);
@@ -437,8 +396,7 @@ export async function timelineMonths(cred: Credential, personId?: string): Promi
   return body.map((b) => ({ month: b.timeBucket.slice(0, 7), count: b.count }));
 }
 
-// One month of the user's own timeline, compactly: Immich sends each field as a list. Stacks
-// show as their top photo only. With `personId`, that person's photos only.
+// One month of the user's own timeline, compactly. With `personId`, that person's photos only.
 export async function timelineMonth(cred: Credential, month: string, personId?: string): Promise<TimelineMonth> {
   const query = new URLSearchParams({
     timeBucket: `${month}-01T00:00:00.000Z`, visibility: "timeline", withStacked: "true", withCoordinates: "true", ...(personId ? { personId } : {}),
@@ -448,9 +406,7 @@ export async function timelineMonth(cred: Credential, month: string, personId?: 
   return (await res.json()) as TimelineMonth;
 }
 
-// Every photo matching a search, following Immich's cursor, up to `maxPages` of 1,000. Each
-// page is turned into what the caller keeps (`keep`, null to drop) as it arrives, so the full
-// JSON of thousands of photos is never held at once.
+// Every photo matching a search, following the cursor, up to `maxPages` of 1,000. `keep` turns each page into what the caller keeps (null drops it).
 export async function searchAll<T>(
   cred: Credential, body: Omit<MetadataSearch, "size" | "cursor">, maxPages: number, keep: (asset: AssetJson) => T | null,
 ): Promise<T[]> {
@@ -479,20 +435,15 @@ export async function createMemory(cred: Credential, body: NewMemory): Promise<{
   return { id: memory.id, assets: memory.assets?.length ?? 0 };
 }
 
-// --- Creations (services/creation-render.service.ts, memory-quality.service.ts) ---
-
-// Streams an Immich file (a preview, thumbnail or video's playback copy) to `file`, stopping
-// at `maxBytes`, so a big file is never held in memory and can't fill the disk.
+// Streams an Immich file (a preview, thumbnail or playback copy) to `file`, stopping at `maxBytes`.
 export async function downloadTo(cred: Credential, path: string, file: string, maxBytes: number, timeoutMs = 120_000): Promise<number> {
   const res = await call(cred, "GET", path, undefined, timeoutMs);
   if (!res.ok) await failed(res, "download a photo");
   if (!res.body) throw new HttpError(413, "Too large to use.");
-  // Never onto something already there (saveBody): the shared work folder could hold a planted link.
   return saveBody(res, file, maxBytes, () => new HttpError(413, "Too large to use."));
 }
 
-// Where faces are in a photo, as fractions of its size (Immich's boxes are in the pixels of
-// the image it detected them on, given with them).
+// Where faces are in a photo, as fractions of its size.
 export async function facesOf(cred: Credential, assetId: string): Promise<Array<[number, number, number, number]>> {
   const res = await call(cred, "GET", `/api/faces?id=${encodeURIComponent(assetId)}`);
   if (!res.ok) await failed(res, "read a photo's faces");

@@ -1,18 +1,4 @@
-// By hand, once (scripts/creations-now.ts): this week's new kinds of creation for someone whose
-// Sunday card was made before they existed (animations and cinematic photos, 22 November 2026),
-// instead of waiting for next Sunday.
-//
-// The same proposals as a themed memory makes (creations.service.ts) for the kinds this week's
-// cards don't have, over the memories made this week (and, for an animation, the last
-// ANIMATION_DAYS if none of this week's has a burst); the best of each kind (ranked as the weekly
-// pick ranks) is queued, through the normal queue (its room per person and in all, quiet hours
-// and checks), in one extra card of its own that holds only these creations, shown from today
-// for CARD_SHOW_DAYS.
-//
-// Every photo is read first and nothing is saved until the end, when the proposals and the card
-// are saved together: a run that fails part-way (Immich down) leaves no trace and can simply be
-// run again. It never touches a proposal or job it didn't make, follows the creations switches,
-// and once a person has an extra card this week it does nothing more.
+// By hand, once (scripts/creations-now.ts): this week's new kinds of creation for someone whose Sunday card was made before they existed. Proposes as a themed memory does and queues the best of each kind through the normal queue, in one extra card. Nothing is saved until the end, so a run that fails part-way can be run again.
 
 import { KINDS_FOR, THEME_RANK, WEEKLY } from "../constants/creations.constants.ts";
 import { immediately } from "../db/database.ts";
@@ -36,9 +22,7 @@ export type NowResult =
   | { done: false; reason: "creations off" | "already made this week" | "nothing missing" | "queue full" | "no working key" }
   | { done: true; memoriesRead: number; proposed: number; queued: number; card: number | null };
 
-// Reads a memory's photos from Immich with the person's own key, as the day's run read them
-// (memories.service.ts): everything from its days or of its Spotlight's person, stacked photos
-// too, with the quality measured for them (so an animation leaves out blurred frames).
+// Reads a memory's photos from Immich with the person's own key, as the day's run read them (memories.service.ts).
 function fromImmich(userId: string): ReadMemory | null {
   const key = readKey(userId);
   if ("reason" in key) return null;
@@ -89,8 +73,6 @@ export async function creationsNow(userId: string, today: string, read?: ReadMem
     await consider(m, ["animation"]);
   }
 
-  // Then saved and queued together, under the write lock (another run can't slip in between).
-  // Checked again under the lock: another run may have made this week's card while this one read.
   const made = immediately(() => (cardSince(userId, since, true) ? null : queueExtraCard(userId, proposals, today, THEME_RANK)));
   if (!made) return { done: false, reason: "already made this week" };
   return { done: true, memoriesRead, proposed: proposals.length, queued: made.queued, card: made.card };

@@ -1,5 +1,4 @@
-// Captions: what the model is asked for and what's kept (services/captions.service.ts,
-// repositories/captions.repository.ts).
+// Captions: what the model is asked for and what's kept.
 
 import type { TAGS } from "../constants/captions.constants.ts";
 
@@ -14,9 +13,7 @@ export type CaptionRecord = Caption & {
   model: string;
 };
 
-// A photo to caption, from the list exported from Immich's database (docs/runbooks.md):
-// asset ID, owner ID, type, preview path and, optionally, when it was uploaded; one per
-// line, tab-separated. The preview path is as Immich stores it (/data/thumbs/…).
+// A photo to caption, from the list exported from Immich's database: asset ID, owner ID, type, preview path and optionally when it was uploaded; one per line, tab-separated.
 export type PhotoToCaption = { id: string; ownerId: string; path: string; uploadedAt: string };
 
 export type Reply = {

@@ -1,13 +1,4 @@
-// Reads JSON as it arrives, without ever holding all of it. For each value, by where it sits (its
-// path of keys and indexes), the caller says what to do with it: keep it, skip it, or (a string)
-// stream it to a sink a piece at a time, e.g. a photo in base64 decoded straight into a file
-// (utils/base64-file.ts). Used for an AI edit's request with its images and for Gemini's reply
-// with its image (schemas/edits.schema.ts, clients/gemini.client.ts), so neither is ever whole in
-// memory.
-//
-// Kept strings and numbers are finished by JSON.parse itself, so they come out exactly as
-// JSON.parse would give them. A streamed string's escapes (\/, =, ...) are decoded before
-// they reach the sink, even when one is split between two pieces.
+// Reads JSON as it arrives, without ever holding all of it. For each value, by where it sits (its path of keys and indexes), the caller says what to do with it: keep it, skip it, or (a string) stream it to a sink a piece at a time.
 
 export type JsonPath = ReadonlyArray<string | number>;
 
@@ -46,7 +37,7 @@ const BACKSLASH = 0x5c;
 
 type Frame = {
   kind: "object" | "array";
-  mode: "keep" | "open" | "skip"; // keep: every value kept; open: each value routed; skip: nothing kept
+  mode: "keep" | "open" | "skip";
   value: Record<string, unknown> | unknown[] | null;
   state: "first" | "key" | "colon" | "value" | "after";
   key: string | null;
@@ -56,13 +47,13 @@ type Frame = {
 type Text = {
   role: "key" | "value";
   mode: "keep" | "skip" | "stream";
-  pieces: Buffer[]; // keep: the raw bytes, escapes and all
+  pieces: Buffer[];
   size: number;
   truncated: boolean;
-  escaped: boolean; // keep/skip: the last byte was an escaping backslash
-  sink: StringSink | null; // stream
-  decoder: TextDecoder | null; // stream
-  escape: string | null; // stream: an escape being read (after its backslash)
+  escaped: boolean;
+  sink: StringSink | null;
+  decoder: TextDecoder | null;
+  escape: string | null;
 };
 
 type Scalar = { keep: boolean; text: string };
@@ -94,7 +85,7 @@ class JsonStreamReader {
       } else {
         const c = bytes[i]!;
         if (c === 0x20 || c === 0x0a || c === 0x0d || c === 0x09) i++;
-        else if (isScalarByte(c) && this.#expectsValue()) this.#beginValue(c); // read from here by #inScalar
+        else if (isScalarByte(c) && this.#expectsValue()) this.#beginValue(c);
         else {
           this.#structure(c);
           i++;
@@ -123,7 +114,6 @@ class JsonStreamReader {
 
   #structure(c: number): void {
     const frame = this.#stack.at(-1);
-    // What a kept object or array is made of counts too: a body of empty arrays is no lighter.
     if (frame?.mode !== "skip") this.#keep(1);
     if (!frame) {
       if (this.#done) throw this.#invalid();
@@ -153,7 +143,6 @@ class JsonStreamReader {
     frame.state = "value";
   }
 
-  // What to do with the value starting here.
   #route(): JsonRoute {
     const parent = this.#stack.at(-1);
     if (parent && parent.mode !== "open") return parent.mode;
@@ -182,7 +171,6 @@ class JsonStreamReader {
     this.#scalar = { keep: route !== "skip", text: "" };
   }
 
-  // A value is complete: into its object or array (or it's the whole JSON).
   #add(value: unknown): void {
     const parent = this.#stack.at(-1);
     if (!parent) {
@@ -193,7 +181,6 @@ class JsonStreamReader {
     if (parent.value !== null) {
       if (Array.isArray(parent.value)) parent.value.push(value === SKIPPED ? undefined : value);
       else if (value !== SKIPPED) {
-        // As JSON.parse does: an own property, even for "__proto__".
         Object.defineProperty(parent.value, parent.key!, { value, enumerable: true, writable: true, configurable: true });
       }
     }
@@ -211,7 +198,6 @@ class JsonStreamReader {
     if (this.#kept > this.#options.maxKeptBytes) throw this.#options.tooLarge();
   }
 
-  // A key or a kept or skipped string, from `i`: up to its closing quote, minding escapes.
   #inText(bytes: Buffer, i: number): number {
     const text = this.#text!;
     let j = i;
@@ -241,7 +227,7 @@ class JsonStreamReader {
       if (take < stop - i) text.truncated = true;
       if (take > 0) {
         this.#keep(take);
-        text.pieces.push(Buffer.from(bytes.subarray(i, i + take))); // a copy: the chunk isn't held
+        text.pieces.push(Buffer.from(bytes.subarray(i, i + take)));
         text.size += take;
       }
     }
@@ -266,7 +252,6 @@ class JsonStreamReader {
     frame.state = "colon";
   }
 
-  // A streamed string, from `i`: its text goes to the sink, a piece per chunk.
   async #streamed(bytes: Buffer, i: number): Promise<number> {
     const text = this.#text!;
     let out = "";
@@ -308,7 +293,6 @@ class JsonStreamReader {
     return j;
   }
 
-  // A number, true, false or null, from `i`: until the byte after it.
   #inScalar(bytes: Buffer, i: number): number {
     const scalar = this.#scalar!;
     let j = i;
@@ -339,26 +323,20 @@ const newText = (role: Text["role"], mode: Text["mode"]): Text => ({
   role, mode, pieces: [], size: 0, truncated: false, escaped: false, sink: null, decoder: null, escape: null,
 });
 
-// Digits, letters, + - and . : what numbers, true, false and null are made of.
 function isScalarByte(c: number): boolean {
   return (c >= 0x30 && c <= 0x39) || (c >= 0x61 && c <= 0x7a) || (c >= 0x41 && c <= 0x5a) || c === 0x2b || c === 0x2d || c === 0x2e;
 }
 
-// A kept string's raw text (between its quotes) as JSON.parse reads it, or null if it isn't valid.
-// One cut short (maxStringBytes) may end inside an escape: that part is dropped.
 function parseString(raw: string, truncated: boolean): string | null {
   for (let cut = 0; cut <= (truncated ? 6 : 0); cut++) {
     try {
       return JSON.parse(`"${raw.slice(0, raw.length - cut)}"`) as string;
     } catch {
-      // try a little shorter (truncated only)
     }
   }
   return null;
 }
 
-// An escape after its backslash: its text when complete, null when more is needed, undefined
-// when it isn't a valid one.
 function unescape(escape: string): string | null | undefined {
   if (escape[0] === "u") {
     if (escape.length < 5) return /^u[0-9a-fA-F]*$/.test(escape) ? null : undefined;

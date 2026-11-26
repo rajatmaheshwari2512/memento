@@ -3,7 +3,6 @@
 //   creation_cards  Sunday's memory card with the week's creations
 //   asset_quality   each photo's measured sharpness and exposure
 //   memory_users    (collages_album_id, recaps_album_id, animations_album_id, cinematic_album_id) each person's four albums
-// What they do: services/creations.service.ts, creation-render.service.ts, memory-quality.service.ts.
 
 import { database } from "../../db/database.ts";
 import type { CardRow, CreationKind, Job, JobInputs, Quality, WaitingCard } from "../../types/creations.types.ts";
@@ -16,9 +15,7 @@ export function queuedCount(userId?: string): number {
   return (database().prepare(sql).get(...(userId ? [userId] : [])) as { n: number }).n;
 }
 
-// What a new themed memory could get; Sunday's pick decides (pickWeek). `rank` is the memory's
-// photo score, kept for the record. Returns the new proposal's id, or null if the memory already
-// had one of this kind.
+// What a new themed memory could get; Sunday's pick decides (pickWeek). Returns the new proposal's id, or null if the memory already had one of this kind.
 export function propose(userId: string, themedMemoryId: number, kind: CreationKind, inputs: JobInputs, rank: number): number | null {
   const now = new Date().toISOString();
   const result = database().prepare(
@@ -90,16 +87,10 @@ function queueInCard(cardId: number, day: string, jobIds: number[]): number {
 // proposalFor (creations.service.ts) worked it out, not saved yet.
 export type ExtraProposal = { memory: MadeMemory; kind: CreationKind; inputs: JobInputs };
 
-// The card made by hand, all or nothing: every proposal is saved, the best memory's of each kind
-// (ranked) queued in a new extra card for `today` (made from the best-ranked of them), the
-// rest skipped. A memory that has meanwhile got a job of that kind keeps it, untouched, and the
-// next-best memory's proposal of that kind is queued instead. Returns the card and how many were
-// queued. Call inside immediately().
+// The card made by hand, all or nothing: the best memory's proposal of each kind is queued in a new extra card for `today`, the rest skipped. Returns the card and how many were queued. Call inside immediately().
 export function queueExtraCard(userId: string, proposals: ExtraProposal[], today: string, themeRank: Record<Theme, number>): { card: number | null; queued: number } {
   const order = ranked([...new Map(proposals.map((p) => [p.memory.id, p.memory])).values()], themeRank).map((m) => m.id);
   const saved = proposals.map((p) => ({ kind: p.kind, memoryId: p.memory.id, id: propose(userId, p.memory.id, p.kind, p.inputs, p.memory.score ?? 0), picked: false }));
-  // The best of each kind among those saved (a proposal not saved, because its memory got a job of
-  // that kind in the meantime, passes the turn to the next-ranked one).
   const best = new Set<CreationKind>();
   for (const s of [...saved].sort((a, b) => order.indexOf(a.memoryId) - order.indexOf(b.memoryId))) {
     if (s.id !== null && !best.has(s.kind)) {
@@ -107,7 +98,6 @@ export function queueExtraCard(userId: string, proposals: ExtraProposal[], today
       s.picked = true;
     }
   }
-  // The card is made from (and titled like) the best-ranked memory that supplied something.
   const toQueue = saved.filter((s) => s.picked).sort((a, b) => order.indexOf(a.memoryId) - order.indexOf(b.memoryId));
   let card: number | null = null;
   let queued = 0;
@@ -121,10 +111,7 @@ export function queueExtraCard(userId: string, proposals: ExtraProposal[], today
   return { card, queued };
 }
 
-// The week's pick, all or nothing: the best memory made on or after the local day `since` that
-// has something proposed (ranked) gets a card for `today`, and its proposals are queued for it;
-// every other proposal of this person is skipped. Returns how many were queued. Call inside
-// atomically().
+// The week's pick, all or nothing: the best memory made on or after the local day `since` that has something proposed gets a card for `today` and its proposals are queued; every other proposal of this person is skipped. Returns how many were queued. Call inside atomically().
 export function pickWeek(userId: string, since: string, today: string, themeRank: Record<Theme, number>): number {
   const db = database();
   const candidates = db.prepare(
@@ -147,8 +134,7 @@ export function nextDue(now: string, renderedOnly = false): Job | undefined {
   return database().prepare(`SELECT * FROM creation_jobs WHERE state = 'queued' AND next_at <= ?${rendered} ORDER BY next_at, id LIMIT 1`).get(now) as Job | undefined;
 }
 
-// Counted as an attempt when it starts, so a job that stops the service can't loop forever. Its
-// work folder is named once, on its first start, and kept until it's uploaded.
+// Counted as an attempt when it starts.
 export function markRunning(id: number, workId: string): void {
   database().prepare(
     "UPDATE creation_jobs SET state = 'running', attempts = attempts + 1, work_id = COALESCE(work_id, ?), updated_at = ? WHERE id = ?",
@@ -213,9 +199,7 @@ export function retryCardLater(id: number, at: string): void {
   database().prepare("UPDATE creation_cards SET attempts = attempts + 1, next_at = ?, updated_at = ? WHERE id = ?").run(at, new Date().toISOString(), id);
 }
 
-// What goes in a card: its creations (collage, recap, animation, cinematic photo: those made),
-// then its memory's photos (not in an extra card: the week's own card showed them). Immich shows
-// them in the order they were taken (each creation's date places it).
+// What goes in a card: its creations, then its memory's photos (not in an extra card).
 export function cardAssets(card: CardRow): { creations: string[]; photos: string[] } {
   const db = database();
   const creations = db.prepare(
@@ -238,8 +222,7 @@ export function cardsOf(userId: string, limit: number): Array<CardRow & { memory
   ).all(userId, limit) as Array<CardRow & { memory_id: string; theme: Theme; label: string }>;
 }
 
-// Every collage and video Memento uploaded, for this person or everyone: never a source photo,
-// never added to a live album, never captioned.
+// Every collage and video Memento uploaded, for this person or everyone.
 export function creationAssetIds(userId?: string): Set<string> {
   const rows = database().prepare(`SELECT asset_id FROM creation_jobs WHERE asset_id IS NOT NULL${userId ? " AND user_id = ?" : ""}`)
     .all(...(userId ? [userId] : [])) as Array<{ asset_id: string }>;

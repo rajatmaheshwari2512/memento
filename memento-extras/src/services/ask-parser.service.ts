@@ -1,16 +1,5 @@
-// Ask Photos: what code can read exactly in a phrase the trained reader (ask-reader.service.ts)
-// marked: a date ("last December", "pichle saal", "Mom's birthday") turned into calendar dates,
-// and names matched to the asker's People page ("Rahul's" → Rahul Sharma). The model decides
-// which words are a date, a person, a thing or a place; whole questions are only scanned for
-// People-page names the model missed (the reader's safety net).
-// (The first version of Ask read whole questions with hand-written rules here; they were
-// removed on 2026-11-21, once the trained reader did better. eval/intent/README.md says how to
-// run them from git history.)
-//
-// Pure: no database, no Immich calls, no clock. Today's date and the people are passed in, so it
-// can be tested on its own (test/ask-parser.test.ts).
-//
-// English, plus the Hindi time words of Hinglish dates ("pichle saal", "2 saal pehle").
+// Ask Photos: what code can read exactly in a phrase the trained reader marked: a date turned into calendar dates, and names matched to the asker's People page.
+// Pure: no database, no Immich calls, no clock; today's date and the people are passed in. English, plus the Hindi time words of Hinglish dates.
 
 import { AFTER, BEFORE, CUT, DAY, EARLIEST_YEAR, FILLER, HINDI_NUMBER, HINDI_NUMBER_WORDS, HINDI_UNIT, HINDI_UNITS, JOINERS, MAX_QUESTION_CHARS, MONTH, MONTHS, MONTH_NAMES, NUMBER, NUMBER_WORDS, POSSESSIVE, YEAR } from "../constants/ask.constants.ts";
 import type { DateRange, Found, Instants, Person, PhraseReading, Plan, ReaderContext, Today } from "../types/ask.types.ts";
@@ -111,7 +100,7 @@ class Question {
     }
   }
 
-  // What's left, with joiners next to cut pieces removed ("beach in June 2024" → "beach").
+  // What's left, with joiners next to cut pieces removed.
   leftover(): string {
     let tokens = this.s.split(/\s+/).filter(Boolean);
     for (let changed = true; changed; ) {
@@ -142,8 +131,7 @@ const firstWord = (s: string) => norm(s).split(" ")[0] ?? "";
 
 // --- who is "me" ---
 
-// 1. a face group named "me"; 2. one named like the account ("Asha Rao"); 3. one
-// named the account's first name ("Asha"), if only one is. DECISIONS.md, "Ask Photos".
+// Who is "me": a face group named "me", else one named like the account, else one named the account's first name, if only one is.
 export function findMe(people: Person[], accountName: string): Person | null {
   const named = (n: string) => people.filter((p) => norm(p.name) === norm(n));
   const me = named("me")[0] ?? (norm(accountName) ? named(accountName)[0] : undefined);
@@ -154,9 +142,7 @@ export function findMe(people: Person[], accountName: string): Person | null {
   return byFirst.length === 1 ? byFirst[0]! : null;
 }
 
-// Names a question can use: each face group's full name, and its first name when no other
-// group has that first name ("Rahul" for "Rahul Sharma"). Longest first, so "Rahul Sharma"
-// wins over "Rahul". Several groups with the same name: the first in Immich's order.
+// Names a question can use: each face group's full name, and its first name when no other group has it. Longest first.
 function nameIndex(people: Person[]): Array<{ name: string; pattern: string; person: Person }> {
   const named = people.filter((p) => norm(p.name) && norm(p.name) !== "me");
   const byFull = new Map<string, Person>();
@@ -236,7 +222,7 @@ function readDates(q: Question, ctx: ReaderContext, isName: (word: string) => bo
       ) ||
       // Christmas (2022), New Year's Eve (2022), New Year (2023)
       q.take(`\\b(?:(last|previous|this)\\s+)?(christmas|xmas)(?:\\s+(eve|day))?(?:\\s+(?:of\\s+)?${YEAR})?|\\b${YEAR}\\s+(christmas|xmas)`, (m) => {
-        // "last Christmas", "this Christmas": the latest one that has started (photos are of the past)
+        // "last Christmas", "this Christmas": the latest one that has started
         const latest = m[1] ? (t >= ymd(today.y, 12, 24) ? today.y : today.y - 1) : null;
         const y = m[4] ?? m[5] ?? latest;
         if (y) return add([{ from: ymd(Number(y), 12, 24), to: ymd(Number(y), 12, 26) }], `Christmas ${y}`);
@@ -274,8 +260,7 @@ function readDates(q: Question, ctx: ReaderContext, isName: (word: string) => bo
       q.take(`\\b(today|tonight|this\\s+morning|this\\s+evening|yesterday)\\b`, (m) =>
         add([dayRange(m[1]!.toLowerCase() === "yesterday" ? addDays(t, -1) : t)]),
       ) ||
-      // last weekend: the Saturday and Sunday before this week. This weekend: this week's, once
-      // it has started, else the one just gone (photos are of the past).
+      // last weekend: the Saturday and Sunday before this week. This weekend: this week's, once it has started, else the one just gone.
       q.take(`\\b(this|last|previous|past|is|iss|pichle|pichhle)\\s+weekend(?:['’]s)?${AFTER}`, (m) => {
         const monday = addDays(t, -weekday(t));
         const started = weekday(t) >= 5;
@@ -301,9 +286,7 @@ function readDates(q: Question, ctx: ReaderContext, isName: (word: string) => bo
         const n = count(m[1]!);
         return counted(n) && add([ago(m[2]!, n)]);
       }) ||
-      // Hinglish, the same dates as their English forms: aaj, kal (yesterday: photos are of
-      // the past), parso; pichle/is hafte, mahine, saal; pichle 3 din; 2 saal pehle.
-      // A People-page name wins ("Kal and Jo at the beach"), as for month names.
+      // Hinglish, the same dates as their English forms: aaj, kal, parso; pichle/is hafte, mahine, saal; pichle 3 din; 2 saal pehle. A People-page name wins ("Kal and Jo at the beach").
       q.take(`\\b(aaj|kal|parso)${AFTER}`, (m) => {
         if (isName(m[1]!)) return false;
         const word = m[1]!.toLowerCase();
@@ -352,10 +335,7 @@ function readDates(q: Question, ctx: ReaderContext, isName: (word: string) => bo
 
 // --- reading a phrase ---
 
-// A phrase → its dates, the People-page names in it, and the words left over (without
-// filler). Birthdays first ("Mom's birthday" is her birthday, not photos of her), then the
-// other dates, then names, so a name that's also a date word stays a person only where the
-// date reader leaves it ("photos of June", but "in June" is the month).
+// A phrase → its dates, the People-page names in it, and the words left over. Birthdays first, then the other dates, then names.
 export function readPhrase(phrase: string, ctx: ReaderContext): PhraseReading {
   const q = new Question(phrase.slice(0, MAX_QUESTION_CHARS));
   const hints: string[] = [];
@@ -393,8 +373,7 @@ export function readPhrase(phrase: string, ctx: ReaderContext): PhraseReading {
   const dates = readDates(q, ctx, isName);
   if (got.birthdays) dates.unshift(got.birthdays);
 
-  // People by name (possessives too: "Mom's"). One pattern for all the names, longest first,
-  // so "Rahul Sharma" wins over "Rahul".
+  // People by name (possessives too: "Mom's"), longest names first.
   if (anyName) {
     q.take(`${BEFORE}(${anyName})${POSSESSIVE}${AFTER}`, (m) => {
       const person = byName.get(norm(m[1]!));
@@ -413,8 +392,7 @@ export function readPhrase(phrase: string, ctx: ReaderContext): PhraseReading {
   };
 }
 
-// A phrase the model marked as a date. A lone month name is the month ("June" → in June):
-// readPhrase alone would leave it to a person named June, or to the word "may".
+// A phrase the model marked as a date. A lone month name is the month ("June" → in June).
 const MONTH_ONLY = new RegExp(`^(${MONTH_NAMES.join("|")})$`, "i");
 export function readDate(phrase: string, ctx: ReaderContext): PhraseReading {
   return readPhrase(MONTH_ONLY.test(phrase.trim()) ? `in ${phrase.trim()}` : phrase, ctx);

@@ -1,13 +1,4 @@
-// Captions: a one-line description and a few tags for each photo, written by a small open
-// vision model (FEATURES.md, "Captions and tags"; DECISIONS.md, "Captions go in our own
-// database"). They feed Ask Photos' search later.
-//
-// This file asks the model for one photo's caption. It's shared by everything that captions
-// photos: the one-off backlog (scripts/caption-backlog.ts) and new photos at night
-// (scripts/caption-night.ts), so old and new captions are made the same way. What we ask
-// and the tag list: constants/captions.constants.ts; what we accept:
-// schemas/captions.schema.ts. It doesn't read settings or the database, so the backlog
-// script can run on its own. Storage and search are in repositories/captions.repository.ts.
+// Captions: a one-line description and a few tags for each photo, written by a small open vision model. This file asks the model for one photo's caption; the backlog and night scripts share it.
 
 import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
@@ -29,7 +20,6 @@ export function captionRequest(jpeg: Buffer, model?: string): Record<string, unk
       },
     ],
     response_format: { type: "json_schema", json_schema: { name: "caption", schema: SCHEMA } },
-    // Some of these models "think" first by default, which is slow and uses up the reply.
     chat_template_kwargs: { enable_thinking: false },
     temperature: 0.2,
     max_tokens: 200,
@@ -54,9 +44,7 @@ export async function modelName(url: string): Promise<string> {
   return typeof id === "string" && id !== "" ? id.split("/").pop()! : "unknown";
 }
 
-// One photo's preview → llama-server → a checked caption. Throws when it can't be had:
-// the error's message is only the kind of failure, safe to log; its cause can quote the
-// model's reply, i.e. the photo's description.
+// One photo's preview → llama-server → a checked caption. Throws when it can't be had; the message is only the kind of failure.
 export async function captionPhoto(url: string, model: string, photo: PhotoToCaption, timeoutMs: number): Promise<CaptionResult> {
   const jpeg = await readFile(photo.path);
   const started = performance.now();
@@ -70,7 +58,6 @@ export async function captionPhoto(url: string, model: string, photo: PhotoToCap
   if (!res.ok) throw new Error(`llama-server answered ${res.status}`, { cause: (await res.text()).slice(0, 200) });
   const reply = (await res.json()) as Reply;
   const message = reply.choices?.[0]?.message;
-  // A model that "thinks" first is several times slower; thinking must be off.
   if (typeof message?.reasoning_content === "string" && message.reasoning_content.trim() !== "") {
     throw new Error("the model thought before answering; turn thinking off");
   }

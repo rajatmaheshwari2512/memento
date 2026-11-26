@@ -1,16 +1,4 @@
-// Making one creation (a queued job, creations.service.ts) and putting it where it belongs:
-//   1. each photo checked again (still the person's, in the timeline, not trashed or locked: the
-//      week may have changed things); the job is dropped if too few are left;
-//   2. Immich's previews (with the person's own crop and rotation, the image Immich's face boxes
-//      describe), the face boxes (not for an animation), and videos' playback files into the
-//      job's folder, streamed to disk (a video too big is left out of the recap);
-//   3. the creations container renders it there (it has no keys and no access to Immich);
-//   4. it's uploaded into the person's library, dated as its stamp says (the date and place are
-//      inside the file), then tagged Memento/Creations and added to their "Collages", "Recaps",
-//      "Animations" or "Cinematic" album.
-// The job's folder is kept until the upload works, so a failed upload is only retried, not
-// rendered again. The asset id is recorded as soon as it's uploaded, so a later failure doesn't
-// upload it twice. Sunday's card (creations.service.ts) puts it in a memory.
+// Making one creation (a queued job, creations.service.ts): each photo checked again, the inputs downloaded into the job's folder, rendered by the creations container, then uploaded into the person's library, tagged Memento/Creations and added to their album. The job's folder is kept until the upload works.
 
 import { openAsBlob } from "node:fs";
 import { rm } from "node:fs/promises";
@@ -30,8 +18,7 @@ import type { Box } from "../../creations/src/layout.ts";
 // The job can't be made any more (too few of its photos are left): dropped, not retried.
 export class JobGone extends Error {}
 
-// The person's "Collages", "Recaps", "Animations" or "Cinematic" album: the one made before, found by id (so
-// renaming it is fine), or a new one if it was deleted.
+// The person's "Collages", "Recaps", "Animations" or "Cinematic" album: found by id, or a new one if it was deleted.
 async function albumFor(cred: Credential, userId: string, kind: CreationKind): Promise<string> {
   const known = albumId(userId, kind);
   if (known) {
@@ -48,7 +35,7 @@ async function stillThere(cred: Credential, userId: string, item: JobItem): Prom
     const asset = await getAsset(cred, item.id);
     return asset.ownerId === userId && !asset.isTrashed && asset.inTimeline;
   } catch (error) {
-    if (error instanceof HttpError && error.status === 404) return false; // deleted, or locked away
+    if (error instanceof HttpError && error.status === 404) return false;
     throw error;
   }
 }
@@ -61,7 +48,7 @@ async function itemsLeft(cred: Credential, job: Job, inputs: JobInputs): Promise
   const gone = () => new JobGone("too few of its photos are left");
   switch (job.kind) {
     case "collage": {
-      const n = LIMITS.collageSizes.find((size) => size <= photos.length); // the largest that fits what's left
+      const n = LIMITS.collageSizes.find((size) => size <= photos.length);
       if (!n) throw gone();
       return evenly(photos, n);
     }
@@ -77,8 +64,7 @@ async function itemsLeft(cred: Credential, job: Job, inputs: JobInputs): Promise
   }
 }
 
-// A photo's biggest faces, as many as the container takes, rounded (a wedding group can have
-// hundreds, and a job's size is limited too).
+// A photo's biggest faces, as many as the container takes, rounded.
 export function mainFaces(faces: Box[]): Box[] {
   const area = ([x1, y1, x2, y2]: Box) => (x2 - x1) * (y2 - y1);
   const round = (v: number) => Math.round(v * 10_000) / 10_000;
@@ -99,7 +85,7 @@ async function download(cred: Credential, items: JobItem[], dir: string, faces: 
       await downloadTo(cred, `/api/assets/${id}/video/playback`, await inFolder(dir, `${i}.mp4`), MAX_BYTES.video, 300_000);
       out.push({ kind: "video", file: `${i}.mp4`, durationMs: item.durationMs ?? 0 });
     } catch (error) {
-      if (!(error instanceof HttpError && error.status === 413)) throw error; // too big: the recap goes on without it
+      if (!(error instanceof HttpError && error.status === 413)) throw error;
     }
   }
   return out;
@@ -125,7 +111,6 @@ async function renderInFolder(job: Job, inputs: JobInputs, cred: Credential): Pr
   await enoughSpace();
   const dir = await freshJobFolder(job.work_id!);
   const request = renderJob(job, await download(cred, items, dir, job.kind !== "animation"), inputs);
-  // The day's memories run may have started while this downloaded: its photo checks go first.
   if (memoriesRunning()) throw new CreationsBusy("a themed-memories run is going");
   await render(request, TIMEOUT_MS[job.kind]);
   markRendered(job.id, true);
@@ -137,16 +122,12 @@ async function upload(job: Job, inputs: JobInputs, cred: Credential, file: strin
   return (await uploadBlob(cred, await openAsBlob(file, { type: MIME[job.kind] }), name, inputs.stamp.utc, `save the ${job.kind}`, 300_000)).id;
 }
 
-// Makes the job's creation (unless it was uploaded on an earlier try; rendered again only if its
-// finished file isn't there) and files it. Returns its asset id; throws if anything fails (the
-// queue retries, or drops a JobGone).
+// Makes the job's creation (unless it was uploaded on an earlier try) and files it. Returns its asset id; throws if anything fails.
 export async function makeCreation(job: Job, cred: Credential): Promise<string> {
   const inputs = JSON.parse(job.inputs) as JobInputs;
   let assetId = job.asset_id;
   if (!assetId) {
     const output = OUTPUT[job.kind];
-    // Finished on an earlier try, or by the container while this service was restarting: kept,
-    // if its file is still there.
     const finished = job.rendered_at !== null || (await renderState(job.work_id!)) === "done";
     let file = finished ? await takeOutput(job.work_id!, output.file, output.maxBytes) : null;
     if (file) markRendered(job.id, true);

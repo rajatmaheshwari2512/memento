@@ -1,16 +1,4 @@
-// Feature flags: on/off switches (and a few numbers) for SelfPhotos' own features, set by
-// an Immich admin in Administration → Settings → Memento Features (our web patch).
-//
-// Stored (repositories/flags.repository.ts) as overrides on top of the defaults below. A
-// setting that was never changed, or was set back to its default, keeps following the
-// default, so a changed env value (e.g. the daily limit in Ansible) still applies until an
-// admin overrides it.
-//
-// Off pauses a feature: the service refuses it and the apps hide its buttons. Nothing the
-// feature already made is deleted.
-//
-// Each new feature adds its group here when it's built. Switches for features that don't
-// exist yet would do nothing, so they aren't listed.
+// Feature flags: on/off switches (and a few numbers) for Memento's own features, set by an Immich admin in Administration → Settings → Memento Features. Stored as overrides on top of the defaults below. Off pauses a feature: the service refuses it and the apps hide its buttons.
 
 import { config } from "../config.ts";
 import { immediately } from "../db/database.ts";
@@ -52,7 +40,7 @@ export function getFlags(): Flags {
   const flags = defaultFlags();
   for (const row of storedFlags()) {
     const rule = RULES[row.key];
-    if (!rule) continue; // a setting from an older version; ignored
+    if (!rule) continue;
     let value: unknown;
     try {
       value = JSON.parse(row.value);
@@ -69,8 +57,7 @@ export function flagsAndDefaults(): FlagsAndDefaults {
   return { flags: getFlags(), defaults: defaultFlags() };
 }
 
-// Applies an admin's checked changes (schemas/flags.schema.ts), all or none. A setting set
-// back to its default forgets the override, so it follows the default again.
+// Applies an admin's checked changes (schemas/flags.schema.ts), all or none.
 export function setFlags(updates: FlagUpdate[], adminUserId: string): FlagChange[] {
   const before = getFlags();
   const defaults = defaultFlags();
@@ -78,7 +65,6 @@ export function setFlags(updates: FlagUpdate[], adminUserId: string): FlagChange
   immediately(() => {
     for (const { key, value } of updates) {
       if (read(before, key) !== value) changes.push({ key, from: read(before, key), to: value });
-      // Back to the default: forget the override, so it follows the default again.
       if (read(defaults, key) === value) removeFlag(key);
       else saveFlag(key, value, adminUserId);
     }

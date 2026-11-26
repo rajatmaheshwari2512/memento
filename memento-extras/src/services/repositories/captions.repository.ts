@@ -1,18 +1,8 @@
-// Where captions are kept, in the service's database (data.db); the tables are defined in
-// migrations.ts:
+// Where captions are kept, in the service's database (data.db); the tables are defined in migrations.ts:
 //   captions      one row per photo: its owner, the caption, which model wrote it
 //   caption_tags  the photo's tags, one row each
 //   captions_fts  SQLite's full-text index (FTS5) over each caption's words and tags, for
 //                 Ask Photos. It's an index, not a copy: saveCaption keeps it in step.
-//
-// Captions only get in through an import of a results file (import-captions.ts) or the
-// night run for new photos (caption-night.ts); no web route writes them.
-// caption_failures holds photos the night run couldn't caption. What a caption is and how
-// it's checked: schemas/captions.schema.ts.
-//
-// Search only ever returns the asking user's own photos (owner_id). Results are meant to
-// go through Immich afterwards, so a photo deleted since it was captioned drops out. Each
-// night, captions of photos gone from Immich for good are removed (caption-records.service.ts).
 
 import { atomically, database } from "../../db/database.ts";
 import type { CaptionMatch, CaptionRecord, Tag } from "../../types/captions.types.ts";
@@ -55,8 +45,7 @@ export function recordCaptionFailure(assetId: string, error: string): void {
   `).run(assetId, error, new Date().toISOString());
 }
 
-// Deletes these photos' captions and failure records. The captions table's trigger and
-// foreign keys take the index entry and tags along.
+// Deletes these photos' captions and failure records.
 export function deleteCaptions(assetIds: string[]): void {
   atomically(() => {
     const caption = database().prepare("DELETE FROM captions WHERE asset_id = ?");
@@ -72,8 +61,7 @@ export function captionCount(): number {
   return (database().prepare("SELECT count(*) AS n FROM captions").get() as { n: number }).n;
 }
 
-// The full-text query for `query`: every word must match. Words only: anything else in the
-// query is ignored, so it can't change the search syntax. null when there are no words.
+// The full-text query for `query`: every word must match; null when there are no words.
 function matchQuery(query: string): string | null {
   const words = query.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
   return words.length === 0 ? null : words.slice(0, 20).map((w) => `"${w}"`).join(" ");

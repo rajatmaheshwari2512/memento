@@ -1,7 +1,4 @@
-// Image types the service accepts from Immich and serves back. Checked by the file's
-// first bytes, not by what a server claims, because anything served under
-// photos.<domain>/extras runs with the user's Immich login: an HTML or SVG file there
-// could act as the user. So only these raster formats ever leave this service.
+// Image types the service accepts from Immich and serves back, checked by the file's first bytes.
 
 import { open } from "node:fs/promises";
 import type { ImageMime } from "../types/image.types.ts";
@@ -21,8 +18,7 @@ export function sniffImage(bytes: Uint8Array): ImageMime | null {
   return null;
 }
 
-// The pixel size of a JPEG or PNG file on disk, from its header (a JPEG's frame header, after
-// whatever comes before it; a PNG's IHDR), reading only those bytes. Null if it isn't found.
+// The pixel size of a JPEG or PNG file on disk, from its header. Null if it isn't found.
 export async function imageFileSize(path: string, mime: ImageMime): Promise<{ width: number; height: number } | null> {
   const file = await open(path, "r");
   try {
@@ -41,7 +37,6 @@ export async function imageFileSize(path: string, mime: ImageMime): Promise<{ wi
       const marker = await read(position, 4);
       if (!marker || marker[0] !== 0xff) return null;
       const kind = marker[1]!;
-      // Frame headers (SOF0–15), but not DHT (C4), JPG (C8) or DAC (CC).
       if (kind >= 0xc0 && kind <= 0xcf && kind !== 0xc4 && kind !== 0xc8 && kind !== 0xcc) {
         const frame = await read(position + 5, 4);
         return frame && { height: frame.readUInt16BE(0), width: frame.readUInt16BE(2) };

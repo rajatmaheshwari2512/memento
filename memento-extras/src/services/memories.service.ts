@@ -1,31 +1,4 @@
-// Themed memories (FEATURES.md, section 7): Spotlight on a person, Best of last month, trips
-// and big days, made each morning for everyone who turned them on, and shown with Immich's own
-// memories in every app.
-//
-// How:
-//   - Each memory is a normal Immich "on this day" memory (POST /api/memories), with
-//     showAt/hideAt so it shows on the right days. Immich keeps no title, so a short label
-//     ("Spotlight: Mom", "Best of October") is kept here, by the memory's id; Memento's apps
-//     show it where "N years ago" goes (GET /memories/labels). Unpatched apps show a date or
-//     "N years ago"; memory-themes.service.ts (memoryDates) says how that's kept truthful.
-//   - It works in the background with a key of the person's own, made from their login when
-//     they turn themed memories on (KEY_PERMISSIONS: read, view, upload, memories, tags; never
-//     change or delete). It's stored encrypted (crypto-box.ts), and deleted in Immich when
-//     they turn them off.
-//   - Once a day per person, from config.memoriesRunAt (07:05, after the night captions), and
-//     again after a restart if the day's run didn't happen. One run at a time for everyone
-//     (schedule.service.ts). What's due comes from the date and what was made or skipped before
-//     (memory-themes.service.ts), so nothing is made twice and a theme with too few good photos
-//     isn't re-read every day.
-//   - The photos: memory-picks.service.ts, with their quality where the creations container
-//     measured it (memory-quality.service.ts). Read from Immich: memory-library.service.ts.
-//   - Collages, videos, animations and cinematic photos are only proposed here, and the week's
-//     best queued on Sunday (creations.service.ts); never made inline.
-//   - Off (the themedMemories flag) stops the day's runs and refuses turning them on.
-//     Nothing is deleted: memories made stay, with their titles.
-//   - Logs carry ids, themes and counts only: never labels (they can hold names).
-//
-// What's stored, and where: repositories/memories.repository.ts.
+// Themed memories: Spotlight on a person, Best of last month, trips and big days, made each morning for everyone who turned them on, and shown with Immich's own memories in every app. Each is a normal Immich "on this day" memory (POST /api/memories) with its label kept here (GET /memories/labels). Off (the themedMemories flag) stops the day's runs; nothing is deleted. Logs carry ids, themes and counts only.
 
 import { createMemory, deleteApiKey, ImmichRefused } from "../clients/immich.client.ts";
 import { config } from "../config.ts";
@@ -56,8 +29,7 @@ import { addDays, daysBetween, startOfDay } from "../utils/local-date.ts";
 
 const lastManualRun = new Map<string, number>();
 
-// Looks every few minutes whether the day's run is due. unref: never keeps the process alive.
-// A failure is logged, never left as an unhandled rejection (which would stop the service).
+// Looks every few minutes whether the day's run is due.
 export function startThemedMemories(): void {
   if (config.memoriesCheckSeconds === 0) return;
   const tick = () => {
@@ -67,9 +39,7 @@ export function startThemedMemories(): void {
   setInterval(tick, config.memoriesCheckSeconds * 1000).unref();
 }
 
-// Everyone whose run for today hasn't happened, one at a time. Skipped while switched off, and
-// while another run (someone's "make my memories now") is going. Renders wait for it each day
-// (schedule.service.ts).
+// Everyone whose run for today hasn't happened, one at a time. Skipped while switched off, and while another run is going.
 export async function dailyPass(): Promise<void> {
   if (!runTimeReached()) return;
   const day = today();
@@ -78,16 +48,14 @@ export async function dailyPass(): Promise<void> {
     const retryBefore = new Date(Date.now() - RETRY_MINUTES * 60_000).toISOString();
     for (const userId of usersDue(day, retryBefore)) await runForUser(userId, day);
   });
-  if (done === null) return; // someone's run is going; the next look tries again
+  if (done === null) return;
   markRunDone(day);
-  kickWorker(); // the collages and videos just queued
+  kickWorker();
 }
 
 // --- One person's run ---
 
-// Makes what's due today for one person. Never throws: problems are logged, a broken key
-// pauses them (they turn it off and on to fix it), anything else is retried later. Called
-// under the run lock.
+// Makes what's due today for one person. Never throws: problems are logged. Called under the run lock.
 async function runForUser(userId: string, day: string): Promise<RunSummary> {
   const summary: RunSummary = { day, made: [], skipped: [], creationsQueued: 0 };
   const read = readKey(userId);
@@ -125,8 +93,7 @@ function photoCount(plan: Plan): number {
   }
 }
 
-// Everything a memory can be made from (stacked photos too): a Spotlight's person's photos, or
-// the days a memory covers. Also read by creations-now.service.ts.
+// Everything a memory can be made from (stacked photos too). Also read by creations-now.service.ts.
 export async function candidatesFor(cred: Credential, userId: string, scope: { personId: string } | { first: string; last: string }): Promise<Candidate[]> {
   return "personId" in scope
     ? candidatesForPerson(cred, userId, scope.personId)
@@ -153,7 +120,6 @@ async function makeThemedMemories(userId: string, cred: Credential, day: string,
   const plans = duePlans({ today: day, items, olderCounts, people, history: past });
   if (plans.length === 0) return;
 
-  // Never a source photo: Memento's own collages and videos.
   const never = creationAssetIds(userId);
   const avoid = recentlyUsed(userId, new Date(Date.now() - PICK.cooldownDays * 86_400_000).toISOString());
   const budget = runBudget();
@@ -161,14 +127,13 @@ async function makeThemedMemories(userId: string, cred: Credential, day: string,
   for (const plan of plans.slice(0, LIMITS.plansTried)) {
     if (made >= MAX_NEW_PER_DAY) break;
     const due = dueOf(userId, plan, day);
-    const library = await candidatesFor(cred, userId, plan.theme === "spotlight" ? { personId: plan.person.id } : plan); // with the photos under stacks, for an animation's burst
+    const library = await candidatesFor(cred, userId, plan.theme === "spotlight" ? { personId: plan.person.id } : plan);
     const all = library.filter((c) => !c.stacked);
     const focusPersonId = plan.theme === "spotlight" ? plan.person.id : undefined;
-    // Photo checks use the creations container: not in the night captions' hours.
     const quality: Map<string, Quality> = all.length > 0 && !inQuietHours() ? await qualityFor(cred, all, { avoid, never, focusPersonId }, budget) : new Map();
     const chosen = all.length > 0 ? pickPhotos(all, { count: photoCount(plan), ...span(plan, all), avoid, never, focusPersonId, quality }) : [];
     if (chosen.length === 0) {
-      insertSkipped(due); // not read again every day; counts for its cooldown
+      insertSkipped(due);
       summary.skipped.push({ theme: plan.theme, reason: "too few good photos" });
       continue;
     }
@@ -193,8 +158,7 @@ function dueOf(userId: string, plan: Plan, day: string): Due {
   return { userId, theme: plan.theme, key: plan.key, personId: plan.theme === "spotlight" ? plan.person.id : null, ...days, madeOn: day };
 }
 
-// Creates the memory in Immich and records it. Recorded first, so a crash mid-way can never
-// make it twice; if Immich clearly refused, the record is dropped so a later day can try again.
+// Creates the memory in Immich and records it.
 async function publish(due: Due, cred: Credential, chosen: Candidate[], label: string, score: number): Promise<{ memoryId: string; rowId: number } | null> {
   const dates = memoryDates(chosen[0]!.day, due.madeOn, SHOW_DAYS[due.theme]);
   const assetIds = chosen.map((c) => c.id);
@@ -211,7 +175,7 @@ async function publish(due: Due, cred: Credential, chosen: Candidate[], label: s
       forget(id);
       return null;
     }
-    markFailed(id); // no answer: it may exist, so it's never tried again
+    markFailed(id);
     throw error;
   }
 }
@@ -253,8 +217,7 @@ export async function changeSettings(user: User, cred: Credential, change: Setti
   return settingsOf(user.id);
 }
 
-// Labels of the person's themed memories and Sunday cards, newest first, for Memento's apps to
-// show where "N years ago" goes. Includes ones Immich has since removed (the apps match by id).
+// Labels of the person's themed memories and Sunday cards, newest first, for Memento's apps.
 export function listThemedMemories(userId: string): ThemedMemory[] {
   const memories = themedMemories(userId, 200).map((r) => ({
     memoryId: r.memory_id!, theme: r.theme, label: r.label!, memoryAt: r.memory_at!, showAt: r.show_at!, hideAt: r.hide_at!,
@@ -266,10 +229,7 @@ export function listThemedMemories(userId: string): ThemedMemory[] {
   return [...memories, ...cards].sort((a, b) => b.showAt.localeCompare(a.showAt));
 }
 
-// "Make my memories now": whatever's due today that wasn't made yet. With `creations`, also
-// this week's collage and video now instead of on the weekly night (still one of each a week).
-// One run at a time for everyone (shared with the day's pass), and each person at most once in
-// MANUAL_RUN_MINUTES.
+// "Make my memories now": whatever's due today that wasn't made yet. With `creations`, also this week's collage and video now. One run at a time for everyone; each person at most once in MANUAL_RUN_MINUTES.
 export async function runNow(user: User, { creations }: RunOptions): Promise<RunSummary> {
   requireThemedMemories();
   const settings = settingsOf(user.id);
@@ -285,6 +245,6 @@ export async function runNow(user: User, { creations }: RunOptions): Promise<Run
   });
   if (!summary) throw new HttpError(429, "Memories are being made for someone right now. Try again in a minute.");
   lastManualRun.set(user.id, Date.now());
-  kickWorker(); // its collages and videos, unless it's the night captions' hours
+  kickWorker();
   return summary;
 }

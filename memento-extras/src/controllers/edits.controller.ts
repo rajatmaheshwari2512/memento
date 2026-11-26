@@ -21,9 +21,7 @@ const made = (res: ServerResponse, edit: EditMade | null) => {
   if (edit) send(res, 201, { editId: edit.editId, imageUrl: `edits/${edit.editId}/image`, size: edit.size, usage: edit.usage });
 };
 
-// Whether the person is still waiting for this edit: its connection is open. One that closed
-// while the edit waited its turn or its photo was fetched (they left the page) isn't made: no
-// call to Google, nothing counted.
+// Whether the person is still waiting for this edit (its connection is open).
 function stillWanted(req: IncomingMessage, user: User): () => boolean {
   return () => {
     if (req.socket && !req.socket.destroyed) return true;
@@ -32,11 +30,6 @@ function stillWanted(req: IncomingMessage, user: User): () => boolean {
   };
 }
 
-// POST /edits with a highlighted area's images, from an app built before /edits/area: more
-// than a whole-photo edit's few bytes. Said plainly instead of "too large", once the app has
-// finished sending (read and dropped, up to the area request's cap), so it gets the answer.
-// Its type, declared size and login are checked first (create), so only a logged-in app's
-// request is read this way.
 async function readEditRequest(req: IncomingMessage): Promise<Record<string, unknown>> {
   if (Number(req.headers["content-length"] ?? "0") > MAX_JSON_BYTES) {
     let size = 0;
@@ -55,8 +48,7 @@ async function readEditRequest(req: IncomingMessage): Promise<Record<string, unk
 }
 
 export const editsController = {
-  // Your edits today, and everyone's this month; and above how many pixels a photo is edited at
-  // 4K (if the admin allows it), so the apps show the price of the size it'll be made at.
+  // Your edits today, and everyone's this month; and above how many pixels a photo is edited at 4K.
   async limits(req, res) {
     const { user } = await requireUser(req);
     send(res, 200, { ...usage(user.id), fourKOverPixels: FOUR_K_OVER_PIXELS });
@@ -64,7 +56,7 @@ export const editsController = {
 
   // A whole-photo edit, typed or with tools (refused with the AI tools switched off).
   async create(req, res) {
-    jsonRequest(req, MAX_AREA_REQUEST_BYTES); // the JSON content type is also the cross-site guard
+    jsonRequest(req, MAX_AREA_REQUEST_BYTES);
     const { user, cred } = await requireUser(req);
     const body = await readEditRequest(req);
     const flags = requireGemini();
@@ -74,9 +66,7 @@ export const editsController = {
     made(res, await inEditLine(async (folder) => (wanted() ? makeEdit(user, cred, flags, request, folder, wanted) : null)));
   },
 
-  // An edit of a highlighted area: a bigger request (the mark and the upright photo), so its
-  // type, declared size, the login and both switches are checked before it's read, and it's
-  // read only in its turn, its images straight into the edit's folder.
+  // An edit of a highlighted area (the mark and the upright photo).
   async createArea(req, res) {
     jsonRequest(req, MAX_AREA_REQUEST_BYTES);
     const { user, cred } = await requireUser(req);
@@ -89,12 +79,11 @@ export const editsController = {
     );
   },
 
-  // Sent from disk as it's read.
   async image(req, res, { id }) {
     const { user } = await requireUser(req);
     const { record, file, size, filename } = await editImage(user, id!);
     res.writeHead(200, {
-      "content-type": record.mime, // only JPEG, PNG or WebP ever get stored
+      "content-type": record.mime,
       "content-length": size,
       "content-disposition": `inline; filename="${filename}"`,
     });
@@ -103,14 +92,12 @@ export const editsController = {
 
   // `{ whole: true }`: a highlighted edit's whole result, as the person chose.
   async save(req, res, { id }) {
-    const body = await readJson(req); // the JSON content type is also the cross-site guard
+    const body = await readJson(req);
     const { user, cred } = await requireUser(req);
     send(res, 200, { assetId: await saveEdit(user, cred, id!, body.whole === true) });
   },
 
-  // An edit of a highlighted area, pasted onto the original by the app: the body is that photo
-  // (image/jpeg or image/png, as for Adjust's save, also the cross-site guard). Everything is
-  // checked before the upload is read, and its size against the photo's after.
+  // An edit of a highlighted area pasted onto the original by the app: the body is that photo (image/jpeg or image/png).
   async saveArea(req, res, { id }) {
     const mime = imageType(req, COPY_TYPES, MAX_COPY_BYTES);
     const { user, cred } = await requireUser(req);

@@ -4,7 +4,7 @@ export type Flags = {
   gemini: {
     enabled: boolean; // AI Edit and every Gemini edit. Off: nothing is sent to Google.
     tools: boolean; // The presets and highlighting an area (pasted back onto the original). Off: hidden, and highlighted edits refused.
-    allow4k: boolean; // Off: every result is 2K (about ₹5 instead of ~₹12 an edit).
+    allow4k: boolean; // Off: every result is 2K.
     dailyLimitPerUser: number;
     monthlyLimitTotal: number;
   };
@@ -33,9 +33,7 @@ export type Flags = {
   };
 };
 
-// How each setting is shown: the Android app's Memento admin draws its list from these
-// (GET /admin/settings), so a new setting shows up there without an app update. The web's
-// admin page (MementoFeaturesSettings.svelte) has its own copy of the words: keep them in step.
+// How each setting is shown: the Android app's Memento admin draws its list from these (GET /admin/settings). The web admin page (MementoFeaturesSettings.svelte) has its own copy of the words: keep them in step.
 type Label = { section: string; title: string; subtitle: string };
 
 export type Rule = ({ kind: "boolean" } | { kind: "int"; min: number; max: number }) & Label;

@@ -12,7 +12,7 @@ export type NoiseJobRow = {
   video_ms: number | null; video_bytes: number | null; created_at: string; started_at: string | null; finished_at: string | null;
 };
 
-// A job in the line, in memory only: it holds the person's login, which is never stored.
+// A job in the line, in memory only.
 export type QueuedNoiseJob = {
   id: string; user: User; cred: Credential; assetId: string; format: VideoFormat; mime: string; extension: string; queuedAt: number;
 };

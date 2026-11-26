@@ -1,8 +1,4 @@
-// How good each candidate photo looks (sharpness, exposure), measured by the creations
-// container on Immich's small thumbnails, so memory-picks.service.ts can skip blurred or badly
-// exposed shots. Only a shortlist of each memory's best candidates is measured, each photo once
-// (kept in asset_quality), at most QUALITY.perRun in one person's run. If the container is down or busy,
-// picking goes on with the details alone.
+// How good each candidate photo looks (sharpness, exposure), measured by the creations container on Immich's thumbnails. Each photo is measured once (asset_quality), at most QUALITY.perRun in one person's run. If the container is down or busy, picking goes on with the details alone.
 
 import { measureQuality } from "../clients/creations.client.ts";
 import { downloadTo } from "../clients/immich.client.ts";
@@ -33,7 +29,6 @@ async function measure(cred: Credential, ids: string[]): Promise<Map<string, Qua
         files.push(`${i}.webp`);
         fileIds.push(assetId);
       } catch {
-        // one thumbnail that won't download is just not measured
       }
     }
     const measured = new Map<string, Quality>();
@@ -61,7 +56,7 @@ export async function qualityFor(
     budget.left -= missing.length;
     log({ event: "quality_measured", photos: measured.size });
   } catch (error) {
-    budget.unavailable = true; // not tried again in this run; picking goes on without it
+    budget.unavailable = true;
     log({ event: "quality_unavailable", error: error instanceof Error ? error.message : String(error) });
   }
   return known;

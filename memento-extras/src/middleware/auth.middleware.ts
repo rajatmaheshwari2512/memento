@@ -1,10 +1,8 @@
-// Who is calling? The service has no logins of its own: it takes the user's Immich
-// login from the request and asks Immich whose it is.
-//   web app:      the immich_access_token cookie (the browser sends it, same domain)
-//   Android app:  the x-immich-user-token header
-//   testing:      an Immich API key in x-api-key, or Authorization: Bearer
-// Share-link keys are deliberately NOT accepted: a public share link must never be
-// enough to spend money on edits.
+// Who is calling? The service has no logins of its own: it takes the user's Immich login from the request and asks Immich whose it is.
+// web app: the immich_access_token cookie
+// Android app: the x-immich-user-token header
+// testing: an Immich API key in x-api-key, or Authorization: Bearer
+// Share-link keys are not accepted.
 
 import { createHash } from "node:crypto";
 import type { IncomingMessage } from "node:http";
@@ -36,8 +34,6 @@ export function credentialFrom(req: IncomingMessage): Credential | null {
   return null;
 }
 
-// Remembers "this login belongs to user X" for a minute, so Immich isn't asked on
-// every request. Keyed by a hash, so tokens themselves aren't kept around.
 const cache = new Map<string, { user: User; expires: number }>();
 
 export async function requireUser(req: IncomingMessage): Promise<Auth> {
@@ -53,7 +49,7 @@ export async function requireUser(req: IncomingMessage): Promise<Auth> {
   return { user, cred };
 }
 
-// From a logged-in browser or app, not an API key: a leaked key can't change anything.
+// From a logged-in browser or app, not an API key.
 export async function requireSessionUser(req: IncomingMessage): Promise<Auth> {
   const auth = await requireUser(req);
   if (auth.cred.name === "x-api-key") throw new HttpError(403, "Use the app or the web for this, not an API key.");

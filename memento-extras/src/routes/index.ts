@@ -1,13 +1,5 @@
-// Every route the service answers, and finding the one for a request. Caddy forwards
-// photos.<domain>/extras/* here with the /extras prefix removed, so this sees /edits,
-// /limits, ... The old /ai-edit/* path is forwarded the same way, for Android app builds
-// from before the rename.
-//
-// POST, PUT and DELETE must have Content-Type: application/json (readJson in each
-// controller), or image/jpeg or image/png for the saves of photos the apps send (Adjust's,
-// and an AI edit of a highlighted area: imageType). A web page on
-// another site can't send those to us without the browser asking first (CORS), and we never
-// say yes (no CORS headers at all). So other sites can't use a visitor's Immich login here.
+// Every route the service answers, and finding the one for a request. Caddy forwards photos.<domain>/extras/* here with the /extras prefix removed.
+// POST, PUT and DELETE must have Content-Type: application/json, or image/jpeg or image/png for the saves of photos the apps send.
 
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { adjustRoutes } from "./adjust.routes.ts";
@@ -24,7 +16,6 @@ import { HttpError } from "../utils/http-error.ts";
 
 const routes: Route[] = [...healthRoutes, ...flagsRoutes, ...adminRoutes, ...liveAlbumsRoutes, ...memoriesRoutes, ...askRoutes, ...editsRoutes, ...adjustRoutes, ...videosRoutes];
 
-// "/edits/:id/image" matches /edits/<anything but a slash>/image, giving { id }.
 const matchers = routes.map((route) => {
   const names: string[] = [];
   const pattern = route.path.replace(/:(\w+)/g, (_, name: string) => {

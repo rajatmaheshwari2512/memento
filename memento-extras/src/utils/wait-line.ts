@@ -49,7 +49,6 @@ export class WaitLine {
     });
   }
 
-  // A job ended: its place goes straight to the first in line, if any.
   #next(): void {
     const waiter = this.#line.shift();
     if (!waiter) {

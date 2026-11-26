@@ -1,25 +1,11 @@
-// The database's whole shape, as numbered steps. This is the one place to read the schema.
-//
-// database.ts runs the steps that haven't run yet, in order, when the database is opened. Each
-// runs inside a transaction, so it either completes or changes nothing, and SQLite's
-// `user_version` records how many have run.
-//
-// Rules:
-//   - Never change a step that has shipped. Add a new one at the end.
-//   - Changes SQLite can't do in place (new checks, foreign keys) rebuild the table: create
-//     the new one, copy the rows across, drop the old one, rename the new one.
-//
-// IDs that belong to Immich (users, photos, albums, people) live in Immich's own database,
-// so they can't have foreign keys here. When something is deleted in Immich, our code
-// notices instead (a deleted album pauses its live album; the night caption run removes
-// captions of photos gone for good).
+// The database's whole shape, as numbered steps: the one place to read the schema.
+// Never change a step that has shipped; add a new one at the end.
+// Changes SQLite can't do in place rebuild the table: create the new one, copy the rows across, drop the old one, rename the new one.
 
 import type { Migration } from "../types/db.types.ts";
 
 export const MIGRATIONS: readonly Migration[] = [
   {
-    // Exactly what the service created before the database had versions. "IF NOT EXISTS",
-    // so on a database from that time this changes nothing and just records version 1.
     name: "1: the tables as first shipped",
     run(db) {
       db.exec(`
@@ -79,7 +65,6 @@ export const MIGRATIONS: readonly Migration[] = [
     },
   },
   {
-    // The database review of 2026-11-19 (DECISIONS.md, "Database design review").
     name: "2: people and photos of live albums in their own tables, checks, foreign keys, captions",
     run(db) {
       db.exec(`
@@ -194,8 +179,7 @@ export const MIGRATIONS: readonly Migration[] = [
     },
   },
   {
-    // Night captions (caption-night.ts): photos the model couldn't caption, so they go to
-    // the back of the queue and stop being tried after a few nights.
+    // Night captions (caption-night.ts): photos the model couldn't caption.
     name: "3: photos that failed to caption",
     run(db) {
       db.exec(`
@@ -209,8 +193,7 @@ export const MIGRATIONS: readonly Migration[] = [
     },
   },
   {
-    // Memento admin (Android app): an AI-edit daily limit set for one person, instead of
-    // everyone's default (the gemini.dailyLimitPerUser flag).
+    // Memento admin: an AI-edit daily limit set for one person.
     name: "4: per-person AI edit limits",
     run(db) {
       db.exec(`
@@ -224,8 +207,7 @@ export const MIGRATIONS: readonly Migration[] = [
     },
   },
   {
-    // Themed memories (memories.service.ts): who turned them on (with their own key), every
-    // themed memory made and its label, and which photos each used.
+    // Themed memories (memories.service.ts): who turned them on, every memory made and its label, and which photos each used.
     name: "5: themed memories",
     run(db) {
       db.exec(`
@@ -277,8 +259,7 @@ export const MIGRATIONS: readonly Migration[] = [
     },
   },
   {
-    // Creations (creations.service.ts): the queue of collages and recap videos to make, which
-    // is also the record of every one made; photos' measured quality; each person's albums.
+    // Creations (creations.service.ts): the queue of jobs (also the record of every one made), photos' measured quality, each person's albums.
     name: "6: creations queue, photo quality, Collages and Recaps albums",
     run(db) {
       db.exec(`
@@ -326,10 +307,7 @@ export const MIGRATIONS: readonly Migration[] = [
     },
   },
   {
-    // The review of 2026-11-21: themes due but with too few good photos are recorded as skipped
-    // (so they aren't re-read every night), trips keep the days they cover (so the same trip
-    // never comes back under a new first day), Sunday's creations get a memory card of their
-    // own, and each creations job keeps its folder until its upload has worked.
+    // Skipped themes, trips' days, Sunday's own memory card, and each job's folder kept until its upload has worked.
     name: "7: skipped themes, the days a memory covers, weekly cards, job folders",
     run(db) {
       db.exec(`
@@ -378,8 +356,7 @@ export const MIGRATIONS: readonly Migration[] = [
     },
   },
   {
-    // The review of 2026-11-22: a card Immich answers with a server error is tried again after
-    // 30, then 60 minutes, then given up, instead of at every look of the worker.
+    // A card Immich answers with a server error is tried again after 30, then 60 minutes, then given up.
     name: "8: card retries",
     run(db) {
       db.exec(`
@@ -389,8 +366,7 @@ export const MIGRATIONS: readonly Migration[] = [
     },
   },
   {
-    // Animations (creations.service.ts): a third kind of creation, and the person's
-    // "Animations" album. The kind is checked, so the queue's table is rebuilt.
+    // Animations: a third kind of creation, and the person's "Animations" album.
     name: "9: animations",
     run(db) {
       db.exec(`
@@ -428,10 +404,7 @@ export const MIGRATIONS: readonly Migration[] = [
     },
   },
   {
-    // Cinematic photos (creations.service.ts): a fourth kind of creation, and the person's
-    // "Cinematic" album. The kind is checked, so the queue's table is rebuilt as in step 9,
-    // every row kept as it was. An older version refuses the database afterwards (database.ts):
-    // going back means the snapshot taken before the deploy (docs/runbooks.md).
+    // Cinematic photos: a fourth kind of creation, and the person's "Cinematic" album. An older version refuses the database afterwards: going back means the snapshot taken before the deploy (docs/runbooks.md).
     name: "10: cinematic photos",
     run(db) {
       db.exec(`
@@ -469,10 +442,7 @@ export const MIGRATIONS: readonly Migration[] = [
     },
   },
   {
-    // A card made by hand (scripts/creations-now.ts) besides the week's own: the week's new
-    // kinds of creation for someone whose card was made before they existed. It holds only its
-    // creations (`extra`), and a second card in a week needs the cards' uniqueness widened, so
-    // the table is rebuilt as in step 9, every row kept as it was.
+    // A card made by hand (scripts/creations-now.ts) besides the week's own.
     name: "11: extra cards",
     run(db) {
       db.exec(`
@@ -498,9 +468,7 @@ export const MIGRATIONS: readonly Migration[] = [
     },
   },
   {
-    // Reduce noise for videos (reduce-noise.service.ts): the record of each video cleaned, and
-    // what the apps ask while it's going. The line itself is in memory (it holds the person's
-    // login, which is never stored). Not a creation: nothing here feeds albums or memories.
+    // Reduce noise for videos (reduce-noise.service.ts): the record of each video cleaned, and what the apps ask while it's going.
     name: "12: reduce noise for videos",
     run(db) {
       db.exec(`

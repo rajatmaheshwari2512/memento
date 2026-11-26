@@ -12,7 +12,7 @@ export class HttpError extends Error {
   }
 }
 
-// IDs go into URL paths and file names, so only plain UUIDs are accepted.
+// Only plain UUIDs are accepted as IDs.
 export function isUuid(value: unknown): value is string {
   return typeof value === "string" && UUID.test(value);
 }

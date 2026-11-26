@@ -8,9 +8,6 @@ import type { Handler } from "../types/http.types.ts";
 import { imageType, receiveImage, send } from "../utils/http.ts";
 
 export const adjustController = {
-  // The body is the adjusted photo itself (Content-Type image/jpeg or image/png). Like
-  // JSON, those types can't be sent from another site without the browser asking first,
-  // so they're the cross-site guard here. Everything is checked before the upload is read.
   async save(req, res, { id }) {
     const mime = imageType(req, COPY_TYPES, MAX_COPY_BYTES);
     const { user, cred } = await requireUser(req);

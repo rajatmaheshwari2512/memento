@@ -1,21 +1,4 @@
-// Choosing a themed memory's photos (FEATURES.md, section 7, "Choose the photos"). Pure: no
-// requests, no database, so the tests can feed it made-up photos.
-//
-//   1. Leave out what doesn't belong in a memory: screenshots and documents (by their details,
-//      not their contents), photos with someone the user hid, rejected photos, tiny images,
-//      very short or very long videos, creations Memento made itself, photos tucked
-//      under another in a stack, and (where measured) blurred or badly exposed shots.
-//   2. Score the rest: favourites, star ratings, people you've named, a real camera, size,
-//      sharpness where measured.
-//   3. Near-identical shots count once: one per moment (an Immich duplicate group, or a burst
-//      of shots seconds apart), the best of each. A moment used lately is skipped whole.
-//   4. Spread across the event: its time is cut into as many equal parts as photos wanted,
-//      and each part gives its best; empty parts are filled by the best of the rest. Picks are
-//      kept a minute or two apart, and at most a fifth are videos.
-//   5. Moments used in another themed memory lately are only used if too few are left otherwise.
-//
-// And for an animation, the opposite of 3: the best burst, all of its near-identical shots; for
-// a cinematic photo, the one best photo with a clear subject.
+// Choosing a themed memory's photos. Pure: no requests, no database. Leaves out what doesn't belong (screenshots, documents, hidden people, tiny images, creations, stacked photos, blurred shots), scores the rest, keeps one per moment and spreads them across the event. For an animation: the best burst; for a cinematic photo: the best photo with a clear subject.
 
 import { ANIMATION } from "../constants/creations.constants.ts";
 import { CREATION_FILE, NON_CAMERA_TYPES, PICK, QUALITY, SAVED_COPY, SCREENSHOT_NAME } from "../constants/memories.constants.ts";
@@ -27,8 +10,7 @@ export function isScreenshotOrDocument(c: Candidate): boolean {
   if (SCREENSHOT_NAME.test(c.fileName)) return true;
   if (c.hasCamera) return false;
   if (c.mime && NON_CAMERA_TYPES.has(c.mime)) return true;
-  // No camera details (WhatsApp strips them, downloads and scans have none): kept only if
-  // it's a favourite or someone you named is in it.
+  // No camera details: kept only if it's a favourite or someone you named is in it.
   return !(c.isFavorite || c.people.some((p) => p.named));
 }
 
@@ -55,7 +37,7 @@ export function score(c: Candidate, focusPersonId?: string, q?: Quality): number
   if (c.hasCamera) s += 0.5;
   if (c.megapixels !== null && c.megapixels >= 3) s += 0.5;
   if (focusPersonId && c.people.some((p) => p.id === focusPersonId)) {
-    if (c.people.length <= 2) s += 1.5; // they're the subject, not one face in a crowd
+    if (c.people.length <= 2) s += 1.5;
     else if (c.people.length > 6) s -= 0.5;
   }
   if (q && q.sharpness !== null) {
@@ -124,7 +106,6 @@ function spread(items: Scored[], { count, start, end }: Pick<PickOptions, "count
     const best = part.sort(better).find(fits);
     if (best) take(best);
   }
-  // Parts with nothing (nights, travel days) leave room: the best of the rest fill it.
   for (const c of [...items].sort(better)) {
     if (picked.length >= count) break;
     if (!picked.includes(c) && fits(c)) take(c);
@@ -164,16 +145,7 @@ export function evenly<T>(items: T[], n: number): T[] {
   return Array.from({ length: n }, (_, i) => items[Math.round((i * (items.length - 1)) / (n - 1))]!);
 }
 
-// The frames of an animation: the best burst among `library` (an event's photos, stacked ones
-// included), taken at or after `after` (so it plays after its memory's collage and recap), or
-// [] if there's none. A burst is a run of photos of one shape (same size, same way up), each
-// at most ANIMATION.maxGapSeconds after the one before, in the order taken; of a longer run,
-// any stretch within ANIMATION.maxSpanSeconds, and of a stretch with more photos than an
-// animation takes, evenly spread across it. Usable as a memory's photos would be (no
-// screenshots, Memento's own creations or `never`); a burst with anyone the person hid is left
-// out whole; and never an edited copy (SAVED_COPY) or the original it was saved from (same
-// time: one photo twice would flicker). The best: its best photo's score, then the most
-// photos, then the earliest. Whether the photos really look alike, only the container can tell.
+// The frames of an animation: the best burst among `library` taken at or after `after`, or [] if there's none. A burst is a run of photos of one shape, each at most ANIMATION.maxGapSeconds after the one before. Never an edited copy (SAVED_COPY) or the original it was saved from.
 export function animationFrames(library: Candidate[], after: number, never: Set<string>, quality?: Map<string, Quality>): Candidate[] {
   const copies = library.filter((c) => SAVED_COPY.test(c.fileName));
   const editedAt = new Set(copies.map((c) => c.takenAt));
@@ -191,7 +163,6 @@ export function animationFrames(library: Candidate[], after: number, never: Set<
   for (const run of runs) {
     if (run.some((c) => c.hiddenPerson)) continue;
     const ok = run.filter((c) => usable(c, quality?.get(c.id)));
-    // Every stretch within the span, from each photo on (a later start can only reach further).
     for (let i = 0, end = 0; i < ok.length && end < ok.length; i++) {
       while (end < ok.length && ok[end]!.takenAt - ok[i]!.takenAt <= ANIMATION.maxSpanSeconds * 1000) end++;
       const frames = evenly(ok.slice(i, end), ANIMATION.maxFrames);
@@ -203,9 +174,7 @@ export function animationFrames(library: Candidate[], after: number, never: Set<
   return best?.frames ?? [];
 }
 
-// The photo for a cinematic photo: of a memory's photos, the best one with one or two people in
-// it (a clear subject to move around), else the best one (the container tells from its depth
-// whether it has a subject in front of a background). [] if it has no photos.
+// The photo for a cinematic photo: of a memory's photos, the best one with one or two people in it, else the best one. [] if it has no photos.
 export function cinematicPhoto(chosen: Candidate[], quality?: Map<string, Quality>): Candidate[] {
   const ranked = chosen
     .filter((c) => c.isImage)
@@ -221,7 +190,6 @@ export function bestSpread(chosen: Candidate[], n: number, images: boolean, qual
   if (n < 1 || pool.length === 0) return [];
   const start = Math.min(...pool.map((c) => c.takenAt));
   const end = Math.max(...pool.map((c) => c.takenAt)) + 1;
-  // spread() caps videos at a share of the count: here they're picked on their own.
   const picked = images ? spread(pool, { count: n, start, end }) : [...pool].sort(better).slice(0, n).sort((a, b) => a.takenAt - b.takenAt);
   return picked.map(unscored);
 }

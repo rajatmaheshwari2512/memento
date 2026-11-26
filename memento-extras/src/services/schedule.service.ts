@@ -1,10 +1,4 @@
-// When themed memories and creations may run (FEATURES.md, sections 7–8):
-//   - the day's run starts at config.memoriesRunAt (07:05: after the night captions);
-//   - nothing heavy starts in RENDER_QUIET_HOURS (the night captions' hours), and a render only
-//     starts if its time limit ends before them;
-//   - one themed-memories run at a time for everyone (the day's pass, or someone's "make my
-//     memories now"), and no render while one runs, nor from the end of the quiet hours until
-//     the day's run is over: the run's photo checks use the same creations container.
+// When themed memories and creations may run: the day's run starts at config.memoriesRunAt; nothing heavy starts in RENDER_QUIET_HOURS; one themed-memories run at a time for everyone, and no render while one runs.
 
 import { config } from "../config.ts";
 import { dayIn, minutesIn } from "../utils/local-date.ts";
@@ -50,8 +44,7 @@ export function rendersMayStart(now = new Date()): boolean {
   if (running || inQuietHours(now)) return false;
   const quiet = config.renderQuietHours;
   const m = minutesIn(now, config.timeZone);
-  if (quiet && m >= quiet.to && m < config.memoriesRunAt) return false; // after the captions, before the day's run
-  // The day's run (when it's scheduled) hasn't happened yet: it goes first.
+  if (quiet && m >= quiet.to && m < config.memoriesRunAt) return false;
   return config.memoriesCheckSeconds === 0 || !runTimeReached(now) || runDoneOn === today();
 }
 

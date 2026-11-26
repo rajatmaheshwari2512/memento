@@ -1,18 +1,6 @@
-// What's due today, and what each themed memory is called (FEATURES.md, section 7). Pure:
-// no requests, no database, so the tests can feed it made-up libraries and dates.
-//
-// Themes, in the order they're made when several are due (at most MAX_NEW_PER_DAY a day):
-//   trip       after an event far from home ends (needs photos with a location; with too few,
-//              there's no home and so no trips)
-//   month      Best of last month, in the month's first days
-//   big_day    a recent day with many photos, a day or two later
-//   spotlight  a named person with enough photos, at most once a week
-//   big_day    an older big day, once a week, never near its anniversary
-// Not "N years ago": Immich makes those itself every night.
-//
-// Each has a key ("trip:2026-10-12") recorded when it's made, so it's never made twice, and
-// what's due is worked out from the date and that record: a day missed (a restart, Immich
-// down) is caught up the next time, without duplicates.
+// What's due today, and what each themed memory is called. Pure: no requests, no database.
+// Themes, in the order they're made (at most MAX_NEW_PER_DAY a day): trip, month, big_day, spotlight, then an older big_day.
+// Each has a key ("trip:2026-10-12") recorded when it's made, so it's never made twice.
 
 import { BIG_DAY, MAX_LABEL, MONTH, SPOTLIGHT, TRIP } from "../constants/memories.constants.ts";
 import type { Candidate, History, LibraryItem, Plan, SpotlightPerson } from "../types/memories.types.ts";
@@ -34,8 +22,7 @@ function located(i: LibraryItem): i is LibraryItem & Point {
   return i.lat !== null && i.lon !== null;
 }
 
-// Home: the ~30 km square with the most days that have a photo with a location, over the past
-// year. Too few such days (the camera's location was off) and there's no home.
+// Home: the ~30 km square with the most days that have a photo with a location, over the past year.
 export function findHome(items: LibraryItem[], today: string): Point | null {
   const since = addDays(today, -365);
   const cells = new Map<string, { days: Set<string>; lat: number; lon: number; n: number }>();
@@ -57,8 +44,7 @@ export function findHome(items: LibraryItem[], today: string): Point | null {
 
 export type Trip = { first: string; last: string; farIds: Set<string>; lastFarAt: number; over: boolean };
 
-// Runs of days with photos far from home, in the last few weeks. Days without any location in
-// between (most photos have none) are part of the trip.
+// Runs of days with photos far from home, in the last few weeks.
 export function findTrips(items: LibraryItem[], home: Point, today: string): Trip[] {
   const since = addDays(today, -TRIP.lookbackDays);
   const recent = items.filter((i) => i.day >= since && i.day < today && located(i)) as Array<LibraryItem & Point>;
@@ -87,8 +73,7 @@ export function countsByDay(items: LibraryItem[]): Map<string, number> {
   return counts;
 }
 
-// A big day has at least BIG_DAY.minItems, and more than nearly all of this person's days
-// with any photos (so a heavy photographer's ordinary day doesn't count).
+// A big day has at least BIG_DAY.minItems, and more than nearly all of this person's days with any photos.
 export function bigDayThreshold(counts: Map<string, number>): number {
   const sorted = [...counts.values()].sort((a, b) => a - b);
   const at = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * BIG_DAY.percentile))] ?? 0;
@@ -144,15 +129,11 @@ export function pastBigDayDue(history: History, today: string): boolean {
 export function duePlans({ today, items, olderCounts, people, history }: Due): Plan[] {
   const plans: Plan[] = [];
   const recentCounts = countsByDay(items);
-  // From the past year, which is read in full (older months are read only if busy enough).
   const threshold = bigDayThreshold(recentCounts);
 
-  // Trips that are over. Trips still going on keep their days out of "big days".
   const home = findHome(items, today);
   const trips = home ? findTrips(items, home, today) : [];
   const tripDays = (day: string) => trips.some((t) => day >= t.first && day <= t.last);
-  // A trip overlapping one made (or skipped) before is the same trip, seen again as the window
-  // moves on: never made twice.
   const madeBefore = (t: Trip) => history.trips.some((m) => t.first <= m.last && t.last >= m.first);
   for (const t of trips) {
     const key = `trip:${t.first}`;
@@ -171,7 +152,6 @@ export function duePlans({ today, items, olderCounts, people, history }: Due): P
     }
   }
 
-  // A recent big day, not part of a trip (the trip's own memory covers it).
   for (let back = BIG_DAY.recentDays; back >= 1; back--) {
     const day = addDays(today, -back);
     const key = `day:${day}`;
@@ -185,8 +165,7 @@ export function duePlans({ today, items, olderCounts, people, history }: Due): P
     if (person) plans.push({ theme: "spotlight", key: `spotlight:${person.id}:${today}`, person });
   }
 
-  // An older big day: the biggest not shown before, at least two months old, and not within a
-  // week of its anniversary (that's when Immich shows it as "N years ago").
+  // An older big day: the biggest not shown before, at least two months old, and not within a week of its anniversary.
   if (olderCounts && pastBigDayDue(history, today)) {
     const days = [...olderCounts.entries()]
       .filter(([day, n]) =>
@@ -227,8 +206,7 @@ function fit(...options: string[]): string {
   return `${last.slice(0, MAX_LABEL - 1).trimEnd()}…`;
 }
 
-// The memory's label: shown by Memento's apps where unpatched ones show "N years ago", so short.
-// Places are named from every photo of the event (`all`): for a trip, the ones far from home.
+// The memory's label, short. Places are named from every photo of the event (`all`): for a trip, the ones far from home.
 //   trip       "Goa trip, 2023" ("Goa trip" if the place is long; "A trip, 2023" with no place names)
 //   month      "Best of October" ("Best of December 2025" when it's not this year's)
 //   big_day    recent: "A day in Shillong" / "A day to remember";
@@ -259,19 +237,7 @@ export function labelFor(plan: Plan, all: Candidate[], today: string): string {
 }
 
 // --- Dates Immich keeps with the memory ---
-//
-// Immich writes a memory's dates as local calendar days at midnight UTC, and the apps read
-// them that way (the Android app compares showAt/hideAt with today's date as UTC midnight).
-//
-// Unpatched apps can't show our label. For an "on this day" memory they show:
-//   Android memories strip and viewer: "N years ago", N = this year − data.year
-//   Android memories list:             memoryAt as a full date
-//   web:                               memoryAt as a date ("12 Oct 2023"), or "N years ago"
-//                                      when memoryAt's day and month are today's
-// So memoryAt is the day of the memory's first photo (photos play oldest first; a collage or
-// video Memento makes is dated just before it), and data.year is chosen so that "N years ago"
-// is that photo's age, rounded: a trip 2 years 11 months ago says "3 years ago", last month
-// says "0 years ago", never a year that isn't true.
+// memoryAt is the day of the memory's first photo, and data.year is chosen so that "N years ago" is that photo's age, rounded.
 export function memoryDates(firstPhotoDay: string, today: string, showDays: number) {
   const ageYears = Math.round(daysBetween(firstPhotoDay, today) / 365.25);
   return {

@@ -13,8 +13,7 @@ function peopleList(value: unknown, field: string, min: number): string[] {
   return ids;
 }
 
-// A live album's rules from a request, checked for shape. That the people are the user's own
-// is checked against Immich by the service.
+// A live album's rules from a request, checked for shape.
 export function parseRules(body: Record<string, unknown>): Rules {
   const include = peopleList(body.include, "include", 1);
   const exclude = peopleList(body.exclude, "exclude", 0);

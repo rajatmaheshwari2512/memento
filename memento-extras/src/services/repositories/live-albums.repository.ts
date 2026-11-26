@@ -47,7 +47,6 @@ export function updateLiveAlbumRules(id: string, rules: Rules): void {
   );
 }
 
-// Its people and seen photos go with it (foreign keys).
 export function deleteLiveAlbumRow(id: string): void {
   database().prepare("DELETE FROM live_albums WHERE id = ?").run(id);
 }

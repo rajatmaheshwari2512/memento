@@ -1,5 +1,4 @@
-// AI edits: the request, new results, and results waiting to be saved
-// (services/edits.service.ts, repositories/edits.repository.ts).
+// AI edits: the request, new results, and results waiting to be saved.
 
 import type { FileHandle } from "node:fs/promises";
 import type { ImageFile, ImageSize } from "./edit-provider.types.ts";
@@ -20,13 +19,7 @@ export type EditRecord = {
   saved: boolean; // set once fully saved (uploaded, dated, stacked)
 };
 
-// A checked POST /edits or /edits/area request (schemas/edits.schema.ts). `tools`: the app's
-// presets picked for this edit, up to MAX_TOOLS ([] for a typed instruction); `prompt` is
-// already their instructions and the typed words joined into one by the app. They pick the
-// provider (services/edit-providers.service.ts). For an edit of a highlighted area: `mark`, the
-// photo with that area tinted red, and `photo`, the photo itself upright as the app shows it (a
-// first edit only; constants/edits.constants.ts), both decoded into files in the edit's folder
-// as the request arrived.
+// A checked POST /edits or /edits/area request. `tools`: the presets picked (up to MAX_TOOLS, [] for a typed instruction); `prompt` is their instructions and the typed words joined. For an edit of a highlighted area: `mark` (the photo with that area tinted red) and `photo` (a first edit only), both files in the edit's folder.
 export type EditRequest = {
   assetId: string;
   fromEditId: string | null;
@@ -36,8 +29,7 @@ export type EditRequest = {
   photo: EditMark | null;
 };
 
-// How an app lined a result up with the photo before pasting (POST /edits/:id/alignment), logged
-// so the refusal threshold can be tuned on real edits.
+// How an app lined a result up with the photo before pasting (POST /edits/:id/alignment), logged.
 export type AlignmentReport = {
   scaleX: number; offsetX: number; scaleY: number; offsetY: number; error: number; patches: number; refused: boolean;
 };

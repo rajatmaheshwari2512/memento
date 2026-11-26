@@ -1,7 +1,4 @@
-// The one-off caption backlog: every existing photo's preview → llama-server → a results
-// file, which import-captions.ts then loads into the database. Run on the main server in a
-// throwaway container, while the temporary big server runs llama-server (docs/runbooks.md,
-// "Caption the backlog").
+// The one-off caption backlog: every existing photo's preview → llama-server → a results file, which import-captions.ts then loads into the database.
 //
 //   node src/scripts/caption-backlog.ts --assets assets.tsv --out captions.jsonl \
 //     --llama http://10.0.1.10:8080,http://10.0.1.10:8081 --concurrency 8 [--limit 200]
@@ -15,8 +12,7 @@
 // --llama    one or more llama-server addresses; requests are spread across them
 // --limit    caption only this many (the timing test)
 //
-// Prints progress every 15 s, including photos per hour, then a summary.
-// Reads only previews (never originals) and needs no keys: the files are on this server.
+// Prints progress every 15 s, including photos per hour, then a summary. Reads only previews and needs no keys.
 
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
@@ -56,7 +52,6 @@ const concurrency = count("concurrency", args.concurrency)!;
 const limit = count("limit", args.limit);
 const timeoutMs = count("timeout-seconds", args["timeout-seconds"])! * 1000;
 
-// Photos already captioned, from an earlier run.
 function doneIds(file: string): Set<string> {
   const done = new Set<string>();
   if (!existsSync(file)) return done;
@@ -66,10 +61,8 @@ function doneIds(file: string): Set<string> {
       const id = (JSON.parse(line) as { assetId?: unknown }).assetId;
       if (typeof id === "string") done.add(id);
     } catch {
-      // empty, or a half-written last line from a crash: that photo is done again
     }
   }
-  // Start on a fresh line if the last one was cut off.
   if (text.length > 0 && !text.endsWith("\n")) appendFileSync(file, "\n");
   return done;
 }
@@ -99,7 +92,7 @@ let failed = 0;
 let promptTokens = 0;
 let stopping = false;
 const started = performance.now();
-let warmAt = 0; // when the first round of requests had finished; rates after that exclude the warm-up
+let warmAt = 0;
 let warmCount = 0;
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
@@ -149,7 +142,6 @@ async function worker(slot: number): Promise<void> {
     }
     if (lastError !== undefined) {
       failed++;
-      // With the cause (the model's reply), to see what went wrong: this file stays on the server.
       const message = lastError instanceof Error ? [lastError.message, lastError.cause].filter(Boolean).join(": ") : String(lastError);
       appendFileSync(errorsFile, JSON.stringify({ assetId: asset.id, error: message, at: new Date().toISOString() }) + "\n");
     }

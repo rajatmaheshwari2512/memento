@@ -1,5 +1,4 @@
-// What POST /edits and /edits/area accept, and the alignment an app reports
-// (controllers/edits.controller.ts).
+// What POST /edits and /edits/area accept, and the alignment an app reports.
 
 import type { IncomingMessage } from "node:http";
 import { join } from "node:path";
@@ -33,9 +32,7 @@ export function parseEditRequest(body: Record<string, unknown>): EditRequest {
   };
 }
 
-// The tools picked: `tools`, 1 to MAX_TOOLS different names; or from an app built before
-// several could be picked, `tool`, one name. Neither: a typed instruction ([]). Only the count
-// and the names are checked: which tools go together is the apps' rule (ai-tools.json).
+// The tools picked: `tools`, 1 to MAX_TOOLS different names; or `tool`, one name (older apps). Neither: a typed instruction ([]).
 function parseTools(body: Record<string, unknown>): string[] {
   const { tool, tools } = body;
   const sent = (value: unknown) => value !== undefined && value !== null;
@@ -54,12 +51,10 @@ function parseTools(body: Record<string, unknown>): string[] {
   return tools;
 }
 
-// An edit of a highlighted area, read as it arrives: the mark and the photo (base64 strings) are
-// decoded into files in the edit's folder as they come, never whole in memory; the rest is a
-// /edits request's few fields. Then checked as parseAreaRequest says.
+// An edit of a highlighted area, read as it arrives: the mark and the photo (base64 strings) are decoded into files in the edit's folder; the rest is a /edits request's few fields.
 export async function readAreaRequest(req: IncomingMessage, folder: string): Promise<EditRequest> {
   const images = new Map<string, Base64ToFile>();
-  let files = 0; // each image gets its own file, even if a field repeats
+  let files = 0;
   try {
     const body = await readJsonStreamed(req, MAX_AREA_REQUEST_BYTES, AREA_IMAGES, (name) => {
       const image = new Base64ToFile(join(folder, `${name}-${files++}`), { strict: true, maxBytes: AREA_IMAGES_MAX[name]! });
@@ -75,8 +70,6 @@ export async function readAreaRequest(req: IncomingMessage, folder: string): Pro
 const AREA_IMAGES_MAX: Record<string, number> = { mark: MAX_MARK_BYTES, photo: MAX_PHOTO_BYTES };
 const AREA_IMAGES: ReadonlySet<string> = new Set(Object.keys(AREA_IMAGES_MAX));
 
-// Also the mark, and for a first edit the upright photo; checked in the same order as ever (the
-// request's fields first, then the mark, then the photo).
 function parseAreaRequest(body: Record<string, unknown>, images: ReadonlyMap<string, Base64ToFile>): EditRequest {
   const request = parseEditRequest(body);
   const mark = parseImage(body.mark, images.get("mark"), "mark");
@@ -86,8 +79,7 @@ function parseAreaRequest(body: Record<string, unknown>, images: ReadonlyMap<str
   return { ...request, mark, photo };
 }
 
-// An image, base64 (a string, decoded into `file` as it came): a JPEG, PNG or WebP by its bytes,
-// not too big. Not sent (or null): none.
+// An image, base64 (decoded into `file` as it came): a JPEG, PNG or WebP by its bytes, not too big. Not sent (or null): none.
 function parseImage(value: unknown, file: Base64ToFile | undefined, name: string): EditMark | null {
   if (!file) {
     if (value === undefined || value === null) return null;

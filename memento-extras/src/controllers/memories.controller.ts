@@ -15,7 +15,7 @@ export const memoriesController = {
 
   // Turning off, and the creations choice, work while the feature is switched off.
   async changeSettings(req, res) {
-    const body = await readJson(req); // the JSON content type is also the cross-site guard
+    const body = await readJson(req);
     const { user, cred } = await requireSessionUser(req);
     send(res, 200, await changeSettings(user, cred, parseSettingsChange(body)));
   },

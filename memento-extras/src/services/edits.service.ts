@@ -1,12 +1,4 @@
-// AI edits: making one with Gemini, showing the result to whoever made it, saving it into
-// their library next to the original, discarding it, and deleting old results. The routes
-// are in routes/edits.routes.ts; results waiting to be saved are kept by
-// repositories/edits.repository.ts.
-//
-// An edit of a highlighted area (the app sends a copy with the area tinted red) is made from
-// the whole photo, like any other. Gemini redraws fine detail everywhere, so the app pastes
-// only the highlighted area of the result onto the original at full size and sends that
-// photo to be saved (saveAreaEdit); the rest of the photo keeps its own pixels.
+// AI edits: making one with Gemini, showing the result to whoever made it, saving it into their library next to the original, discarding it, and deleting old results.
 
 import { randomUUID } from "node:crypto";
 import { openAsBlob } from "node:fs";
@@ -38,23 +30,14 @@ import { log } from "../utils/http.ts";
 import { extensionFor, imageFileSize } from "../utils/image-type.ts";
 import { WaitLine } from "../utils/wait-line.ts";
 
-// Automatic, by the photo's size: 4K when the original is clearly bigger than a 2K result,
-// otherwise 2K; the same for every edit and every app build. The apps show the price by the
-// same rule.
-//
-// LATER (phase 2, FEATURES.md "Cutting Gemini's cost"; not built): an edit of a highlighted
-// area sends the whole photo at 4K (~₹12). Phase 2 sends only a crop of about twice the area at
-// 2K (1K for small ones; ~₹4–5.5) and the apps paste it back at full size. The request would
-// carry the crop's place in the photo; the apps' paste-back (ai-area.ts, ai_area.dart) would
-// place the result there instead of stretching it over the whole photo.
+// Automatic, by the photo's size: 4K when the original is clearly bigger than a 2K result, otherwise 2K.
 function sizeFor(asset: Asset): ImageSize {
   if (config.imageSize !== "auto") return config.imageSize;
   const { width, height } = shownSize(asset);
   return width * height > FOUR_K_OVER_PIXELS ? "4K" : "2K";
 }
 
-// The photo as shown (with Immich's own crop, which the apps price from too), else the original's;
-// 0 × 0 when Immich doesn't know.
+// The photo as shown (with Immich's own crop), else the original's; 0 × 0 when Immich doesn't know.
 function shownSize(asset: Asset): { width: number; height: number } {
   return asset.shownWidth !== null && asset.shownHeight !== null
     ? { width: asset.shownWidth, height: asset.shownHeight }
@@ -75,8 +58,7 @@ function allowedSize(size: ImageSize, flags: Flags): ImageSize {
   return size === "4K" && !flags.gemini.allow4k ? "2K" : size;
 }
 
-// Loads an edit result, but only for the user who made it. Anyone else gets "not found",
-// so result IDs can't be probed.
+// Loads an edit result, but only for the user who made it.
 async function ownEdit(id: string, userId: string): Promise<EditRecord> {
   const record = isUuid(id) ? await getEdit(id) : null;
   if (!record || record.userId !== userId) throw new HttpError(404, "Edit not found. Unsaved edits are deleted after an hour.");
@@ -104,10 +86,7 @@ const edits = new WaitLine({
   tooLong: () => new HttpError(503, EDITS_TOO_LONG),
 });
 
-// Runs an edit when its turn comes (EDITS_AT_ONCE at a time), with a fresh folder for its files
-// (the photo, the app's mark, Gemini's result), removed afterwards whatever happens. Refused (507)
-// when the disk is nearly full, before anything is written, read or counted. The request's body
-// is read inside, so a request waiting its turn holds no photo.
+// Runs an edit when its turn comes (EDITS_AT_ONCE at a time), with a fresh folder for its files, removed afterwards. Refused (507) when the disk is nearly full.
 export function inEditLine<T>(job: (folder: string) => Promise<T>): Promise<T> {
   return edits.run(async () => {
     await requireFreeSpace(EDITS_LOW_DISK);
@@ -116,7 +95,6 @@ export function inEditLine<T>(job: (folder: string) => Promise<T>): Promise<T> {
     try {
       return await job(folder);
     } catch (error) {
-      // The disk filled up while the edit's files were written.
       if ((error as NodeJS.ErrnoException).code === "ENOSPC") throw new HttpError(507, EDITS_LOW_DISK);
       throw error;
     } finally {
@@ -125,13 +103,11 @@ export function inEditLine<T>(job: (folder: string) => Promise<T>): Promise<T> {
   });
 }
 
-// Edits' files a crash left behind (at start).
 export async function clearEditFiles(): Promise<void> {
   await rm(join(config.dataDir, EDIT_FILES_FOLDER), { recursive: true, force: true });
 }
 
-// Made in `folder`, the edit's own (inEditLine). `wanted` is asked again just before the edit is
-// counted: someone who left while the photo was fetched isn't charged (null).
+// Made in `folder`, the edit's own. `wanted` is asked again just before the edit is counted: null if the person left.
 export async function makeEdit(
   user: User, cred: Credential, flags: Flags, request: EditRequest, folder: string, wanted: () => boolean = () => true,
 ): Promise<EditMade | null> {
@@ -142,7 +118,7 @@ export async function makeEdit(
 
   const free = await tryFreeTool(user, asset, request);
   if (free !== null) return free;
-  requireEditableSize(asset); // Gemini's limit: still before anything is downloaded or counted
+  requireEditableSize(asset);
 
   // "Edit more" works on the previous result instead of the original, at its size.
   let source: EditSource;
@@ -151,7 +127,6 @@ export async function makeEdit(
   if (fromEditId !== null) {
     const previous = await ownEdit(fromEditId, user.id);
     if (previous.assetId !== assetId) throw new HttpError(400, "That edit belongs to a different photo.");
-    // A copy: the result could be discarded or expire while this edit is made.
     const path = join(folder, "previous");
     await copyFile(editImagePath(previous), path);
     source = { path, mime: previous.mime, bytes: (await stat(path)).size, from: "edit" };
@@ -188,7 +163,6 @@ export async function makeEdit(
     return { editId: id, size, usage: usage(user.id) };
   } catch (error) {
     finish(id, false, Date.now() - started, 0);
-    // Gemini's own words can repeat the person's instruction: only that it refused is logged.
     const reason = error instanceof GeminiRefused ? "gemini_refused" : error instanceof Error ? error.message : String(error);
     log({ event: "edit_failed", edit: id, user: user.id, asset: assetId, ms: Date.now() - started, error: reason });
     throw error;
@@ -203,10 +177,7 @@ export async function editImage(user: User, id: string): Promise<EditImage> {
   return { record, ...image, filename: `ai-edit-${id.slice(0, 8)}.${extensionFor(record.mime)}` };
 }
 
-// Saves the result into the user's library, stacked on top of the original. Safe to retry:
-// once uploaded, it isn't uploaded again. A highlighted edit is normally pasted by the app
-// (saveAreaEdit); its whole result only when the app says so (`whole`: the person chose it, e.g.
-// because the result couldn't be lined up with the photo).
+// Saves the result into the user's library, stacked on top of the original. Safe to retry. A highlighted edit is normally pasted by the app (saveAreaEdit); its whole result only when the app says so (`whole`).
 export async function saveEdit(user: User, cred: Credential, id: string, whole: boolean): Promise<string> {
   const record = await ownEdit(id, user.id);
   if (record.area && !whole) {
@@ -214,16 +185,15 @@ export async function saveEdit(user: User, cred: Credential, id: string, whole: 
   }
   if (record.saved && record.savedAssetId) return record.savedAssetId;
 
-  // Read the original again now: its stack may have changed since the edit was made.
   const original = await getAsset(cred, record.assetId);
   if (original.ownerId !== user.id) throw new HttpError(403, "You can only save edits of your own photos.");
 
   // Takes its turn with other saves (copies.service.ts).
   const savedAssetId = await inSaveLine(async () => {
     if (!record.savedAssetId) {
-      const image = await openAsBlob(editImagePath(record), { type: record.mime }); // streamed from disk
+      const image = await openAsBlob(editImagePath(record), { type: record.mime });
       record.savedAssetId = await uploadCopy(cred, original, image, record.mime, `ai-edit-${id.slice(0, 8)}`);
-      await updateEdit(record); // from here on, a retry won't upload again
+      await updateEdit(record);
     }
     await placeWithOriginal(cred, record.savedAssetId, original);
     return record.savedAssetId;
@@ -234,10 +204,7 @@ export async function saveEdit(user: User, cred: Credential, id: string, whole: 
   return savedAssetId;
 }
 
-// An edit of a highlighted area: the app pastes that area of the result onto the original at
-// full size and sends the photo, which `receive` streams to a file (copies.service.ts,
-// withSaveSlot). Saved like saveEdit's, as a copy stacked on the original, and safe to retry
-// the same way: once uploaded, the photo isn't read or uploaded again.
+// An edit of a highlighted area: the app pastes that area of the result onto the original at full size and sends the photo, which `receive` streams to a file. Saved like saveEdit's; safe to retry.
 export async function saveAreaEdit(
   user: User, cred: Credential, id: string, mime: ImageMime, receive: (path: string) => Promise<void>,
 ): Promise<string> {
@@ -253,7 +220,7 @@ export async function saveAreaEdit(
       const size = await imageFileSize(path, mime);
       if (!size || !isFullSize(size, original)) throw new HttpError(400, "That isn't this photo at its full size.");
       record.savedAssetId = await uploadCopy(cred, original, await openAsBlob(path, { type: mime }), mime, `ai-edit-${id.slice(0, 8)}`);
-      await updateEdit(record); // from here on, a retry won't upload again
+      await updateEdit(record);
     }
     await placeWithOriginal(cred, record.savedAssetId, original);
     return record.savedAssetId;
@@ -264,12 +231,10 @@ export async function saveAreaEdit(
   return savedAssetId;
 }
 
-// The original with an area pasted on, at full size: the photo's size as shown or, when Immich
-// doesn't say, the original's either way round (a rotation tag turns it). A RAW photo's
-// full-size picture can be a little smaller (constants/edits.constants.ts, FULL_SIZE_MIN_SHARE).
+// The original with an area pasted on, at full size: the photo's size as shown or, when Immich doesn't say, the original's either way round.
 function isFullSize(size: { width: number; height: number }, original: Asset): boolean {
   if (original.shownWidth !== null && original.shownHeight !== null) return fitsFullSize(size, original.shownWidth, original.shownHeight);
-  if (original.width === null || original.height === null) return true; // nothing to compare with
+  if (original.width === null || original.height === null) return true;
   return fitsFullSize(size, original.width, original.height) || fitsFullSize(size, original.height, original.width);
 }
 
@@ -293,8 +258,7 @@ export async function discardEdit(user: User, id: string): Promise<void> {
   await removeEdit(id);
 }
 
-// Results older than RESULT_TTL_MINUTES are deleted, saved or not (once saved, the photo
-// lives in Immich). Returns how many went.
+// Results older than RESULT_TTL_MINUTES are deleted, saved or not. Returns how many went.
 export async function removeExpiredEdits(): Promise<number> {
   const cutoff = Date.now() - config.resultTtlMinutes * 60_000;
   let removed = 0;

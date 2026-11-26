@@ -1,13 +1,9 @@
-// Base64 to and from files, a piece at a time, so a photo is never whole in memory: an AI edit's
-// images go to Gemini as base64 inside JSON, and its result comes back the same way
-// (clients/gemini.client.ts); the apps send a highlighted edit's images that way too
-// (schemas/edits.schema.ts).
+// Base64 to and from files, a piece at a time, so a photo is never whole in memory.
 
 import { open, type FileHandle } from "node:fs/promises";
 import type { StringSink } from "./json-stream.ts";
 
-// How much of a file is encoded at a time: a multiple of 3 bytes, so each piece encodes on its
-// own (padding only at the very end). 48 KB of file is 64 KB of base64.
+// How much of a file is encoded at a time: a multiple of 3 bytes.
 const READ_BYTES = 3 * 16 * 1024;
 
 // How long `bytes` bytes are in base64, padding included.
@@ -18,7 +14,7 @@ export async function* base64OfFile(path: string): AsyncGenerator<Buffer> {
   const file = await open(path, "r");
   try {
     const buffer = Buffer.alloc(READ_BYTES);
-    let carry = 0; // bytes left from the last read (0–2), at the buffer's start
+    let carry = 0;
     for (;;) {
       const { bytesRead } = await file.read(buffer, carry, READ_BYTES - carry, null);
       const have = carry + bytesRead;
@@ -27,7 +23,6 @@ export async function* base64OfFile(path: string): AsyncGenerator<Buffer> {
         return;
       }
       const whole = have - (have % 3);
-      // A new buffer each time: whoever reads this may still hold the last one.
       if (whole > 0) yield Buffer.from(buffer.subarray(0, whole).toString("base64"), "latin1");
       buffer.copy(buffer, 0, whole, have);
       carry = have - whole;
@@ -37,18 +32,11 @@ export async function* base64OfFile(path: string): AsyncGenerator<Buffer> {
   }
 }
 
-// What a lenient read ignores (Buffer.from(…, "base64") does the same): anything but base64's
-// letters (the URL-safe ones too) and padding, e.g. line breaks.
 const NOT_BASE64 = /[^A-Za-z0-9+/\-_=]/g;
 const PLAIN = /^[A-Za-z0-9+/]*(=*)$/;
 const PADDING = /^=*$/;
 
-// A base64 string (from utils/json-stream.ts) decoded into a new file as it arrives, 4 characters
-// at a time. Strict (what an app sends): only plain base64 is valid, as /^[A-Za-z0-9+/]+={0,2}$/
-// says; otherwise (Gemini's reply) what isn't base64 is ignored. Nothing more is written once it's
-// invalid or more than `maxBytes` would be, but it's still counted. Afterwards: how many
-// characters came, how many bytes were written, whether it was valid, and its first bytes (to tell
-// the image's type). close() must be called in the end, whatever happened.
+// A base64 string decoded into a new file as it arrives. Strict (what an app sends): only plain base64 is valid; otherwise what isn't base64 is ignored. Afterwards: how many characters came, how many bytes were written, whether it was valid, and its first bytes. close() must be called in the end.
 export class Base64ToFile implements StringSink {
   readonly path: string;
   chars = 0;
@@ -84,7 +72,7 @@ export class Base64ToFile implements StringSink {
     if (this.#strict && this.#dataChars === 0) this.valid = false;
     if (this.#writing() && this.#carry) await this.#put(Buffer.from(this.#carry, "base64"));
     this.#carry = "";
-    if (!this.#file && !this.#closed) this.#file = await open(this.path, "wx", 0o600); // even when empty
+    if (!this.#file && !this.#closed) this.#file = await open(this.path, "wx", 0o600);
     await this.close();
   }
 
@@ -95,12 +83,10 @@ export class Base64ToFile implements StringSink {
     await file?.close();
   }
 
-  // Still worth writing: valid, and not already refused as too large (schemas/edits.schema.ts's rule).
   #writing(): boolean {
     return this.valid && !this.#closed && (this.chars * 3) / 4 <= this.#maxBytes + 2;
   }
 
-  // Plain base64: letters, then at most two "=" at the very end.
   #check(text: string): void {
     if (!this.valid) return;
     if (this.#padding > 0) {

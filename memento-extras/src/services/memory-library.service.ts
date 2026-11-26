@@ -1,16 +1,4 @@
-// What themed memories know about a person's library, read from Immich with their key each
-// night. Nothing is copied into our database.
-//
-//   the timeline (GET /api/timeline/bucket, one month at a time): every photo's time, place
-//     and favourite, compactly. Finds home, trips, big days and how full last month was.
-//   the photo search (with EXIF and people): the details a memory's photos are chosen by,
-//     only for the days (or the person) of something that's due.
-//   people: named ones, and how many photos each has, for Spotlight.
-//
-// Only the user's own photos: Immich's search also returns photos partners share, and those
-// are dropped here (a memory can't hold them, and a collage must never show them). And only
-// what their timeline shows: a stack counts as its top photo (the photos under it are kept,
-// marked `stacked`, for animations only: a burst is often stacked).
+// What themed memories know about a person's library, read from Immich with their key each night: the timeline (month by month), the photo search (with EXIF and people), and people. Only the user's own photos; a stack counts as its top photo.
 
 import { listPeople, searchAll, timelineMonth, timelineMonths } from "../clients/immich.client.ts";
 import { BIG_DAY, LIMITS, SPOTLIGHT } from "../constants/memories.constants.ts";
@@ -40,8 +28,7 @@ export function itemsOf(m: TimelineMonth, userId: string): LibraryItem[] {
   return items;
 }
 
-// The past ~13 months (home over the past year, trips, recent big days, last month), and the
-// list of every month with its count (for older big days).
+// The past ~13 months, and the list of every month with its count.
 export async function loadRecent(cred: Credential, userId: string, today: string) {
   const months = await timelineMonths(cred);
   const since = monthOf(addDays(today, -400));
@@ -52,8 +39,7 @@ export async function loadRecent(cred: Credential, userId: string, today: string
   return { items, months };
 }
 
-// Photos per day over the whole library. Only months with enough photos for a big day are
-// read (at most LIMITS.olderMonths, newest first); the recent ones are already in hand.
+// Photos per day over the whole library; only months with enough photos for a big day are read (at most LIMITS.olderMonths, newest first).
 export async function loadAllCounts(
   cred: Credential, userId: string, months: Array<{ month: string; count: number }>, recent: LibraryItem[], today: string,
 ): Promise<Map<string, number>> {
@@ -67,8 +53,7 @@ export async function loadAllCounts(
   return counts;
 }
 
-// Named people with enough photos to be worth a Spotlight, and how many each has (one request
-// each, for the first LIMITS.spotlightPeople in Immich's order). Hidden people aren't listed.
+// Named people with enough photos to be worth a Spotlight, and how many each has. Hidden people aren't listed.
 export async function loadSpotlightPeople(cred: Credential): Promise<SpotlightPerson[]> {
   const people = (await listPeople(cred)).filter((p) => p.name.trim() !== "").slice(0, LIMITS.spotlightPeople);
   const out: SpotlightPerson[] = [];
@@ -124,8 +109,7 @@ export function toCandidate(json: AssetJson, userId: string): Candidate | null {
   };
 }
 
-// What the person's timeline shows in these months (a stack as its top photo only; the search
-// returns every photo of a stack), optionally only one person's.
+// What the person's timeline shows in these months, optionally only one person's.
 async function shownIn(cred: Credential, userId: string, months: string[], personId?: string): Promise<Set<string>> {
   const ids = new Set<string>();
   for (const month of months.slice(-LIMITS.olderMonths)) {
@@ -134,9 +118,7 @@ async function shownIn(cred: Credential, userId: string, months: string[], perso
   return ids;
 }
 
-// Every photo and video taken on these local days that the timeline shows, and the photos
-// stacked under them. Searched by time with half a day to spare either side (photos taken in
-// other time zones), then kept by the day they were taken.
+// Every photo and video taken on these local days that the timeline shows, and the photos stacked under them.
 export async function candidatesForDays(cred: Credential, userId: string, first: string, last: string, timeZone: string): Promise<Candidate[]> {
   const shown = await shownIn(cred, userId, monthsBetween(first, last));
   const from = new Date(startOfDay(first, timeZone) - 14 * HOUR).toISOString();

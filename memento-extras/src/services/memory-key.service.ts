@@ -1,6 +1,4 @@
-// Each person's own Immich key for themed memories and creations (KEY_PERMISSIONS), made from
-// their login when they turn themed memories on (api-key.service.ts), and used by the day's run
-// (memories.service.ts) and the render worker (creations.service.ts).
+// Each person's own Immich key for themed memories and creations (KEY_PERMISSIONS), made from their login when they turn themed memories on.
 
 import { KeyRejected, timelineMonths } from "../clients/immich.client.ts";
 import { KEY_BROKEN, KEY_NAME, KEY_OUTDATED, KEY_PERMISSIONS, KEY_PURPOSE } from "../constants/memories.constants.ts";
@@ -12,7 +10,7 @@ const PERMISSIONS = JSON.stringify(KEY_PERMISSIONS);
 
 const KEY: KeySpec = {
   purpose: KEY_PURPOSE, name: KEY_NAME, permissions: KEY_PERMISSIONS, what: "themed memories",
-  check: (key) => timelineMonths(key), // still accepted by Immich?
+  check: (key) => timelineMonths(key),
 };
 
 // The person's key as a credential, or why there's none: "off" (they turned memories off),

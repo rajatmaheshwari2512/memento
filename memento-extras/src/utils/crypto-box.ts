@@ -1,17 +1,5 @@
-// Encrypts small secrets (e.g. the per-user Immich API keys live albums use) before they
-// go into the database, so a copy of the database (a backup, a debugging copy) is useless
-// without MEMENTO_SECRET. It doesn't protect against someone who controls the server:
-// the secret is there too.
-//
-//   key:    HKDF-SHA256 from MEMENTO_SECRET, separately for each purpose ("live-albums
-//           api-keys"), so two uses of the secret never share a key
-//   cipher: AES-256-GCM, a fresh random 12-byte nonce every time
-//   bound:  to what it belongs to (e.g. the user ID) as additional data, so a value
-//           copied onto another user's row fails to decrypt
-//   stored: base64 of version (1 byte) + nonce (12) + tag (16) + ciphertext
-//
-// Opening fails loudly (throws) if the value was changed, belongs elsewhere, or the
-// secret is different.
+// Encrypts small secrets (e.g. the per-user Immich API keys live albums use) before they go into the database; a copy of the database is useless without MEMENTO_SECRET.
+// Opening fails loudly (throws) if the value was changed, belongs elsewhere, or the secret is different.
 
 import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from "node:crypto";
 import { config } from "../config.ts";

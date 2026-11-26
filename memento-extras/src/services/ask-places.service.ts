@@ -1,9 +1,4 @@
-// Places in Ask Photos ("last time in goa"). The trained reader marks the words that say where
-// the photos were taken (its PLACE label: not "Delhi wale cousins", not "India Gate"); here
-// that phrase is looked up in *the asker's own* places. Immich works out each photo's city,
-// state and country from its location and lists the ones in a user's (and their timeline
-// partners') photos, so this works for any user with nothing to train. A place that isn't in
-// their photos isn't a filter: its words just stay search words. Plan: DECISIONS.md, Ask Photos.
+// Places in Ask Photos ("last time in goa"): the phrase the trained reader marks as where the photos were taken is looked up in the asker's own places. A place that isn't in their photos isn't a filter: its words stay search words.
 
 import { setTimeout as sleep } from "node:timers/promises";
 import { placeNames, searchPlaces } from "../clients/immich.client.ts";
@@ -13,15 +8,12 @@ import type { Credential } from "../types/immich.types.ts";
 import { log } from "../utils/http.ts";
 import { wordsOf } from "../utils/words.ts";
 
-// Widest first: a name that's both a state and a city ("Delhi") is read as the state, which
-// holds the city's photos too ("New Delhi" is in the state of Delhi).
 const KINDS: PlaceKind[] = ["country", "state", "city"];
 
 // A user's places by key ("new delhi", "manali" for "Manāli").
 export type PlaceIndex = Map<string, Place>;
 
-// How a place name is compared: its words without accents ("Manāli" is "manali") or "and"
-// ("Jammu & Kashmir" is "Jammu and Kashmir").
+// How a place name is compared: its words without accents or "and".
 const placeWords = (name: string): string[] => wordsOf(name.normalize("NFD").replace(/\p{M}/gu, "")).filter((w) => w !== "and");
 export const placeKey = (name: string): string => placeWords(name).join(" ");
 
@@ -46,23 +38,21 @@ export function indexPlaces(lists: Record<PlaceKind, string[]>): PlaceIndex {
   return index;
 }
 
-// Ask never waits long for Immich here: null when it's slow (the work carries on) or fails.
+// Null when Immich is slow or fails.
 const inTime = <T>(work: Promise<T>): Promise<T | null> =>
   Promise.race([work, sleep(PLACES_WAIT_MS, null, { ref: false })]).catch(() => null);
 
 const cache = new Map<string, { index: PlaceIndex; expires: number }>();
-const loading = new Map<string, Promise<PlaceIndex>>(); // one read per user at a time
-const failedUntil = new Map<string, number>(); // Immich couldn't list them: don't ask again for a minute
+const loading = new Map<string, Promise<PlaceIndex>>();
+const failedUntil = new Map<string, number>();
 
-// The asker's places if they've been read already (a read that finished after Ask stopped
-// waiting for it still counts).
+// The asker's places if they've been read already.
 export const cachedPlaces = (userId: string): PlaceIndex | null => {
   const hit = cache.get(userId);
   return hit && hit.expires > Date.now() ? hit.index : null;
 };
 
-// The asker's places, kept for a few minutes; null when Immich is slow or can't list them,
-// so Ask never waits long for them. A slow read carries on and is kept for the next question.
+// The asker's places, kept for a few minutes; null when Immich is slow or can't list them.
 export async function placesOf(cred: Credential, userId: string): Promise<PlaceIndex | null> {
   const cached = cachedPlaces(userId);
   if (cached) return cached;
@@ -88,8 +78,7 @@ export async function placesOf(cred: Credential, userId: string): Promise<PlaceI
   return inTime(load);
 }
 
-// The longest run of a phrase's words that's one of the asker's places: "goa beach", marked
-// as one place, is Goa (and "beach" stays a search word).
+// The longest run of a phrase's words that's one of the asker's places.
 function byName(phrase: string, index: PlaceIndex): PlaceMatch | null {
   const words = placeWords(phrase);
   for (let n = words.length; n >= 1; n--) {
@@ -101,7 +90,6 @@ function byName(phrase: string, index: PlaceIndex): PlaceMatch | null {
   return null;
 }
 
-// Immich's answers, by phrase: its place data is the same for every user.
 const searched = new Map<string, PlaceFound[]>();
 
 async function placeSearch(cred: Credential, phrase: string): Promise<PlaceFound[]> {
@@ -113,18 +101,13 @@ async function placeSearch(cred: Credential, phrase: string): Promise<PlaceFound
   return found;
 }
 
-// The place the question names, if it's one of the asker's: each phrase the reader marked as
-// where, by its own name, or else by what Immich's place search makes of it, which knows old
-// names, other spellings and typos ("bombay" → Mumbai, "banglore" → Bengaluru). Its answers
-// can be places anywhere ("calcutta" is also a town in Belize), so the first one that's among
-// the asker's places counts. The first phrase that matches wins ("delhi to manali": Delhi).
+// The place the question names, if it's one of the asker's: each phrase the reader marked as where, by its own name, or else by Immich's place search. The first phrase that matches wins.
 export async function findPlace(cred: Credential, plan: Plan, index: PlaceIndex): Promise<PlaceMatch | null> {
   if (index.size === 0) return null;
   for (const phrase of plan.places) {
     const match = byName(phrase, index);
     if (match) return match;
   }
-  // At most three phrases, looked up at once, waited for no longer than one lookup.
   const phrases = [...new Set(plan.places.map(placeKey).filter(Boolean))].slice(0, 3);
   const answers = (await inTime(Promise.all(phrases.map((p) => placeSearch(cred, p).catch((): PlaceFound[] => []))))) ?? [];
   for (const [i, found] of answers.entries()) {

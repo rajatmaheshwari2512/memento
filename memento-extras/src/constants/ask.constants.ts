@@ -1,5 +1,4 @@
-// Ask Photos: how many results each search keeps, and the words and patterns the date reader
-// and name matching use (services/ask.service.ts, ask-parser.service.ts, ask-reader.service.ts).
+// Ask Photos: how many results each search keeps, and the words and patterns the date reader and name matching use.
 
 export const ASK_OFF = "Ask Photos is switched off. An admin can turn it on in Administration → Settings → Memento Features.";
 
@@ -7,20 +6,16 @@ export const SMART_RESULTS = 250; // the search model's best matches
 
 export const CAPTION_RESULTS = 200; // caption matches, best first
 
-// "The last time …": every caption match (up to this many) is sorted by date, so the newest
-// is never cut for a weaker word match. Immich takes 2,000 IDs in one search (5,000 failed),
-// so they go in batches.
+// For "The last time …": up to this many caption matches are sorted by date, sent to Immich in batches.
 export const DATED_CAPTIONS = 10_000;
 
 export const IDS_PER_SEARCH = 2_000;
 
 export const PAGE = 250; // photos per page when there are no words to rank by (newest first)
 
-export const DATE_SORTED_SMART = 50; // "the last time …" with no caption match: the AI search's best 50 are sorted by date
+export const DATE_SORTED_SMART = 50;
 
-// Reciprocal rank fusion: each list gives a photo 1 / (K + its place in that list), and the
-// photo's score is the sum. 60 is the usual K; with it, a photo near the top of both lists
-// beats one at the very top of only one.
+// Reciprocal rank fusion constant (60 is the usual).
 export const RRF_K = 60;
 
 export const PEOPLE_CACHE_MS = 60_000;
@@ -28,10 +23,6 @@ export const PEOPLE_CACHE_MS = 60_000;
 export const MAX_QUESTION_CHARS = 300;
 
 // Words that never help find a photo: grammar, chat, question words, and sort or kind words.
-// Left over from a phrase the model marked as a date, they aren't searched for ("pichle saal
-// ki" → nothing, "my first birthday" → "birthday"), since the caption search needs every word.
-// The reader's safety net also uses it: a People-page name that's one of these words ("Will",
-// "May") counts only when the model marks it as a person.
 export const FILLER = new Set(
   ("a an the at in on of with and or to for from by into onto over under near some any all every just only " +
     "my our your his her their its this that these those is are was were be been being i we you he she they it us " +
@@ -50,8 +41,7 @@ export const FILLER = new Set(
     .split(" "),
 );
 
-// Small words that only join things together. When one of them ends up next to something
-// the date reader took out ("photos of June 2024" → "of"), it goes too.
+// Small words that only join things together; dropped when next to a piece the date reader took out.
 export const JOINERS = new Set([
   "and", "&", "+", ",", "with", "of", "from", "in", "during", "on", "at", "or", "taken", "my", "our", "the", "a",
   "all", "every", "any", "just", "only", "between", "since", "around", "when", "where", "while", "was", "were", "is",
@@ -89,9 +79,7 @@ export const AFTER = "(?![\\p{L}\\p{N}])";
 
 export const POSSESSIVE = "(?:['’]s|s['’])?";
 
-// The trained reader (services/ask-reader.service.ts). A face named like a relation also
-// answers to that relation's other words ("Mummy" ← "maa", "mom"). Ambiguous words ("mama":
-// mother or uncle; "grandma": nani or dadi) are left out.
+// The trained reader: a face named like a relation also answers to that relation's other words.
 export const RELATIONS: readonly (readonly string[])[] = [
   ["mom", "mommy", "mummy", "mumma", "mum", "maa", "amma", "ammi", "mother", "mamma", "mumy", "mummi", "momy"],
   ["dad", "daddy", "papa", "pappa", "father", "pitaji", "abbu", "dady", "pops"],
@@ -103,8 +91,7 @@ export const RELATIONS: readonly (readonly string[])[] = [
   ["bhaiya", "bhai", "bro", "brother"],
 ];
 
-// First-person words the reader may label as a person: the asker. The same list as the reader's
-// (reader/common.py, FIRST_PERSON); a test keeps them in step.
+// First-person words the reader may label as a person (same list as reader/common.py FIRST_PERSON).
 export const FIRST_PERSON = new Set([
   "me", "myself", "i", "i'm", "im", "i'am", "i've", "ive", "i'd", "self",
   "main", "mai", "mein", "mujhe", "muje", "mujhko", "maine", "mene", "khud", "meri", "mera", "mere", "apun",
@@ -127,9 +114,7 @@ export const HINDI_NUMBER_WORDS: Record<string, number> = {
 };
 export const HINDI_NUMBER = `(\\d{1,3}|${Object.keys(HINDI_NUMBER_WORDS).join("|")})`;
 
-// Places (services/ask-places.service.ts): how long a user's list of places is kept; Ask never
-// waits longer than PLACES_WAIT_MS for it (or for Immich's place search), and after a failed
-// read asks again a minute later.
+// Places: how long a user's list of places is kept, and how long Ask waits for it (PLACES_WAIT_MS).
 export const PLACES_CACHE_MS = 10 * 60_000;
 export const PLACES_WAIT_MS = 1_500;
 export const PLACES_RETRY_MS = 60_000;

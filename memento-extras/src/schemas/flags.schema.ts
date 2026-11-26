@@ -1,5 +1,4 @@
-// Every setting an admin may change, its allowed values, and how it's shown
-// (services/flags.service.ts; the app's Memento admin draws its list from these).
+// Every setting an admin may change, its allowed values, and how it's shown.
 
 import { GEMINI_SECTION } from "../constants/flags.constants.ts";
 import type { FlagUpdate, Rule, Setting } from "../types/flags.types.ts";
@@ -75,15 +74,13 @@ export function valid(rule: Rule, value: unknown): boolean {
   return typeof value === "number" && Number.isInteger(value) && value >= rule.min && value <= rule.max;
 }
 
-// Whether `value` is allowed for the setting `key`, e.g. a person's own daily limit is
-// checked against "gemini.dailyLimitPerUser".
+// Whether `value` is allowed for the setting `key`.
 export function validSetting(key: string, value: unknown): boolean {
   const rule = RULES[key];
   return rule !== undefined && valid(rule, value);
 }
 
-// An admin's changes, e.g. { gemini: { enabled: false } }: every setting known and every value
-// in range, or nothing is changed.
+// An admin's changes, e.g. { gemini: { enabled: false } }: every setting known and every value in range, or nothing is changed.
 export function parseFlagChanges(patch: Record<string, unknown>): FlagUpdate[] {
   const updates: FlagUpdate[] = [];
   for (const [group, values] of Object.entries(patch)) {

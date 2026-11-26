@@ -8,7 +8,7 @@ import { readJson, send } from "../utils/http.ts";
 
 export const askController = {
   async ask(req, res) {
-    const body = await readJson(req); // the JSON content type is also the cross-site guard
+    const body = await readJson(req);
     const { user, cred } = await requireUser(req);
     requireAskPhotos();
     send(res, 200, await ask(user, cred, parseAskRequest(body)));

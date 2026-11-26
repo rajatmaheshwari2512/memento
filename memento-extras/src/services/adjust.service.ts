@@ -1,8 +1,4 @@
-// Adjust: light and colour sliders, filters and straighten. The web and Android apps render
-// the adjusted photo themselves, at full size, and send it here; it's saved like an AI edit,
-// as a copy with the original's date and place, stacked on top of it (copies.service.ts,
-// which also streams the upload to a file and takes turns with AI edits' saves). The routes
-// are in routes/adjust.routes.ts.
+// Adjust: light and colour sliders, filters and straighten. The apps render the adjusted photo themselves, at full size, and send it here; it's saved as a copy with the original's date and place, stacked on top of it (copies.service.ts).
 
 import { openAsBlob } from "node:fs";
 import { getAsset } from "../clients/immich.client.ts";
@@ -14,7 +10,6 @@ import type { ImageMime } from "../types/image.types.ts";
 import { HttpError, isUuid } from "../utils/http-error.ts";
 import { log } from "../utils/http.ts";
 
-// Checked before the photo is read or the upload accepted.
 export function requireAdjust(): void {
   if (!getFlags().adjust.enabled) throw new HttpError(403, ADJUST_OFF);
 }

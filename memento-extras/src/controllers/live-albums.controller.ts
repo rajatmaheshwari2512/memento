@@ -16,7 +16,7 @@ export const liveAlbumsController = {
   },
 
   async create(req, res) {
-    const body = await readJson(req); // the JSON content type is also the cross-site guard
+    const body = await readJson(req);
     const { user, cred } = await requireSessionUser(req);
     requireLiveAlbums();
     send(res, 201, await createLiveAlbum(user, cred, parseNewLiveAlbum(body)));

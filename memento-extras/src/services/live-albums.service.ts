@@ -1,20 +1,4 @@
-// Live albums: an album that fills itself with photos of chosen people (FEATURES.md, "Live
-// albums"). A user sets one up in the web app or the Android app; every few minutes this
-// service asks Immich for those people's photos and adds the new ones to the album.
-//
-// How it stays safe and predictable:
-//   - It only ever adds. A photo it has considered once (added, already there, or refused)
-//     is remembered per album and never tried again, so a photo you remove stays removed.
-//   - It works in the background with a key of the user's own, made once from their login
-//     when they set up their first live album. The key can only read photos and albums and
-//     add to albums (KEY_PERMISSIONS). It's stored encrypted (crypto-box.ts), and deleted in
-//     Immich when the user removes their last live album.
-//   - Only your own albums and your own people.
-//   - Never Memento's own creations (collages, recaps, animations, cinematic photos:
-//     creations.service.ts), though they show the same people.
-//   - Off (the liveAlbums flag) stops the checks and refuses changes. Nothing is deleted.
-//
-// What's stored, and where: repositories/live-albums.repository.ts.
+// Live albums: an album that fills itself with photos of chosen people. Every few minutes this service asks Immich for those people's photos and adds the new ones to the album. It only adds, with a key of the user's own (KEY_PERMISSIONS), only for their own albums and people, never Memento's own creations. Off (the liveAlbums flag) stops the checks and refuses changes.
 
 import { randomUUID } from "node:crypto";
 import { addToAlbum, createAlbum, deleteApiKey, getAlbum, KeyRejected, personExists, searchAll } from "../clients/immich.client.ts";
@@ -72,7 +56,7 @@ const KEY: KeySpec = {
 
 function readKey(userId: string): Credential | null {
   const stored = userKey(userId);
-  return stored ? openKey(KEY, userId, stored.sealed) : null; // throws if tampered, moved or the secret changed
+  return stored ? openKey(KEY, userId, stored.sealed) : null;
 }
 
 // Makes sure the user has a working key, using their login (they're saving a live album).
@@ -115,10 +99,9 @@ export async function runLiveAlbum(id: string): Promise<RunResult> {
       visibility: { in: ["timeline"] },
       ...(row.since ? { takenAt: { gte: `${row.since}T00:00:00.000Z` } } : {}),
     };
-    // Read in full before anything is added, so the results don't shift under the cursor.
     const found = await searchAll(cred, { filter }, 200, (a) => a.id);
     const seen = seenAssetIds(id);
-    const creations = creationAssetIds(row.user_id); // Memento's own creations: never added
+    const creations = creationAssetIds(row.user_id);
     const fresh = found.filter((assetId) => !seen.has(assetId) && !creations.has(assetId));
 
     let added = 0;
@@ -160,13 +143,11 @@ export async function runAll(): Promise<void> {
 
 // --- What the apps call ---
 
-// Checked first by the routes that change live albums. Stopping one still works when off.
 export function requireLiveAlbums(): void {
   if (!getFlags().liveAlbums.enabled) throw new HttpError(403, LIVE_ALBUMS_OFF);
   if (!secretConfigured()) throw new HttpError(503, "Live albums aren't set up on this server (MEMENTO_SECRET is missing).");
 }
 
-// Only the user's own people: Immich answers "not found" for anyone else's.
 async function checkPeople(cred: Credential, { include, exclude }: Rules): Promise<void> {
   for (const person of [...include, ...exclude]) {
     if (!(await personExists(cred, person))) throw new HttpError(400, "One of the chosen people wasn't found.");
@@ -181,7 +162,7 @@ export function listLiveAlbums(user: User): LiveAlbum[] {
 export async function createLiveAlbum(user: User, cred: Credential, { album: choice, rules }: NewLiveAlbum): Promise<LiveAlbum> {
   if (liveAlbumCount(user.id) >= config.maxLiveAlbumsPerUser) throw new HttpError(400, `You can have at most ${config.maxLiveAlbumsPerUser} live albums.`);
   await checkPeople(cred, rules);
-  await ensureKey(user, cred); // first, so a failure here leaves no new album behind
+  await ensureKey(user, cred);
 
   let album;
   if ("albumId" in choice) {
@@ -201,7 +182,7 @@ export async function createLiveAlbum(user: User, cred: Credential, { album: cho
     savePeople(id, rules);
   });
   log({ event: "live_album_created", liveAlbum: id, user: user.id, album: album.id, people: rules.include.length, match: rules.match });
-  void runLiveAlbum(id); // fill it now, in the background
+  void runLiveAlbum(id);
   return toLiveAlbum(rowFor(id, user.id));
 }
 

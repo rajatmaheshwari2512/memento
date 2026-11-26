@@ -14,7 +14,7 @@ export const flagsController = {
   },
 
   async update(req, res) {
-    const body = await readJson(req); // the JSON content type is also the cross-site guard
+    const body = await readJson(req);
     const { user } = await requireAdmin(req);
     const changes = setFlags(parseFlagChanges(body), user.id);
     for (const change of changes) log({ event: "flag_changed", user: user.id, ...change });

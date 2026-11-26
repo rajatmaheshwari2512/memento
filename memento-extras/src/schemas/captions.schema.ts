@@ -1,12 +1,10 @@
-// What the caption model must answer, and the checks every caption passes before
-// it's kept (services/captions.service.ts, repositories/captions.repository.ts).
+// What the caption model must answer, and the checks every caption passes before it's kept.
 
 import { MAX_CAPTION_CHARS, MAX_TAGS, TAGS } from "../constants/captions.constants.ts";
 import type { Caption, CaptionRecord, Tag } from "../types/captions.types.ts";
 import { isUuid } from "../utils/http-error.ts";
 
 // Makes the model's reply valid JSON of this shape (llama-server turns it into a grammar).
-// The checker below still validates everything, in case a server ignores it.
 export const SCHEMA = {
   type: "object",
   properties: {
@@ -19,8 +17,7 @@ export const SCHEMA = {
 
 const TAG_BY_LOWER = new Map(TAGS.map((t) => [t.toLowerCase(), t] as const));
 
-// The model's reply text → a caption we accept, or null. Tags not on the list are dropped,
-// and the caption is tidied and capped. Never throws.
+// The model's reply text → a caption we accept, or null. Tags not on the list are dropped. Never throws.
 export function parseCaption(text: unknown): Caption | null {
   if (typeof text !== "string") return null;
   const body = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");

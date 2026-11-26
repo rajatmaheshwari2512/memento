@@ -21,7 +21,7 @@ export const adminController = {
   },
 
   async setDailyLimit(req, res, { id }) {
-    const body = await readJson(req); // the JSON content type is also the cross-site guard
+    const body = await readJson(req);
     const { user } = await requireAdmin(req);
     const userId = parseUserId(id!);
     const dailyEdits = parseDailyLimit(body);
