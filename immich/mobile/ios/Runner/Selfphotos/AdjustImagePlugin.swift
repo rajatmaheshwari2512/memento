@@ -107,9 +107,10 @@ class AdjustImagePlugin: ImmichPlugin, FlutterPlugin {
     output = nil
   }
 
+  // Throws tooLarge unless twice [bytes] is free.
   static func ensureMemory(bytes: Int) throws {
     let available = os_proc_available_memory()
-    if available > 0 && bytes > available {
+    if available > 0 && bytes * 2 > available {
       throw AdjustImageError.tooLarge
     }
   }
