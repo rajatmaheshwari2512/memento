@@ -678,7 +678,6 @@ void main() {
       expect(await row(local.id), (checksum: null, deviceChecksum: null));
 
       await sut.updateHashes({local.id: 'original'});
-      await sut.linkStorageSaverCopies();
 
       expect(await row(local.id), (checksum: 'copy', deviceChecksum: 'original'));
     });

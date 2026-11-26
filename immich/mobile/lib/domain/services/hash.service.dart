@@ -66,8 +66,6 @@ class HashService {
           await _hashAssets(pseudoAlbum, trashedToHash, isTrashed: true);
         }
       }
-
-      await _localAssetRepository.linkStorageSaverCopies();
     } on PlatformException catch (e, s) {
       if (e.code == _kHashCancelledCode) {
         _log.warning("Hashing cancelled by platform");

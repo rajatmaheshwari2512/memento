@@ -65,22 +65,6 @@ void main() {
         expect(captured[asset.id], result.hash);
       });
 
-      test('links Storage saver copies after hashing', () async {
-        final album = LocalAlbumFactory.create();
-        final asset = LocalAssetFactory.create();
-
-        when(mocks.localAlbum.getBackupAlbums).thenAnswer((_) async => [album]);
-        when(() => mocks.localAlbum.repo.getAssetsToHash(album.id)).thenAnswer((_) async => [asset]);
-        when(
-          () => mocks.nativeApi.api.hashAssets([asset.id], allowNetworkAccess: false),
-        ).thenAnswer((_) async => [HashResult(assetId: asset.id, hash: 'test-hash')]);
-        when(() => mocks.trashedAsset.getAssetsToHash(any())).thenAnswer((_) async => []);
-
-        await sut.hashAssets();
-
-        verifyInOrder([mocks.localAsset.updateHashes, mocks.localAsset.linkStorageSaverCopies]);
-      });
-
       test('handles failed hashes', () async {
         final album = LocalAlbumFactory.create();
         final asset = LocalAssetFactory.create();

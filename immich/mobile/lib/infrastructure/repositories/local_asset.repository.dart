@@ -63,14 +63,17 @@ class LocalAssetRepository extends DatabaseAccessor<Drift> with $LocalAssetRepos
       return Future.value();
     }
 
-    return _db.batch((batch) async {
-      for (final entry in hashes.entries) {
-        batch.update(
-          _db.localAssetEntity,
-          LocalAssetEntityCompanion(checksum: Value(entry.value)),
-          where: (e) => e.id.equals(entry.key),
-        );
-      }
+    return _db.transaction(() async {
+      await _db.batch((batch) {
+        for (final entry in hashes.entries) {
+          batch.update(
+            _db.localAssetEntity,
+            LocalAssetEntityCompanion(checksum: Value(entry.value)),
+            where: (e) => e.id.equals(entry.key),
+          );
+        }
+      });
+      await linkStorageSaverCopies();
     });
   }
 
