@@ -781,6 +781,14 @@ void main() {
       expect(await row(local.id), (checksum: 'copy', deviceChecksum: 'original'));
     });
 
+    test('links an original the app has not hashed yet', () async {
+      final local = await ctx.newLocalAsset(checksumOption: const Option.none());
+
+      await sut.linkStorageSaverCopy(local.id, originalChecksum: 'original', copyChecksum: 'copy');
+
+      expect(await row(local.id), (checksum: 'copy', deviceChecksum: 'original'));
+    });
+
     test('keeps an existing link when a copy is uploaded again', () async {
       final local = await ctx.newLocalAsset(checksum: 'original');
       await sut.linkStorageSaverCopy(local.id, originalChecksum: 'original', copyChecksum: 'copy');

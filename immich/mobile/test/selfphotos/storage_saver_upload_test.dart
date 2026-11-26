@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:drift/native.dart';
 import 'package:flutter/foundation.dart';
@@ -198,6 +199,41 @@ void main() {
         () => mockAssetService.linkStorageSaverCopy(photo.id, 'original-sha', copySha),
         () => mockAssetService.stackEditedUpload(photo.localId!, 'remote-1', copySha),
       ]);
+    });
+
+    test('hashes an original the app has not hashed yet and links it by that hash', () async {
+      final folder = Directory.systemTemp.createTempSync('saver-test-');
+      addTearDown(() => folder.deleteSync(recursive: true));
+      final original = File('${folder.path}/photo.jpg')..writeAsStringSync('original');
+      final unhashed = LocalAsset(
+        id: photo.id,
+        name: photo.name,
+        type: photo.type,
+        createdAt: photo.createdAt,
+        updatedAt: photo.updatedAt,
+        playbackStyle: photo.playbackStyle,
+        isEdited: false,
+      );
+      stubAsset(unhashed, original.path, 'photo.jpg');
+      stubShrink(() => shrunk);
+      final uploads = captureUploads();
+      // base64 SHA-1 of 'original'
+      final originalSha = base64.encode(sha1.convert(utf8.encode('original')).bytes);
+
+      await sut.uploadSingleAsset(
+        unhashed,
+        null,
+        callbacks: const UploadCallbacks(),
+        storageSaver: const StorageSaverRun(BackupQuality.saver, 1),
+      );
+
+      expect(jsonDecode(uploads.single.fields['metadata']!), [
+        {
+          'key': 'memento-storage-saver',
+          'value': {'originalChecksum': originalSha, 'quality': 'saver'},
+        },
+      ]);
+      verify(() => mockAssetService.linkStorageSaverCopy(unhashed.id, originalSha, copySha)).called(1);
     });
 
     test('names a shrunk video after the original with the copy\'s extension', () async {

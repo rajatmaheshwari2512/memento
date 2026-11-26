@@ -311,9 +311,15 @@ class LocalAssetRepository extends DatabaseAccessor<Drift> with $LocalAssetRepos
   }
 
   /// Links [id] to the Storage saver copy just uploaded for it, before the copy arrives in a sync.
+  /// An item the app hasn't hashed yet (no checksum) is linked too.
   Future<void> linkStorageSaverCopy(String id, {required String originalChecksum, required String copyChecksum}) async {
     final query = _db.localAssetEntity.update()
-      ..where((row) => row.id.equals(id) & row.checksum.equals(originalChecksum) & row.deviceChecksum.isNull());
+      ..where(
+        (row) =>
+            row.id.equals(id) &
+            (row.checksum.equals(originalChecksum) | row.checksum.isNull()) &
+            row.deviceChecksum.isNull(),
+      );
     await query.write(
       LocalAssetEntityCompanion(checksum: Value(copyChecksum), deviceChecksum: Value(originalChecksum)),
     );

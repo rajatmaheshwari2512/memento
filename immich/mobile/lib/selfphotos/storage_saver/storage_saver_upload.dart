@@ -92,11 +92,11 @@ class StorageSaverUpload {
 
   /// Shrinks [file] for [run]; null means upload the original.
   Future<StorageSaverCopy?> prepare(LocalAsset asset, File file, StorageSaverRun run) async {
-    final originalChecksum = asset.checksum;
-    if (run.quality == BackupQuality.original || originalChecksum == null) {
+    if (run.quality == BackupQuality.original) {
       return null;
     }
     try {
+      final originalChecksum = asset.checksum ?? await _checksum(file);
       final folder = _folder = await Directory.systemTemp.createTemp('selfphotos-saver-');
       final output = File(p.join(folder.path, asset.type == AssetType.video ? 'copy.mp4' : 'copy.jpg'));
       final result = await _native.shrink(
@@ -114,7 +114,7 @@ class StorageSaverUpload {
         _logger.info("Storage saver kept ${asset.id} - ${asset.name} full size: ${result.reason}");
         return null;
       }
-      final checksum = base64.encode((await sha1.bind(output.openRead()).first).bytes);
+      final checksum = await _checksum(output);
       _logger.info("Storage saver shrank ${asset.id} - ${asset.name} to ${await output.length()} bytes");
       return StorageSaverCopy(
         file: output,
@@ -127,6 +127,9 @@ class StorageSaverUpload {
       return null;
     }
   }
+
+  /// The base64 SHA-1 of [file], as the app stores checksums.
+  Future<String> _checksum(File file) async => base64.encode((await sha1.bind(file.openRead()).first).bytes);
 
   Future<void> dispose() async {
     try {
