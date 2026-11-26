@@ -1,5 +1,4 @@
-<!-- SelfPhotos AI edits: AI Edit, opened only by its button (no editor tabs: the photo gets the -->
-<!-- room). -->
+<!-- SelfPhotos AI edits: AI Edit, opened only by its button. -->
 <script lang="ts">
   import EditorShell from '#lib/ai-edit/adjust/EditorShell.svelte';
   import { readImage } from '#lib/ai-edit/adjust/adjust-export.ts';
