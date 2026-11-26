@@ -287,6 +287,7 @@ class LocalAlbumRepository extends DatabaseAccessor<Drift> with $LocalAlbumRepos
       for (final asset in localAssets) {
         final companion = LocalAssetEntityCompanion.custom(
           checksum: const Constant(null),
+          deviceChecksum: const Constant(null),
           adjustmentTime: Variable(asset.adjustmentTime),
           previousChecksum: coalesce([_db.localAssetEntity.previousChecksum, _db.localAssetEntity.checksum]),
         );
@@ -343,6 +344,7 @@ class LocalAlbumRepository extends DatabaseAccessor<Drift> with $LocalAlbumRepos
           durationMs: Value(asset.durationMs),
           id: asset.id,
           checksum: const Value(null),
+          deviceChecksum: const Value(null),
           orientation: Value(asset.orientation),
           isFavorite: Value(asset.isFavorite),
           playbackStyle: Value(asset.playbackStyle),

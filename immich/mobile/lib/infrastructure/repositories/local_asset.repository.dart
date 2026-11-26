@@ -239,6 +239,66 @@ class LocalAssetRepository extends DatabaseAccessor<Drift> with $LocalAssetRepos
     );
   }
 
+  Future<void> linkStorageSaverCopies() async {
+    await _db.customUpdate(
+      '''
+      UPDATE local_asset_entity
+      SET device_checksum = checksum,
+        checksum = (
+          SELECT remote_asset_entity.checksum
+          FROM remote_asset_storage_saver_entity
+          INNER JOIN remote_asset_entity
+            ON remote_asset_storage_saver_entity.asset_id = remote_asset_entity.id
+          INNER JOIN auth_user_entity
+            ON remote_asset_entity.owner_id = auth_user_entity.id
+          WHERE remote_asset_storage_saver_entity.original_checksum = local_asset_entity.checksum
+          ORDER BY remote_asset_entity.deleted_at IS NOT NULL, remote_asset_entity.created_at, remote_asset_entity.id
+          LIMIT 1
+        )
+      WHERE local_asset_entity.device_checksum IS NULL
+        AND local_asset_entity.checksum IS NOT NULL
+        AND EXISTS (
+          SELECT 1
+          FROM remote_asset_storage_saver_entity
+          INNER JOIN remote_asset_entity
+            ON remote_asset_storage_saver_entity.asset_id = remote_asset_entity.id
+          INNER JOIN auth_user_entity
+            ON remote_asset_entity.owner_id = auth_user_entity.id
+          WHERE remote_asset_storage_saver_entity.original_checksum = local_asset_entity.checksum
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM remote_asset_entity
+          INNER JOIN auth_user_entity
+            ON remote_asset_entity.owner_id = auth_user_entity.id
+          WHERE remote_asset_entity.checksum = local_asset_entity.checksum
+        )
+      ''',
+      updates: {_db.localAssetEntity},
+      updateKind: UpdateKind.update,
+    );
+  }
+
+  Future<void> unlinkStorageSaverCopies() async {
+    await _db.customUpdate(
+      '''
+      UPDATE local_asset_entity
+      SET checksum = device_checksum,
+        device_checksum = NULL
+      WHERE local_asset_entity.device_checksum IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1
+          FROM remote_asset_entity
+          INNER JOIN auth_user_entity
+            ON remote_asset_entity.owner_id = auth_user_entity.id
+          WHERE remote_asset_entity.checksum = local_asset_entity.checksum
+        )
+      ''',
+      updates: {_db.localAssetEntity},
+      updateKind: UpdateKind.update,
+    );
+  }
+
   Future<String?> getPreviousRemoteId(String id) {
     final query = _db.selectOnly(_db.localAssetEntity)
       ..join([

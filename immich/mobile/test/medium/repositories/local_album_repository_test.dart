@@ -89,6 +89,30 @@ void main() {
       });
     }
 
+    for (final (platform, edited) in [
+      (TargetPlatform.android, _localAsset('linked', updatedAt: DateTime(2025))),
+      (TargetPlatform.iOS, _localAsset('linked', adjustmentTime: DateTime(2025))),
+    ]) {
+      test('${platform.name}: a change clears the Storage saver link and remembers the copy checksum', () async {
+        debugDefaultTargetPlatformOverride = platform;
+        await ctx.newLocalAsset(
+          id: 'linked',
+          checksum: 'copy',
+          deviceChecksum: 'original',
+          updatedAt: DateTime(2024),
+          adjustmentTime: DateTime(2024),
+        );
+
+        await sut.upsert(album, toUpsert: [edited]);
+
+        final data = await ctx.db.managers.localAssetEntity.filter((row) => row.id.equals('linked')).getSingle();
+        expect(
+          (checksum: data.checksum, deviceChecksum: data.deviceChecksum, previousChecksum: data.previousChecksum),
+          (checksum: null, deviceChecksum: null, previousChecksum: 'copy'),
+        );
+      });
+    }
+
     test('android: previous follows the uploads across two edits', () async {
       debugDefaultTargetPlatformOverride = TargetPlatform.android;
       final assets = LocalAssetRepository(ctx.db);

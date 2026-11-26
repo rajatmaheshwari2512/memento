@@ -15,6 +15,7 @@ import 'package:immich_mobile/data/db/main/table/remote/album_asset.drift.dart';
 import 'package:immich_mobile/data/db/main/table/remote/album_user.drift.dart';
 import 'package:immich_mobile/data/db/main/table/remote/asset.drift.dart';
 import 'package:immich_mobile/data/db/main/table/remote/cloud_id.drift.dart';
+import 'package:immich_mobile/data/db/main/table/remote/storage_saver.drift.dart';
 import 'package:immich_mobile/data/db/main/table/user/auth_user.drift.dart';
 import 'package:immich_mobile/data/db/main/table/user/partner.drift.dart';
 import 'package:immich_mobile/data/db/main/table/user/user.drift.dart';
@@ -178,6 +179,17 @@ class MediumRepositoryContext {
         );
   }
 
+  Future<RemoteAssetStorageSaverEntityData> newRemoteAssetStorageSaver({
+    required String assetId,
+    required String originalChecksum,
+  }) {
+    return db
+        .into(db.remoteAssetStorageSaverEntity)
+        .insertReturning(
+          RemoteAssetStorageSaverEntityCompanion(assetId: .new(assetId), originalChecksum: .new(originalChecksum)),
+        );
+  }
+
   Future<RemoteAlbumEntityData> newRemoteAlbum({
     String? id,
     String? name,
@@ -272,6 +284,7 @@ class MediumRepositoryContext {
     String? checksum,
     Option<String>? checksumOption,
     String? previousChecksum,
+    String? deviceChecksum,
     DateTime? createdAt,
     AssetType? type,
     bool? isFavorite,
@@ -302,6 +315,7 @@ class MediumRepositoryContext {
             updatedAt: .new(TestUtils.date(updatedAt)),
             checksum: _resolveUndefined(checksum, checksumOption, const Uuid().v4()),
             previousChecksum: .new(previousChecksum),
+            deviceChecksum: .new(deviceChecksum),
             createdAt: .new(createdAt),
             groupDate: .new(timelineGroupDate(createdAt.toLocal())),
             type: .new(type ?? .image),

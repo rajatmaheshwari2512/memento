@@ -111,9 +111,9 @@ void main() {
     when(() => mockSyncApiRepo.deleteSyncAck(any())).thenAnswer((_) async => {});
 
     when(() => mockApi.serverInfoApi).thenReturn(mockServerApi);
-    when(
-      () => mockServerApi.getServerVersion(),
-    ).thenAnswer((_) async => ServerVersionResponseDto(major: 1, minor: 132, patch_: 0, prerelease: null, featureLevel: 1));
+    when(() => mockServerApi.getServerVersion()).thenAnswer(
+      (_) async => ServerVersionResponseDto(major: 1, minor: 132, patch_: 0, prerelease: null, featureLevel: 1),
+    );
 
     when(() => mockSyncStreamRepo.updateUsersV1(any())).thenAnswer(successHandler);
     when(() => mockSyncStreamRepo.deleteUsersV1(any())).thenAnswer(successHandler);
@@ -161,6 +161,8 @@ void main() {
     );
 
     when(() => mockLocalAssetRepo.getAssetsFromBackupAlbums(any())).thenAnswer((_) async => {});
+    when(() => mockLocalAssetRepo.unlinkStorageSaverCopies()).thenAnswer((_) async {});
+    when(() => mockLocalAssetRepo.linkStorageSaverCopies()).thenAnswer((_) async {});
     when(() => mockTrashedLocalAssetRepo.trashLocalAsset(any())).thenAnswer((_) async {});
     when(() => mockTrashedLocalAssetRepo.getToRestore()).thenAnswer((_) async => []);
     when(() => mockTrashedLocalAssetRepo.applyRestoredAssets(any())).thenAnswer((_) async {});
@@ -565,9 +567,9 @@ void main() {
   group('SyncStreamService - Sync Migration', () {
     test('ensure that <2.5.0 migrations run', () async {
       await Store.put(StoreKey.syncMigrationStatus, "[]");
-      when(
-        () => mockServerApi.getServerVersion(),
-      ).thenAnswer((_) async => ServerVersionResponseDto(major: 2, minor: 4, patch_: 1, prerelease: null, featureLevel: 1));
+      when(() => mockServerApi.getServerVersion()).thenAnswer(
+        (_) async => ServerVersionResponseDto(major: 2, minor: 4, patch_: 1, prerelease: null, featureLevel: 1),
+      );
 
       await sut.sync();
 
@@ -593,9 +595,9 @@ void main() {
     });
     test('ensure that >=2.5.0 migrations run', () async {
       await Store.put(StoreKey.syncMigrationStatus, "[]");
-      when(
-        () => mockServerApi.getServerVersion(),
-      ).thenAnswer((_) async => ServerVersionResponseDto(major: 2, minor: 5, patch_: 0, prerelease: null, featureLevel: 1));
+      when(() => mockServerApi.getServerVersion()).thenAnswer(
+        (_) async => ServerVersionResponseDto(major: 2, minor: 5, patch_: 0, prerelease: null, featureLevel: 1),
+      );
       await sut.sync();
 
       verifyInOrder([
@@ -623,13 +625,50 @@ void main() {
         '["${SyncMigrationTask.v20260128_CopyExifWidthHeightToAsset.name}"]',
       );
 
-      when(
-        () => mockServerApi.getServerVersion(),
-      ).thenAnswer((_) async => ServerVersionResponseDto(major: 2, minor: 4, patch_: 1, prerelease: null, featureLevel: 1));
+      when(() => mockServerApi.getServerVersion()).thenAnswer(
+        (_) async => ServerVersionResponseDto(major: 2, minor: 4, patch_: 1, prerelease: null, featureLevel: 1),
+      );
 
       await sut.sync();
 
       verifyNever(() => mockSyncMigrationRepo.v20260128CopyExifWidthHeightToAsset());
+    });
+  });
+
+  group('SyncStreamService - Storage saver', () {
+    test('unlinks then links Storage saver copies after the stream completes', () async {
+      await sut.sync();
+
+      verifyInOrder([
+        () => mockSyncApiRepo.streamChanges(
+          any(),
+          onReset: any(named: 'onReset'),
+          serverVersion: any(named: 'serverVersion'),
+          abortSignal: any(named: 'abortSignal'),
+        ),
+        () => mockLocalAssetRepo.unlinkStorageSaverCopies(),
+        () => mockLocalAssetRepo.linkStorageSaverCopies(),
+      ]);
+    });
+
+    test('skips Storage saver links when the sync is cancelled', () async {
+      final cancellation = Completer<void>()..complete();
+      sut = SyncStreamService(
+        syncApiRepository: mockSyncApiRepo,
+        syncStreamRepository: mockSyncStreamRepo,
+        localAssetRepository: mockLocalAssetRepo,
+        trashedLocalAssetRepository: mockTrashedLocalAssetRepo,
+        assetMediaRepository: mockAssetMediaRepo,
+        permissionRepository: mockPermissionRepo,
+        api: mockApi,
+        syncMigrationRepository: mockSyncMigrationRepo,
+        cancellation: cancellation,
+      );
+
+      await sut.sync();
+
+      verifyNever(() => mockLocalAssetRepo.unlinkStorageSaverCopies());
+      verifyNever(() => mockLocalAssetRepo.linkStorageSaverCopies());
     });
   });
 }

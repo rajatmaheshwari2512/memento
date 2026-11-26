@@ -101,6 +101,11 @@ class SyncStreamService {
       await Store.put(StoreKey.syncMigrationStatus, jsonEncode(migrations));
     }
 
+    if (!isCancelled) {
+      await _localAssetRepository.unlinkStorageSaverCopies();
+      await _localAssetRepository.linkStorageSaverCopies();
+    }
+
     return true;
   }
 

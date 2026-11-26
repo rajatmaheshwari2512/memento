@@ -635,6 +635,130 @@ void main() {
     });
   });
 
+  group('Storage saver links', () {
+    late String userId;
+
+    setUp(() async {
+      final user = await ctx.newUser();
+      userId = user.id;
+      await ctx.newAuthUser(id: userId);
+    });
+
+    Future<({String? checksum, String? deviceChecksum})> row(String id) async {
+      final data = await ctx.db.managers.localAssetEntity.filter((row) => row.id.equals(id)).getSingle();
+      return (checksum: data.checksum, deviceChecksum: data.deviceChecksum);
+    }
+
+    Future<void> newCopy({required String checksum, String? ownerId, DateTime? createdAt, DateTime? deletedAt}) async {
+      final copy = await ctx.newRemoteAsset(
+        ownerId: ownerId ?? userId,
+        checksum: checksum,
+        createdAt: createdAt,
+        deletedAt: deletedAt,
+      );
+      await ctx.newRemoteAssetStorageSaver(assetId: copy.id, originalChecksum: 'original');
+    }
+
+    Future<void> deleteRemote(String checksum) =>
+        (ctx.db.delete(ctx.db.remoteAssetEntity)..where((row) => row.checksum.equals(checksum))).go();
+
+    test('links a hashed original when its copy arrives', () async {
+      final local = await ctx.newLocalAsset(checksum: 'original');
+      await newCopy(checksum: 'copy');
+
+      await sut.linkStorageSaverCopies();
+
+      expect(await row(local.id), (checksum: 'copy', deviceChecksum: 'original'));
+    });
+
+    test('links an original hashed after its copy arrived', () async {
+      final local = await ctx.newLocalAsset(checksumOption: const .none());
+      await newCopy(checksum: 'copy');
+      await sut.linkStorageSaverCopies();
+      expect(await row(local.id), (checksum: null, deviceChecksum: null));
+
+      await sut.updateHashes({local.id: 'original'});
+      await sut.linkStorageSaverCopies();
+
+      expect(await row(local.id), (checksum: 'copy', deviceChecksum: 'original'));
+    });
+
+    test('never links to a partner copy', () async {
+      final partner = await ctx.newUser();
+      final local = await ctx.newLocalAsset(checksum: 'original');
+      await newCopy(checksum: 'copy', ownerId: partner.id);
+
+      await sut.linkStorageSaverCopies();
+
+      expect(await row(local.id), (checksum: 'original', deviceChecksum: null));
+    });
+
+    test('does not link when the original is on the server', () async {
+      final local = await ctx.newLocalAsset(checksum: 'original');
+      await ctx.newRemoteAsset(ownerId: userId, checksum: 'original');
+      await newCopy(checksum: 'copy');
+
+      await sut.linkStorageSaverCopies();
+
+      expect(await row(local.id), (checksum: 'original', deviceChecksum: null));
+    });
+
+    test('prefers a copy not in the trash, then the oldest', () async {
+      final local = await ctx.newLocalAsset(checksum: 'original');
+      await newCopy(checksum: 'trashed', createdAt: DateTime(2020), deletedAt: DateTime(2025));
+      await newCopy(checksum: 'newer', createdAt: DateTime(2023));
+      await newCopy(checksum: 'older', createdAt: DateTime(2022));
+
+      await sut.linkStorageSaverCopies();
+
+      expect(await row(local.id), (checksum: 'older', deviceChecksum: 'original'));
+    });
+
+    test('links to a trashed copy when it is the only one', () async {
+      final local = await ctx.newLocalAsset(checksum: 'original');
+      await newCopy(checksum: 'trashed', deletedAt: DateTime(2025));
+
+      await sut.linkStorageSaverCopies();
+
+      expect(await row(local.id), (checksum: 'trashed', deviceChecksum: 'original'));
+    });
+
+    test('unlink keeps the link while the copy exists', () async {
+      final local = await ctx.newLocalAsset(checksum: 'original');
+      await newCopy(checksum: 'copy');
+      await sut.linkStorageSaverCopies();
+
+      await sut.unlinkStorageSaverCopies();
+
+      expect(await row(local.id), (checksum: 'copy', deviceChecksum: 'original'));
+    });
+
+    test('unlink restores the device checksum after the copy is deleted', () async {
+      final local = await ctx.newLocalAsset(checksum: 'original');
+      await newCopy(checksum: 'copy');
+      await sut.linkStorageSaverCopies();
+
+      await deleteRemote('copy');
+      await sut.unlinkStorageSaverCopies();
+
+      expect(await row(local.id), (checksum: 'original', deviceChecksum: null));
+    });
+
+    test('re-links to a second copy after the first is deleted', () async {
+      final local = await ctx.newLocalAsset(checksum: 'original');
+      await newCopy(checksum: 'first', createdAt: DateTime(2022));
+      await newCopy(checksum: 'second', createdAt: DateTime(2023));
+      await sut.linkStorageSaverCopies();
+      expect(await row(local.id), (checksum: 'first', deviceChecksum: 'original'));
+
+      await deleteRemote('first');
+      await sut.unlinkStorageSaverCopies();
+      await sut.linkStorageSaverCopies();
+
+      expect(await row(local.id), (checksum: 'second', deviceChecksum: 'original'));
+    });
+  });
+
   group('getPreviousRemoteId', () {
     test('finds the owned remote asset that has the previous checksum', () async {
       final me = await ctx.newUser();
