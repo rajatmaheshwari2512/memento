@@ -1,10 +1,15 @@
 # Checks that the iPhone app still builds: apps/ios/build.sh, for the iOS simulator, unsigned.
-# On every pull request, and on pushes to main that change the app, its build or this file.
+# On pull requests and pushes to main that change the app, its build or this file.
 # It publishes nothing.
 name: iPhone build
 
 on:
   pull_request:
+    paths:
+      - immich/mobile/**
+      - apps/ios/**
+      - apps/mobile-build.sh
+      - .github/workflows/ios.yml
   push:
     branches: [main]
     paths:
@@ -22,7 +27,7 @@ concurrency:
 jobs:
   build:
     name: iPhone app (simulator)
-    runs-on: macos-latest
+    runs-on: macos-26
     timeout-minutes: 120
     permissions:
       contents: read
