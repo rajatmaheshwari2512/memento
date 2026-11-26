@@ -19,7 +19,7 @@ export type Job = {
 };
 
 // Sunday's card, with the first photo's day of the memory it was made from.
-export type CardRow = { id: number; user_id: string; week: string; themed_memory_id: number; source_memory_at: string; extra: number };
+export type CardRow = { id: number; user_id: string; week: string; themed_memory_id: number; source_memory_at: string };
 // A card waiting to become a memory, with the server errors it has had so far.
 export type WaitingCard = CardRow & { attempts: number };
 

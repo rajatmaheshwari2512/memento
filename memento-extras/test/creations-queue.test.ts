@@ -15,11 +15,6 @@ Object.assign(process.env, {
   LIMITS_TIMEZONE: "Asia/Kolkata", RENDER_QUIET_HOURS: "22:00-06:30",
 });
 const { itemsFor, proposalFor, proposeCreations, queueWeekly, stampFor } = await import("../src/services/creations.service.ts");
-const { creationsNow } = await import("../src/services/creations-now.service.ts");
-const { cardAssets, propose, queueExtraCard } = await import("../src/services/repositories/creations.repository.ts");
-const { THEME_RANK } = await import("../src/constants/creations.constants.ts");
-const proposeKind = (userId: string, themedMemoryId: number, kind: "collage" | "recap" | "animation" | "cinematic", memory: Parameters<typeof proposalFor>[1], score: number) =>
-  propose(userId, themedMemoryId, kind, proposalFor(kind, memory, "trip")!, score);
 const { fitsBeforeQuiet, inQuietHours, markRunDone, rendersMayStart, today } = await import("../src/services/schedule.service.ts");
 const { insertPending, markCreated, setCreationsChoice } = await import("../src/services/repositories/memories.repository.ts");
 const { database, closeDatabase } = await import("../src/db/database.ts");
@@ -200,101 +195,4 @@ test("nothing proposed for someone who turned creations off; a full queue takes 
   proposeCreations(busy, memory(busy, "trip:new", "2026-11-05"), "trip", { chosen: Array.from({ length: 6 }, () => photo()), quality: new Map() }, 0);
   assert.equal(queueWeekly(busy, "2026-11-08"), 0, "six waiting already");
   assert.equal(states(busy).at(-1), "proposed");
-});
-
-test("by hand, once: this week's missing kinds in one extra card of their own; twice does nothing; the weekly flow untouched", async () => {
-  const user = randomUUID();
-  setCreationsChoice(user, true);
-  const day = "2026-11-22";
-  const mom = { id: "mom", named: true };
-  const chosen = Array.from({ length: 6 }, (_, i) => photo({ people: i === 2 ? [mom] : [] }));
-  const burst = Array.from({ length: 4 }, (_, i) => photo({ takenAt: chosen[1]!.takenAt + 60_000 + i * 1000 }));
-  const memoryOf = { chosen, quality: new Map(), library: [...chosen, ...burst], never: new Set<string>() };
-  const trip = memory(user, `trip:${randomUUID()}`, day, "trip", 5);
-  proposeKind(user, trip, "collage", memoryOf, 5);
-  assert.equal(queueWeekly(user, day), 1);
-  const later = memory(user, `day:${randomUUID()}`, day, "big_day", 1);
-  const waiting = proposeKind(user, later, "cinematic", memoryOf, 1)!;
-  const reads: number[] = [];
-  const read = async (m: { id: number }) => (reads.push(m.id), memoryOf);
-
-  const first = await creationsNow(user, day, read);
-  assert.ok(first.done && first.card !== null);
-  assert.deepEqual({ ...first, card: 0 }, { done: true, memoriesRead: 2, proposed: 3, queued: 2, card: 0 });
-  const card = database().prepare("SELECT * FROM creation_cards WHERE id = ?").get(first.card) as any;
-  assert.deepEqual([card.extra, card.week, card.status, card.themed_memory_id], [1, day, "waiting", trip]);
-  const jobs = database().prepare("SELECT themed_memory_id, kind, state, card_id FROM creation_jobs WHERE user_id = ? ORDER BY id").all(user) as any[];
-  assert.deepEqual(jobs.map((j) => [j.themed_memory_id === trip ? "trip" : "later", j.kind, j.state, j.card_id === first.card]), [
-    ["trip", "collage", "queued", false],
-    ["later", "cinematic", "proposed", false],
-    ["later", "animation", "skipped", false],
-    ["trip", "animation", "queued", true],
-    ["trip", "cinematic", "queued", true],
-  ], "the trip's (a trip ranks above a big day); the waiting proposal untouched");
-  assert.deepEqual(cardAssets({ ...card, source_memory_at: "" }).photos, [], "only its creations: the week's card showed the photos");
-  assert.ok(database().prepare("SELECT id FROM creation_jobs WHERE id = ? AND state = 'proposed'").get(waiting));
-
-  const readsBefore = reads.length;
-  assert.deepEqual(await creationsNow(user, day, read), { done: false, reason: "already made this week" });
-  assert.equal((database().prepare("SELECT COUNT(*) AS n FROM creation_jobs WHERE user_id = ?").get(user) as any).n, 5);
-  assert.equal((database().prepare("SELECT COUNT(*) AS n FROM creation_cards WHERE user_id = ?").get(user) as any).n, 2);
-  assert.equal(reads.length, readsBefore, "nothing read again");
-});
-
-test("by hand: someone who turned creations off gets nothing, and nothing of theirs is read", async () => {
-  const user = randomUUID();
-  setCreationsChoice(user, false);
-  memory(user, `trip:${randomUUID()}`, "2026-11-22");
-  const result = await creationsNow(user, "2026-11-22", async () => {
-    throw new Error("read");
-  });
-  assert.deepEqual(result, { done: false, reason: "creations off" });
-  assert.deepEqual(states(user), []);
-  assert.equal((database().prepare("SELECT COUNT(*) AS n FROM creation_cards WHERE user_id = ?").get(user) as any).n, 0);
-});
-
-test("by hand: Immich failing part-way leaves nothing behind, and running it again works", async () => {
-  const user = randomUUID();
-  setCreationsChoice(user, true);
-  const day = "2026-11-22";
-  const chosen = Array.from({ length: 6 }, (_, i) => photo({ people: i === 2 ? [{ id: "mom", named: true }] : [] }));
-  const burst = Array.from({ length: 4 }, (_, i) => photo({ takenAt: chosen[1]!.takenAt + 60_000 + i * 1000 }));
-  const memoryOf = { chosen, quality: new Map(), library: [...chosen, ...burst], never: new Set<string>() };
-  const trip = memory(user, `trip:${randomUUID()}`, day, "trip", 5);
-  proposeKind(user, trip, "collage", memoryOf, 5);
-  assert.equal(queueWeekly(user, day), 1);
-  memory(user, `day:${randomUUID()}`, day, "big_day", 1);
-  const jobsOf = () => (database().prepare("SELECT kind, state FROM creation_jobs WHERE user_id = ? ORDER BY id").all(user) as any[]).map((j) => `${j.kind}:${j.state}`);
-  const cardsOf = () => (database().prepare("SELECT COUNT(*) AS n FROM creation_cards WHERE user_id = ?").get(user) as any).n;
-  const before = jobsOf();
-  let reads = 0;
-  await assert.rejects(creationsNow(user, day, async () => {
-    if (++reads === 2) throw new Error("Immich didn't answer");
-    return memoryOf;
-  }), /didn't answer/);
-  assert.deepEqual(jobsOf(), before, "no proposal saved from the first memory read");
-  assert.equal(cardsOf(), 1);
-  const again = await creationsNow(user, day, async () => memoryOf);
-  assert.ok(again.done && again.queued === 2 && again.card !== null);
-  assert.equal(cardsOf(), 2);
-});
-
-test("by hand: a memory that got a job of that kind meanwhile passes its turn to the next-best memory", () => {
-  const user = randomUUID();
-  setCreationsChoice(user, true);
-  const day = "2026-11-22";
-  const chosen = Array.from({ length: 6 }, (_, i) => photo({ people: i === 2 ? [{ id: "mom", named: true }] : [] }));
-  const burst = Array.from({ length: 4 }, (_, i) => photo({ takenAt: chosen[1]!.takenAt + 60_000 + i * 1000 }));
-  const memoryOf = { chosen, quality: new Map(), library: [...chosen, ...burst], never: new Set<string>() };
-  const trip = memory(user, `trip:${randomUUID()}`, day, "trip", 5);
-  const bigDay = memory(user, `day:${randomUUID()}`, day, "big_day", 1);
-  const inputs = proposalFor("animation", memoryOf, "trip")!;
-  proposeKind(user, trip, "animation", memoryOf, 5);
-  const made = queueExtraCard(user, [
-    { memory: { id: trip, theme: "trip", score: 5 } as any, kind: "animation", inputs },
-    { memory: { id: bigDay, theme: "big_day", score: 1 } as any, kind: "animation", inputs },
-  ], day, THEME_RANK);
-  assert.equal(made.queued, 1, "the big day's animation instead");
-  const queued = database().prepare("SELECT themed_memory_id FROM creation_jobs WHERE card_id = ?").all(made.card) as any[];
-  assert.deepEqual(queued.map((j) => j.themed_memory_id), [bigDay]);
 });

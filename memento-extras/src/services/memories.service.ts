@@ -93,8 +93,8 @@ function photoCount(plan: Plan): number {
   }
 }
 
-// Everything a memory can be made from (stacked photos too). Also read by creations-now.service.ts.
-export async function candidatesFor(cred: Credential, userId: string, scope: { personId: string } | { first: string; last: string }): Promise<Candidate[]> {
+// Everything a memory can be made from (stacked photos too).
+async function candidatesFor(cred: Credential, userId: string, scope: { personId: string } | { first: string; last: string }): Promise<Candidate[]> {
   return "personId" in scope
     ? candidatesForPerson(cred, userId, scope.personId)
     : candidatesForDays(cred, userId, scope.first, scope.last, config.timeZone);

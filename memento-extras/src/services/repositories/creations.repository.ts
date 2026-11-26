@@ -25,53 +25,23 @@ export function propose(userId: string, themedMemoryId: number, kind: CreationKi
   return result.changes ? Number(result.lastInsertRowid) : null;
 }
 
-// Whether this person got a card on or after the local day `since` (one a week): the week's own
-// card, or (`extra`) one made by hand (creationsNow).
-export function cardSince(userId: string, since: string, extra = false): boolean {
-  return database().prepare("SELECT 1 FROM creation_cards WHERE user_id = ? AND week >= ? AND extra = ?").get(userId, since, extra ? 1 : 0) !== undefined;
-}
-
-// The kinds this person's cards since `since` have (made, waiting or dropped).
-export function kindsCarded(userId: string, since: string): Set<CreationKind> {
-  const rows = database().prepare(
-    "SELECT DISTINCT j.kind FROM creation_jobs j JOIN creation_cards c ON c.id = j.card_id WHERE c.user_id = ? AND c.week >= ?",
-  ).all(userId, since) as Array<{ kind: CreationKind }>;
-  return new Set(rows.map((r) => r.kind));
-}
-
-// This person's themed memories made (and in Immich) on or after the local day `since`, newest
-// first, with what's needed to read their photos again.
-export type MadeMemory = { id: number; theme: Theme; person_id: string | null; first_day: string | null; last_day: string | null; score: number | null };
-export function memoriesMadeSince(userId: string, since: string): MadeMemory[] {
-  return database().prepare(
-    `SELECT id, theme, person_id, first_day, last_day, score FROM themed_memories
-     WHERE user_id = ? AND status = 'created' AND made_on >= ? ORDER BY made_on DESC, id DESC`,
-  ).all(userId, since) as MadeMemory[];
-}
-
-// The photos and videos in a themed memory.
-export function memoryAssetIds(themedMemoryId: number): string[] {
-  return (database().prepare("SELECT asset_id FROM themed_memory_assets WHERE themed_memory_id = ?").all(themedMemoryId) as Array<{ asset_id: string }>).map((r) => r.asset_id);
-}
-
-// Whether a memory already has (or had) a job of this kind, in any state.
-export function hasJob(themedMemoryId: number, kind: CreationKind): boolean {
-  return database().prepare("SELECT 1 FROM creation_jobs WHERE themed_memory_id = ? AND kind = ?").get(themedMemoryId, kind) !== undefined;
+// Whether this person got a card on or after the local day `since` (one a week).
+export function cardSince(userId: string, since: string): boolean {
+  return database().prepare("SELECT 1 FROM creation_cards WHERE user_id = ? AND week >= ? AND extra = 0").get(userId, since) !== undefined;
 }
 
 // Memories ranked for the week's creations: theme first (`themeRank`), then how good their
-// photos are, then the newest. Both picks (pickWeek, queueExtraCard) use it.
+// photos are, then the newest.
 function ranked<T extends { id: number; theme: Theme; score: number | null }>(memories: T[], themeRank: Record<Theme, number>): T[] {
   return [...memories].sort((a, b) => themeRank[b.theme] - themeRank[a.theme] || (b.score ?? 0) - (a.score ?? 0) || b.id - a.id);
 }
 
-// A new card for this person on `day`, made from a themed memory: the week's own, or (`extra`)
-// one made by hand. Returns its id.
-function openCard(userId: string, themedMemoryId: number, day: string, extra: boolean): number {
+// A new card for this person on `day`, made from a themed memory. Returns its id.
+function openCard(userId: string, themedMemoryId: number, day: string): number {
   const now = new Date().toISOString();
   return (database().prepare(
-    "INSERT INTO creation_cards (user_id, themed_memory_id, week, status, extra, created_at, updated_at) VALUES (?, ?, ?, 'waiting', ?, ?, ?) RETURNING id",
-  ).get(userId, themedMemoryId, day, extra ? 1 : 0, now, now) as { id: number }).id;
+    "INSERT INTO creation_cards (user_id, themed_memory_id, week, status, created_at, updated_at) VALUES (?, ?, ?, 'waiting', ?, ?) RETURNING id",
+  ).get(userId, themedMemoryId, day, now, now) as { id: number }).id;
 }
 
 // Queues these proposals (those still proposed) in a card. Returns how many.
@@ -81,34 +51,6 @@ function queueInCard(cardId: number, day: string, jobIds: number[]): number {
     "UPDATE creation_jobs SET state = 'queued', card_id = ?, queued_on = ?, next_at = ?, updated_at = ? WHERE id = ? AND state = 'proposed'",
   );
   return jobIds.reduce((n, id) => n + Number(queue.run(cardId, day, now, now, id).changes), 0);
-}
-
-// What the card made by hand (creationsNow) could get: a kind of creation for a memory, as
-// proposalFor (creations.service.ts) worked it out, not saved yet.
-export type ExtraProposal = { memory: MadeMemory; kind: CreationKind; inputs: JobInputs };
-
-// The card made by hand, all or nothing: the best memory's proposal of each kind is queued in a new extra card for `today`, the rest skipped. Returns the card and how many were queued. Call inside immediately().
-export function queueExtraCard(userId: string, proposals: ExtraProposal[], today: string, themeRank: Record<Theme, number>): { card: number | null; queued: number } {
-  const order = ranked([...new Map(proposals.map((p) => [p.memory.id, p.memory])).values()], themeRank).map((m) => m.id);
-  const saved = proposals.map((p) => ({ kind: p.kind, memoryId: p.memory.id, id: propose(userId, p.memory.id, p.kind, p.inputs, p.memory.score ?? 0), picked: false }));
-  const best = new Set<CreationKind>();
-  for (const s of [...saved].sort((a, b) => order.indexOf(a.memoryId) - order.indexOf(b.memoryId))) {
-    if (s.id !== null && !best.has(s.kind)) {
-      best.add(s.kind);
-      s.picked = true;
-    }
-  }
-  const toQueue = saved.filter((s) => s.picked).sort((a, b) => order.indexOf(a.memoryId) - order.indexOf(b.memoryId));
-  let card: number | null = null;
-  let queued = 0;
-  if (toQueue.length > 0) {
-    card = openCard(userId, toQueue[0]!.memoryId, today, true);
-    queued = queueInCard(card, today, toQueue.map((s) => s.id!));
-  }
-  const skip = database().prepare("UPDATE creation_jobs SET state = 'skipped', updated_at = ? WHERE id = ? AND state = 'proposed'");
-  const now = new Date().toISOString();
-  for (const s of saved) if (!s.picked && s.id !== null) skip.run(now, s.id);
-  return { card, queued };
 }
 
 // The week's pick, all or nothing: the best memory made on or after the local day `since` that has something proposed gets a card for `today` and its proposals are queued; every other proposal of this person is skipped. Returns how many were queued. Call inside atomically().
@@ -122,7 +64,7 @@ export function pickWeek(userId: string, since: string, today: string, themeRank
   let queued = 0;
   if (best) {
     const ids = (db.prepare("SELECT id FROM creation_jobs WHERE themed_memory_id = ? AND state = 'proposed'").all(best.id) as Array<{ id: number }>).map((r) => r.id);
-    queued = queueInCard(openCard(userId, best.id, today, false), today, ids);
+    queued = queueInCard(openCard(userId, best.id, today), today, ids);
   }
   db.prepare("UPDATE creation_jobs SET state = 'skipped', updated_at = ? WHERE user_id = ? AND state = 'proposed'").run(new Date().toISOString(), userId);
   return queued;
@@ -187,7 +129,7 @@ export function liveWorkIds(): Set<string> {
 // become a memory (or not).
 export function cardsToFinish(now: string): WaitingCard[] {
   return database().prepare(
-    `SELECT c.id, c.user_id, c.week, c.themed_memory_id, c.attempts, c.extra, m.memory_at AS source_memory_at FROM creation_cards c
+    `SELECT c.id, c.user_id, c.week, c.themed_memory_id, c.attempts, m.memory_at AS source_memory_at FROM creation_cards c
      JOIN themed_memories m ON m.id = c.themed_memory_id
      WHERE c.status = 'waiting' AND (c.next_at IS NULL OR c.next_at <= ?)
        AND NOT EXISTS (SELECT 1 FROM creation_jobs j WHERE j.card_id = c.id AND j.state IN ('queued', 'running'))`,
@@ -199,14 +141,14 @@ export function retryCardLater(id: number, at: string): void {
   database().prepare("UPDATE creation_cards SET attempts = attempts + 1, next_at = ?, updated_at = ? WHERE id = ?").run(at, new Date().toISOString(), id);
 }
 
-// What goes in a card: its creations, then its memory's photos (not in an extra card).
+// What goes in a card: its creations, then its memory's photos.
 export function cardAssets(card: CardRow): { creations: string[]; photos: string[] } {
   const db = database();
   const creations = db.prepare(
     `SELECT asset_id FROM creation_jobs WHERE card_id = ? AND state = 'done' AND asset_id IS NOT NULL
      ORDER BY CASE kind WHEN 'collage' THEN 0 WHEN 'recap' THEN 1 ELSE 2 END, id`,
   ).all(card.id) as Array<{ asset_id: string }>;
-  const photos = card.extra ? [] : db.prepare("SELECT asset_id FROM themed_memory_assets WHERE themed_memory_id = ?").all(card.themed_memory_id) as Array<{ asset_id: string }>;
+  const photos = db.prepare("SELECT asset_id FROM themed_memory_assets WHERE themed_memory_id = ?").all(card.themed_memory_id) as Array<{ asset_id: string }>;
   return { creations: creations.map((r) => r.asset_id), photos: photos.map((r) => r.asset_id) };
 }
 
@@ -217,7 +159,7 @@ export function setCard(id: number, status: "created" | "empty" | "late" | "fail
 // The person's cards in Immich, with the label of the memory each was made from.
 export function cardsOf(userId: string, limit: number): Array<CardRow & { memory_id: string; theme: Theme; label: string }> {
   return database().prepare(
-    `SELECT c.id, c.user_id, c.week, c.themed_memory_id, c.memory_id, c.extra, m.theme, m.label, m.memory_at AS source_memory_at FROM creation_cards c
+    `SELECT c.id, c.user_id, c.week, c.themed_memory_id, c.memory_id, m.theme, m.label, m.memory_at AS source_memory_at FROM creation_cards c
      JOIN themed_memories m ON m.id = c.themed_memory_id WHERE c.user_id = ? AND c.status = 'created' ORDER BY c.week DESC LIMIT ?`,
   ).all(userId, limit) as Array<CardRow & { memory_id: string; theme: Theme; label: string }>;
 }
