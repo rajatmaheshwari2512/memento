@@ -34,9 +34,11 @@ import native_video_player
     BackgroundWorkerFgHostApiSetup.setUp(binaryMessenger: messenger, api: BackgroundWorkerApiImpl())
     ConnectivityApiSetup.setUp(binaryMessenger: messenger, api: ConnectivityApiImpl())
     NetworkApiSetup.setUp(binaryMessenger: messenger, api: NetworkApiImpl())
+    StorageSaverPlugin.register(with: registry.registrar(forPlugin: StorageSaverPlugin.name)!) // SelfPhotos Storage saver
   }
 
   public static func cancelPlugins(with engine: FlutterEngine) {
     (engine.valuePublished(byPlugin: NativeSyncApiImpl.name) as? NativeSyncApiImpl)?.detachFromEngine()
+    (engine.valuePublished(byPlugin: StorageSaverPlugin.name) as? StorageSaverPlugin)?.detachFromEngine()
   }
 }
