@@ -24,7 +24,6 @@ import 'package:immich_mobile/data/db/main/table/user/metadata.drift.dart';
 import 'package:immich_mobile/data/db/main/table/user/partner.drift.dart';
 import 'package:immich_mobile/data/db/main/table/user/user.drift.dart';
 import 'package:immich_mobile/domain/models/album/album.model.dart';
-import 'package:immich_mobile/domain/models/asset/asset_metadata.model.dart';
 import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
 import 'package:immich_mobile/domain/models/asset_edit.model.dart';
 import 'package:immich_mobile/domain/models/memory.model.dart';
@@ -398,7 +397,7 @@ class SyncStreamRepository extends DatabaseAccessor<Drift> with $SyncStreamRepos
         for (final metadata in data) {
           if (metadata.key == kMobileMetadataKey) {
             batch.deleteWhere(_db.remoteAssetCloudIdEntity, (row) => row.assetId.equals(metadata.assetId));
-          } else if (metadata.key == RemoteAssetMetadataKey.storageSaver.key) {
+          } else if (metadata.key == kStorageSaverMetadataKey) {
             batch.deleteWhere(_db.remoteAssetStorageSaverEntity, (row) => row.assetId.equals(metadata.assetId));
           }
         }
@@ -429,7 +428,7 @@ class SyncStreamRepository extends DatabaseAccessor<Drift> with $SyncStreamRepos
               companion.copyWith(assetId: Value(metadata.assetId)),
               onConflict: DoUpdate((_) => companion),
             );
-          } else if (metadata.key == RemoteAssetMetadataKey.storageSaver.key) {
+          } else if (metadata.key == kStorageSaverMetadataKey) {
             final originalChecksum = metadata.value['originalChecksum'];
             if (originalChecksum is! String) {
               continue;

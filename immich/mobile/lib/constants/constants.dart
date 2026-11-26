@@ -1,6 +1,7 @@
 import 'dart:io';
 
 const String kMobileMetadataKey = "mobile-app";
+const String kStorageSaverMetadataKey = "memento-storage-saver";
 
 // Number of log entries to retain on app start
 const int kLogTruncateLimit = 2000;
