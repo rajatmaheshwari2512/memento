@@ -9,7 +9,7 @@
 # One-time setup:
 #   - tools at the versions Immich pins, installed with mise from inside the repo so its
 #     lock files decide the exact builds (no other tools from Immich's config):
-#       cd immich && mise trust mise.toml mobile/mise.toml native/mise.toml
+#       cd immich && for f in mise.toml mobile/mise.toml native/mise.toml; do mise trust "$f"; done
 #       cd mobile && mise install aqua:flutter/flutter java rust
 #       cd .. && mise install node pnpm npm:@openapitools/openapi-generator-cli
 #       cd native && mise install rust

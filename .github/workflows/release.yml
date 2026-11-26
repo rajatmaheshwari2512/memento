@@ -295,10 +295,16 @@ jobs:
           MISE_EXPERIMENTAL: 1
           MISE_GITHUB_TOKEN: ${{ github.token }}
         run: |
-          mise trust mise.toml mobile/mise.toml native/mise.toml
           (cd mobile && mise install aqua:flutter/flutter java rust)
           mise install node pnpm npm:@openapitools/openapi-generator-cli
           (cd native && mise install rust)
+          version=$(python3 -I -c 'import json; print(json.load(open("open-api/openapitools.json"))["generator-cli"]["version"])')
+          url="https://maven-central.storage-download.googleapis.com/maven2/org/openapitools/openapi-generator-cli/$version/openapi-generator-cli-$version.jar"
+          curl -fsSL --retry 5 --retry-all-errors -o "$RUNNER_TEMP/generator.jar" "$url"
+          echo "$(curl -fsSL --retry 5 --retry-all-errors "$url.sha1")  $RUNNER_TEMP/generator.jar" | sha1sum -c -
+          dirs=$(find "$HOME/.local/share/mise/installs" -type d -path '*node_modules/@openapitools/openapi-generator-cli')
+          [ -n "$dirs" ] || { echo "::error::openapi-generator-cli isn't installed"; exit 1; }
+          for dir in $dirs; do mkdir -p "$dir/versions" && cp "$RUNNER_TEMP/generator.jar" "$dir/versions/$version.jar"; done
 
       - name: Build the app (apps/android/build.sh)
         if: steps.signing.outputs.ready == 'true'
