@@ -38,3 +38,6 @@ export const isAskPhotosOff = () => mementoFlags.value !== null && !isAskPhotosE
 // Themed memories and their collages and videos.
 export const isThemedMemoriesEnabled = () => mementoFlags.value?.themedMemories.enabled ?? false;
 export const isCreationsEnabled = () => mementoFlags.value?.creations.enabled ?? false;
+
+// Storage saver: each person's backup quality.
+export const isStorageSaverEnabled = () => mementoFlags.value?.storageSaver.enabled ?? false;

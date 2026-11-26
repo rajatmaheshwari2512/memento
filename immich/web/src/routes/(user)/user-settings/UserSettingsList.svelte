@@ -1,4 +1,5 @@
 <script lang="ts">
+  import MementoBackupSettings from '#lib/ai-edit/MementoBackupSettings.svelte';
   import MementoMemoriesSettings from '#lib/ai-edit/MementoMemoriesSettings.svelte';
   import SettingAccordion from '#lib/components/shared-components/settings/SettingAccordion.svelte';
   import { OpenQueryParam, QueryParameter } from '#lib/constants.ts';
@@ -98,6 +99,8 @@
 </SettingAccordion>
 
 <MementoMemoriesSettings /><!-- SelfPhotos themed memories: the person's own switches -->
+
+<MementoBackupSettings /><!-- SelfPhotos backup quality: the person's own choice -->
 
 <SettingAccordion
   icon={mdiBellOutline}
