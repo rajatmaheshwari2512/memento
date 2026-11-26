@@ -74,8 +74,6 @@ class StorageSaverPlugin: ImmichPlugin, FlutterPlugin {
         }
         DispatchQueue.main.async { self.completeWhenActive(for: result, with: value) }
       }
-    case "sizes":
-      result(FlutterError(code: "unsupported", message: "File sizes aren't available on iOS", details: nil))
     case "cancel":
       guard let run = (args["runId"] as? NSNumber)?.int64Value else {
         result(FlutterError(code: "failed", message: "Missing arguments", details: nil))
