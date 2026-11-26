@@ -64,5 +64,3 @@ export const EDITS_WAITING = 24;
 export const EDIT_WAIT_MS = 3 * 60_000;
 export const EDITS_TOO_MANY = "Memento is making a lot of AI edits right now. Try again in a minute.";
 export const EDITS_TOO_LONG = "Memento was busy with other AI edits for too long. Try again.";
-
-export const UPDATE_THE_APP = "Highlighted edits need a newer version of the app. Please update it, then try again.";

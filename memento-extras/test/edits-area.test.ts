@@ -198,12 +198,12 @@ test("sizes are automatic, by the photo: 4K over ~5 MP, else 2K, for every edit;
 
 test("presets name their tools; bad names are refused", async () => {
   geminiCalls.length = 0;
-  assert.equal((await edit({ tool: "unblur", prompt: "Make the photo sharp" })).status, 201);
-  for (const bad of ["Unblur", "../x", 7, "a".repeat(41)]) assert.equal((await edit({ tool: bad })).status, 400, String(bad));
+  assert.equal((await edit({ tools: ["unblur"], prompt: "Make the photo sharp" })).status, 201);
+  for (const bad of ["Unblur", "../x", 7, "a".repeat(41)]) assert.equal((await edit({ tools: [bad] })).status, 400, String(bad));
   assert.equal(geminiCalls.length, 1);
 });
 
-test("several presets in one edit: 1 to 3 different tools, sent as `tools`; the old `tool` still works; never both", async () => {
+test("several presets in one edit: 1 to 3 different tools, sent as `tools`", async () => {
   geminiCalls.length = 0;
   const combined = "Make all of these changes to the photo in one edit:\n- Enhance it\n- A new sky\n- Watercolour\n- make it warmer";
   const made = await edit({ tools: ["enhance", "sky", "watercolour"], prompt: combined });
@@ -211,13 +211,10 @@ test("several presets in one edit: 1 to 3 different tools, sent as `tools`; the 
   assert.ok(geminiCalls[0]!.text.endsWith(`Instruction: ${combined}`), "the app's joined instruction, as it is");
   assert.equal((await edit({ tools: ["unblur"] })).status, 201);
   assert.equal((await areaEdit({ tools: ["enhance", "erase"] })).status, 201);
-  assert.equal((await edit({ tools: null, tool: "unblur" })).status, 201, "null counts as not sent");
+  assert.equal((await edit({ tools: null })).status, 201, "null counts as not sent");
   for (const bad of [[], ["a", "b", "c", "d"], ["sky", "sky"], ["sky", "Sky"], ["sky", 7], "sky", { 0: "sky" }]) {
     assert.equal((await edit({ tools: bad })).status, 400, JSON.stringify(bad));
   }
-  const both = await edit({ tool: "sky", tools: ["sky"] });
-  assert.equal(both.status, 400);
-  assert.match(both.body.error, /not both/);
   assert.equal(geminiCalls.length, 4);
 });
 
@@ -225,8 +222,6 @@ test("an edit's log names its tools, never the instruction", async () => {
   const made = await edit({ tools: ["relight", "glare"], prompt: "the secret otter instruction" });
   assert.equal(made.status, 201);
   assert.match(service.logs, new RegExp(`"event":"edit","edit":"${made.body.editId}".*"provider":"gemini".*"tools":\\["relight","glare"\\]`));
-  const old = await edit({ tool: "unblur", prompt: "the secret otter instruction" });
-  assert.match(service.logs, new RegExp(`"edit":"${old.body.editId}".*"tools":\\["unblur"\\]`));
   const typed = await edit({ prompt: "the secret otter instruction" });
   assert.match(service.logs, new RegExp(`"edit":"${typed.body.editId}".*"tools":\\[\\]`));
   assert.doesNotMatch(service.logs, /secret otter/);
@@ -265,9 +260,6 @@ test("a highlighted edit needs its mark, and its photo unless it's Edit more; ba
     duplex: "half",
   } as RequestInit).then((r) => r.status, () => "reset");
   assert.ok(chunked === 413 || chunked === "reset", `got ${chunked}`);
-  const old = await edit({ mark: big(1) });
-  assert.equal(old.status, 426);
-  assert.match(old.body.error, /update/);
   assert.equal(await headersOnly("/edits", {}, 1024 * 1024), 401);
   assert.equal(await headersOnly("/edits", { cookie: OWNER_COOKIE, "content-type": "text/plain" }, 1024 * 1024), 415);
   assert.equal(await headersOnly("/edits", { cookie: OWNER_COOKIE }), 413);
@@ -317,7 +309,7 @@ test("AI tools switched off: highlighted edits (before their body is read), pres
   });
   assert.equal(refused.status, 403);
   assert.match(refused.body, /AI tools .* switched off/);
-  assert.equal((await edit({ tool: "unblur" })).status, 403);
+  assert.equal((await edit({ tools: ["unblur"] })).status, 403);
   assert.equal((await edit({ tools: ["unblur", "sky"] })).status, 403);
   assert.equal((await saveArea(made.body.editId, jpeg(4080, 3072))).status, 403);
   assert.deepEqual(geminiCalls, []);

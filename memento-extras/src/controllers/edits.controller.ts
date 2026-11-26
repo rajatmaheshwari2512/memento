@@ -1,8 +1,7 @@
 // AI edits and their limits (services/edits.service.ts, limits.service.ts).
 
 import { COPY_TYPES, MAX_COPY_BYTES } from "../constants/copies.constants.ts";
-import { FOUR_K_OVER_PIXELS, MAX_AREA_REQUEST_BYTES, UPDATE_THE_APP } from "../constants/edits.constants.ts";
-import { MAX_JSON_BYTES } from "../constants/http.constants.ts";
+import { FOUR_K_OVER_PIXELS, MAX_AREA_REQUEST_BYTES } from "../constants/edits.constants.ts";
 import { requireUser } from "../middleware/auth.middleware.ts";
 import { parseAlignmentReport, parseEditRequest, readAreaRequest } from "../schemas/edits.schema.ts";
 import {
@@ -14,7 +13,6 @@ import type { Handler } from "../types/http.types.ts";
 import type { User } from "../types/immich.types.ts";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { pipeline } from "node:stream/promises";
-import { HttpError } from "../utils/http-error.ts";
 import { imageType, jsonRequest, log, readJson, receiveImage, send } from "../utils/http.ts";
 
 const made = (res: ServerResponse, edit: EditMade | null) => {
@@ -30,23 +28,6 @@ function stillWanted(req: IncomingMessage, user: User): () => boolean {
   };
 }
 
-async function readEditRequest(req: IncomingMessage): Promise<Record<string, unknown>> {
-  if (Number(req.headers["content-length"] ?? "0") > MAX_JSON_BYTES) {
-    let size = 0;
-    for await (const chunk of req) {
-      size += (chunk as Buffer).length;
-      if (size > MAX_AREA_REQUEST_BYTES) break;
-    }
-    throw new HttpError(426, UPDATE_THE_APP);
-  }
-  try {
-    return await readJson(req);
-  } catch (error) {
-    if (error instanceof HttpError && error.status === 413) throw new HttpError(426, UPDATE_THE_APP);
-    throw error;
-  }
-}
-
 export const editsController = {
   // Your edits today, and everyone's this month; and above how many pixels a photo is edited at 4K.
   async limits(req, res) {
@@ -56,9 +37,8 @@ export const editsController = {
 
   // A whole-photo edit, typed or with tools (refused with the AI tools switched off).
   async create(req, res) {
-    jsonRequest(req, MAX_AREA_REQUEST_BYTES);
     const { user, cred } = await requireUser(req);
-    const body = await readEditRequest(req);
+    const body = await readJson(req);
     const flags = requireGemini();
     const request = parseEditRequest(body);
     if (request.tools.length > 0) requireTools(flags);

@@ -32,16 +32,10 @@ export function parseEditRequest(body: Record<string, unknown>): EditRequest {
   };
 }
 
-// The tools picked: `tools`, 1 to MAX_TOOLS different names; or `tool`, one name (older apps). Neither: a typed instruction ([]).
+// The tools picked: `tools`, 1 to MAX_TOOLS different names. Not sent: a typed instruction ([]).
 function parseTools(body: Record<string, unknown>): string[] {
-  const { tool, tools } = body;
-  const sent = (value: unknown) => value !== undefined && value !== null;
-  if (sent(tool) && sent(tools)) throw new HttpError(400, "Send tools or tool, not both.");
-  if (sent(tool)) {
-    if (!isToolName(tool)) throw new HttpError(400, "tool must be a tool's name.");
-    return [tool];
-  }
-  if (!sent(tools)) return [];
+  const { tools } = body;
+  if (tools === undefined || tools === null) return [];
   if (
     !Array.isArray(tools) || tools.length < 1 || tools.length > MAX_TOOLS || !tools.every(isToolName) ||
     new Set(tools).size !== tools.length

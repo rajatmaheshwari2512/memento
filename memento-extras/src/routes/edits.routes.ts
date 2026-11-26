@@ -3,7 +3,7 @@ import type { Route } from "../types/http.types.ts";
 
 export const editsRoutes: Route[] = [
   { method: "GET", path: "/limits", handler: editsController.limits }, // your edits today, everyone's this month, the 4K threshold
-  { method: "POST", path: "/edits", handler: editsController.create }, // { assetId, prompt, fromEditId?, tool? } -> { editId, size, ... }
+  { method: "POST", path: "/edits", handler: editsController.create }, // { assetId, prompt, fromEditId?, tools? } -> { editId, size, ... }
   { method: "POST", path: "/edits/area", handler: editsController.createArea }, // as /edits, plus { mark, photo } -> { editId, size, ... }
   { method: "GET", path: "/edits/:id/image", handler: editsController.image }, // the result (only for the user who made it)
   { method: "POST", path: "/edits/:id/save", handler: editsController.save }, // { whole? } upload next to the original -> { assetId }
