@@ -27,7 +27,7 @@ export function propose(userId: string, themedMemoryId: number, kind: CreationKi
 
 // Whether this person got a card on or after the local day `since` (one a week).
 export function cardSince(userId: string, since: string): boolean {
-  return database().prepare("SELECT 1 FROM creation_cards WHERE user_id = ? AND week >= ?").get(userId, since) !== undefined;
+  return database().prepare("SELECT 1 FROM creation_cards WHERE user_id = ? AND week >= ? AND extra = 0").get(userId, since) !== undefined;
 }
 
 // Memories ranked for the week's creations: theme first (`themeRank`), then how good their

@@ -52,6 +52,7 @@ test("a version-12 database with data is updated, and every row stays", () => {
     INSERT INTO themed_memories (id, user_id, theme, theme_key, status, made_on, created_at) VALUES (1, 'u1', 'month', 'month:2026-10', 'created', '2026-11-01', 't');
     INSERT INTO creation_cards (id, user_id, themed_memory_id, week, status, memory_id, created_at, updated_at, attempts, next_at) VALUES (7, 'u1', 1, '2026-11-01', 'created', 'm1', 't1', 't2', 2, 't3');
     INSERT INTO creation_cards (id, user_id, themed_memory_id, week, status, created_at, updated_at) VALUES (8, 'u1', 1, '2026-11-08', 'waiting', 't', 't');
+    INSERT INTO creation_cards (id, user_id, themed_memory_id, week, status, created_at, updated_at, extra) VALUES (9, 'u1', 1, '2026-11-01', 'created', 't', 't', 1);
     INSERT INTO creation_jobs (id, user_id, themed_memory_id, kind, inputs, state, rank, next_at, created_at, updated_at, card_id) VALUES (1, 'u1', 1, 'collage', '[]', 'done', 1.5, 't', 't', 't', 7);
     INSERT INTO creation_jobs (id, user_id, themed_memory_id, kind, inputs, state, rank, next_at, created_at, updated_at, card_id) VALUES (2, 'u1', 1, 'recap', '[]', 'proposed', 0.5, 't', 't', 't', NULL);
     INSERT INTO noise_jobs (id, user_id, asset_id, state, step, copy_id, video_ms, created_at) VALUES ('n1', 'u1', 'v1', 'running', 'cleaning', NULL, 5000, 't');
@@ -59,25 +60,17 @@ test("a version-12 database with data is updated, and every row stays", () => {
   `);
   const rows = (table: string) => db.prepare(`SELECT * FROM ${table}`).all().map((r) => ({ ...r }));
   const without = (table: string, column: string) => rows(table).map(({ [column]: _, ...rest }) => rest);
-  const tables = ["flags", "user_keys", "edits", "live_albums", "live_album_people", "memory_users", "themed_memories", "creation_jobs"];
+  const tables = ["flags", "user_keys", "edits", "live_albums", "live_album_people", "memory_users", "themed_memories", "creation_cards", "creation_jobs"];
   const before = Object.fromEntries(tables.map((t) => [t, rows(t)]));
-  const cardsBefore = without("creation_cards", "extra");
   const noiseBefore = without("noise_jobs", "step");
   assert.equal(rows("noise_jobs")[0]!.step, "cleaning");
   migrate(db, MIGRATIONS);
   assert.equal(version(db), 14);
   assert.deepEqual(Object.fromEntries(tables.map((t) => [t, rows(t)])), before);
-  assert.deepEqual(rows("creation_cards"), cardsBefore);
   assert.deepEqual(rows("noise_jobs"), noiseBefore);
-  assert.equal(rows("creation_cards").length, 2);
+  assert.equal(rows("creation_cards").length, 3);
   assert.deepEqual(rows("creation_jobs").map((j) => j.card_id), [7, null]);
-  assert.ok(!("extra" in rows("creation_cards")[0]!));
   assert.ok(!("step" in rows("noise_jobs")[0]!));
-  assert.throws(() => db.exec("INSERT INTO creation_cards (user_id, themed_memory_id, week, status, created_at, updated_at) VALUES ('u1', 1, '2026-11-01', 'waiting', 't', 't')"), /UNIQUE/);
-  db.exec("PRAGMA foreign_keys = ON");
-  db.exec("DELETE FROM creation_cards WHERE id = 7");
-  assert.equal(rows("creation_jobs")[0]!.card_id, null);
-  db.exec("PRAGMA foreign_keys = OFF");
   db.exec("INSERT INTO backup_settings VALUES ('u1', 'saver', 't')");
   assert.throws(() => db.exec("INSERT INTO backup_settings VALUES ('u2', 'low', 't')"), /CHECK/);
   assert.throws(() => db.exec("INSERT INTO backup_settings VALUES ('u1', 'original', 't')"), /UNIQUE|PRIMARY/);
@@ -102,7 +95,7 @@ test("a database from a newer version is refused", () => {
 
 test("steps after the baseline are numbered from 13 and applied in order, once", () => {
   assert.equal(MIGRATIONS[1]!.name, "13: backup quality");
-  assert.equal(MIGRATIONS[2]!.name, "14: drop unused columns");
+  assert.equal(MIGRATIONS[2]!.name, "14: drop the unused noise step");
   const steps = [
     ...MIGRATIONS,
     { name: "15: a", run: (d: DatabaseSync) => d.exec("CREATE TABLE a (x)") },
