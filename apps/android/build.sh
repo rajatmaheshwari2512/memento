@@ -33,10 +33,10 @@ env_value() {
     sed -e 's/[[:space:]]#.*$//' -e 's/[[:space:]]*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"
 }
 keystore="$(env_value ANDROID_KEYSTORE_PATH)"
-keystore="${keystore:-$HOME/.config/selfphotos/android/selfphotos-immich.jks}"
+keystore="${keystore:-$HOME/.config/memento/android/memento.jks}"
 case "$keystore" in "~"/*) keystore="$HOME/${keystore#"~/"}" ;; /*) ;; *) keystore="$repo/$keystore" ;; esac
 key_alias="$(env_value ANDROID_KEYSTORE_ALIAS)"
-key_alias="${key_alias:-selfphotos}"
+key_alias="${key_alias:-memento}"
 
 cd "$src"
 version="$(sed -n 's/^immich_version: *//p' "$repo/host/roles/immich/defaults/main.yml")"

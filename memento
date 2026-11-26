@@ -1135,9 +1135,9 @@ public ($packages → the package → Package settings → Change visibility). N
 # ── android ─────────────────────────────────────────────────────────────────────────────────────
 
 load_android() {
-  keystore=$(expand_home "$(value ANDROID_KEYSTORE_PATH "$HOME/.config/selfphotos/android/selfphotos-immich.jks")")
+  keystore=$(expand_home "$(value ANDROID_KEYSTORE_PATH "$HOME/.config/memento/android/memento.jks")")
   case "$keystore" in /*) ;; *) keystore="$root/$keystore" ;; esac
-  key_alias=$(value ANDROID_KEYSTORE_ALIAS selfphotos)
+  key_alias=$(value ANDROID_KEYSTORE_ALIAS memento)
 }
 
 android_build() {

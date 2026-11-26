@@ -251,7 +251,7 @@ delete it there (`/opt/memento-extras/music`). Without music, recap videos are s
 | `.env` (the whole file) | Every secret: the database password, Memento's secret, the backup keys and passwords. Save it again whenever you change it. |
 | The two backup passwords | Shown once by setup. Without them, the backups can't be read. |
 | `infra/terraform.tfstate` | Once setup has made anything with Terraform. It's Terraform's only record of the server, the DNS record and the bucket; without it, setup would make a new server. Save it again after each Terraform change. |
-| The Android signing key | The file at `ANDROID_KEYSTORE_PATH` (default `~/.config/selfphotos/android/selfphotos-immich.jks`). Every update of the app must be signed with it. |
+| The Android signing key | The file at `ANDROID_KEYSTORE_PATH` (default `~/.config/memento/android/memento.jks`). Every update of the app must be signed with it. |
 
 ### 11. Recommended: test the backup
 
@@ -367,12 +367,12 @@ the top of the repo (the first line makes the environment):
 
 ```
 gh api -X PUT 'repos/{owner}/{repo}/environments/release' > /dev/null
-base64 < ~/.config/selfphotos/android/selfphotos-immich.jks | gh secret set ANDROID_KEYSTORE_BASE64 --env release
+base64 < ~/.config/memento/android/memento.jks | gh secret set ANDROID_KEYSTORE_BASE64 --env release
 gh secret set ANDROID_KEYSTORE_PASSWORD --env release   # it asks: paste ANDROID_KEYSTORE_PASSWORD from .env
-gh secret set ANDROID_KEYSTORE_ALIAS --env release      # it asks: selfphotos, or your ANDROID_KEYSTORE_ALIAS
+gh secret set ANDROID_KEYSTORE_ALIAS --env release      # it asks: memento, or your ANDROID_KEYSTORE_ALIAS
 ```
 
-(The second line's file is `ANDROID_KEYSTORE_PATH`, if you set one.) The app from a release must be
+(The second line's file is `ANDROID_KEYSTORE_PATH` from `.env`, or the default `~/.config/memento/android/memento.jks`; if you set one in `.env`, use its path in the command.) The app from a release must be
 signed with the same key as the app on the phones, or they refuse the update.
 
 **Optional, once: only `main` may use the key.** Then a run from another branch never gets it:
