@@ -35,6 +35,7 @@ import 'package:openapi/api.dart' show AssetMediaSize;
 
 import '../unit/factories/remote_asset_factory.dart';
 import '../unit/presentation/presentation_context.dart';
+import 'work_folder_stub.dart';
 
 const _pixelRatio = 2.625;
 const _screen = Size(1080, 2424);
@@ -158,6 +159,8 @@ Widget _localized(Widget Function(BuildContext context) app) => EasyLocalization
 );
 
 void main() {
+  setUpAll(stubWorkFolderRoot);
+
   late PresentationContext ctx;
 
   setUpAll(_loadFont);

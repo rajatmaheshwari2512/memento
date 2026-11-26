@@ -14,6 +14,7 @@ import 'package:immich_mobile/selfphotos/adjust/adjust_params.dart';
 import 'package:immich_mobile/selfphotos/adjust/adjust_shader.dart';
 
 import '../unit/factories/remote_asset_factory.dart';
+import 'work_folder_stub.dart';
 
 class _Source extends AdjustService {
   const _Source();
@@ -74,6 +75,8 @@ class _Native extends AdjustNative {
 }
 
 void main() {
+  setUpAll(stubWorkFolderRoot);
+
   testWidgets('the shader gives the same pixels as on the web', (tester) async {
     await tester.runAsync(() async {
       final parity =

@@ -9,6 +9,7 @@ import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
 import 'package:immich_mobile/extensions/platform_extensions.dart';
 import 'package:immich_mobile/selfphotos/storage_saver/storage_saver.service.dart';
 import 'package:immich_mobile/selfphotos/storage_saver/storage_saver_native.dart';
+import 'package:immich_mobile/selfphotos/work_folder.dart';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
 
@@ -58,7 +59,7 @@ class StorageSaverRun {
 Future<void> deleteStaleFolders({Directory? root, Duration maxAge = const Duration(hours: 24)}) async {
   try {
     final cutoff = DateTime.now().subtract(maxAge);
-    await for (final entity in (root ?? Directory.systemTemp).list()) {
+    await for (final entity in (root ?? await workFolderRoot()).list()) {
       if (entity is Directory && p.basename(entity.path).startsWith(_folderPrefix)) {
         try {
           if (entity.statSync().modified.isBefore(cutoff)) {
@@ -115,7 +116,7 @@ class StorageSaverUpload {
     }
     try {
       final originalChecksum = asset.checksum ?? await _checksum(file);
-      final folder = _folder = await (await Directory.systemTemp.create(recursive: true)).createTemp(_folderPrefix);
+      final folder = _folder = await createWorkFolder(_folderPrefix);
       final output = File(p.join(folder.path, copyName));
       final result = await _native.shrink(
         file.path,

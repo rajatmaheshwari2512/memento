@@ -13,6 +13,7 @@ import 'package:immich_mobile/selfphotos/adjust/adjust_params.dart';
 import 'package:immich_mobile/selfphotos/adjust/adjust_shader.dart';
 import 'package:immich_mobile/selfphotos/adjust/markup.dart';
 import 'package:immich_mobile/selfphotos/extras_client.dart';
+import 'package:immich_mobile/selfphotos/work_folder.dart';
 import 'package:path/path.dart' as p;
 
 // Small enough for any phone GPU even when turned (a tile's source part is up to √2 bigger).
@@ -46,7 +47,7 @@ Future<AdjustExport> exportFullSize(
   AdjustService service = const AdjustService(),
   AdjustNative native = const AdjustNative(),
 }) async {
-  final folder = await (await Directory.systemTemp.create(recursive: true)).createTemp('selfphotos-copy-');
+  final folder = await createWorkFolder('selfphotos-copy-');
   try {
     final source = await _openSource(asset, folder, service, native);
     final output = outputOf(source);

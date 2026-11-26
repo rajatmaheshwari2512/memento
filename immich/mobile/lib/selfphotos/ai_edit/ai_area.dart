@@ -13,6 +13,7 @@ import 'package:immich_mobile/selfphotos/adjust/adjust_geometry.dart';
 import 'package:immich_mobile/selfphotos/adjust/adjust_native.dart';
 import 'package:immich_mobile/selfphotos/ai_edit/ai_align.dart';
 import 'package:immich_mobile/selfphotos/ai_edit/ai_tools.dart';
+import 'package:immich_mobile/selfphotos/work_folder.dart';
 import 'package:path/path.dart' as p;
 
 class AiStroke {
@@ -160,7 +161,7 @@ Future<Uint8List> markedCopy(
     paintStrokes(canvas, strokes, bounds.size, area.tintColor);
     canvas.restore();
   });
-  final folder = await (await Directory.systemTemp.create(recursive: true)).createTemp('selfphotos-mark-');
+  final folder = await createWorkFolder('selfphotos-mark-');
   try {
     final pixels = await marked.toByteData();
     await native.createOutput(size);

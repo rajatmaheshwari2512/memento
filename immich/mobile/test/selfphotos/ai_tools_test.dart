@@ -16,6 +16,7 @@ import 'package:immich_mobile/selfphotos/ai_edit/ai_area.dart';
 import 'package:immich_mobile/selfphotos/ai_edit/ai_tools.dart';
 
 import '../unit/factories/remote_asset_factory.dart';
+import 'work_folder_stub.dart';
 
 final _kit = AiToolkit.parse(File('../web/src/lib/ai-edit/ai/ai-tools.json').readAsStringSync());
 
@@ -74,6 +75,8 @@ class _Native extends AdjustNative {
 }
 
 void main() {
+  setUpAll(stubWorkFolderRoot);
+
   group('the tools', () {
     test('every tool has a name the service accepts, a label, and an instruction with room for words', () {
       final en = jsonDecode(File('../i18n/en.json').readAsStringSync()) as Map<String, Object?>;
