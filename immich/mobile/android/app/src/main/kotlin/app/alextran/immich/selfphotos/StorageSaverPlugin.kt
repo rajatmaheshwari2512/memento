@@ -1,0 +1,447 @@
+package app.alextran.immich.selfphotos
+
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.media.MediaExtractor
+import android.media.MediaFormat
+import android.media.MediaMetadataRetriever
+import android.net.Uri
+import android.os.Build
+import android.os.Handler
+import android.os.HandlerThread
+import android.os.Looper
+import android.util.Base64
+import android.util.Log
+import androidx.exifinterface.media.ExifInterface
+import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
+import androidx.media3.effect.Presentation
+import androidx.media3.transformer.Composition
+import androidx.media3.transformer.DefaultEncoderFactory
+import androidx.media3.transformer.EditedMediaItem
+import androidx.media3.transformer.Effects
+import androidx.media3.transformer.ExportException
+import androidx.media3.transformer.ExportResult
+import androidx.media3.transformer.TransformationRequest
+import androidx.media3.transformer.Transformer
+import androidx.media3.transformer.VideoEncoderSettings
+import io.flutter.embedding.engine.plugins.FlutterPlugin
+import io.flutter.plugin.common.MethodCall
+import io.flutter.plugin.common.MethodChannel
+import java.io.DataInputStream
+import java.io.File
+import java.io.FileOutputStream
+import java.security.MessageDigest
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicLong
+import kotlin.math.floor
+import kotlin.math.min
+import kotlin.math.sqrt
+
+// SelfPhotos Storage saver: shrinks a video or photo before it's uploaded.
+class StorageSaverPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+  private var channel: MethodChannel? = null
+  private var context: Context? = null
+  private val main = Handler(Looper.getMainLooper())
+  private val submitted = AtomicLong()
+  @Volatile private var cancelledUpTo = 0L
+  @Volatile private var running: VideoExport? = null
+
+  override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+    context = binding.applicationContext
+    channel = MethodChannel(binding.binaryMessenger, "selfphotos/storage_saver").also { it.setMethodCallHandler(this) }
+  }
+
+  override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+    channel?.setMethodCallHandler(null)
+    channel = null
+    cancel()
+  }
+
+  override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
+    when (call.method) {
+      "shrink" -> {
+        val job = submitted.incrementAndGet()
+        worker.execute {
+          try {
+            val value = if (job <= cancelledUpTo) {
+              notShrunk("cancelled")
+            } else {
+              shrink(
+                job,
+                File(call.argument<String>("inputPath")!!),
+                File(call.argument<String>("outputPath")!!),
+                call.argument<String>("kind")!!,
+                call.argument<Int>("videoBitrate"),
+              )
+            }
+            main.post { result.success(value) }
+          } catch (e: Throwable) {
+            Log.w(TAG, "Couldn't shrink", e)
+            main.post { result.error("failed", e.message ?: e.toString(), null) }
+          }
+        }
+      }
+      "cancel" -> {
+        cancel()
+        result.success(null)
+      }
+      else -> result.notImplemented()
+    }
+  }
+
+  // Stops the running shrink and skips the ones already asked for.
+  private fun cancel() {
+    cancelledUpTo = submitted.get()
+    running?.cancel()
+  }
+
+  private fun shrink(job: Long, input: File, output: File, kind: String, videoBitrate: Int?): Map<String, Any> {
+    val reason = when (kind) {
+      "video" -> shrinkVideo(job, input, output, videoBitrate!!)
+      "photo" -> shrinkPhoto(input, output)
+      else -> error("Unknown kind $kind")
+    }
+    if (reason != null) {
+      output.delete()
+      return notShrunk(reason)
+    }
+    if (output.length() > input.length() * MAX_SIZE_RATIO) {
+      output.delete()
+      return notShrunk("notSmaller")
+    }
+    return mapOf("shrunk" to true, "size" to output.length(), "checksum" to sha1(output))
+  }
+
+  // Returns why the video is kept as it is, or null once [output] is written.
+  private fun shrinkVideo(job: Long, input: File, output: File, bitrate: Int): String? {
+    val facts = VideoFacts.read(input)
+    if (facts.hdr) return "hdr"
+    if (facts.frameRate > MAX_FRAME_RATE) return "frameRate"
+    val resize = facts.shortSide > MAX_SHORT_SIDE
+    if (!resize && facts.bitrate <= bitrate / MAX_SIZE_RATIO) return "alreadySmall"
+
+    val export = VideoExport(context!!, input, output, bitrate, resize, min(facts.shortSide, MAX_SHORT_SIDE))
+    running = export
+    try {
+      if (job <= cancelledUpTo) export.cancel()
+      return export.run()
+    } finally {
+      running = null
+    }
+  }
+
+  // Returns why the photo is kept as it is, or null once [output] is written.
+  private fun shrinkPhoto(input: File, output: File): String? {
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeFile(input.path, bounds)
+    if (bounds.outMimeType != "image/jpeg") return "notJpeg"
+    JpegHeaders.read(input).skipReason()?.let { return it }
+
+    val decoded = BitmapFactory.decodeFile(input.path, BitmapFactory.Options().apply {
+      inPreferredConfig = Bitmap.Config.ARGB_8888
+    }) ?: return "unreadable"
+    var bitmap = decoded
+    try {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && decoded.hasGainmap()) return "gainMap"
+      val pixels = decoded.width.toLong() * decoded.height
+      if (pixels > MAX_PIXELS) {
+        val scale = sqrt(MAX_PIXELS.toDouble() / pixels)
+        bitmap = Bitmap.createScaledBitmap(
+          decoded,
+          floor(decoded.width * scale).toInt(),
+          floor(decoded.height * scale).toInt(),
+          true,
+        )
+      }
+      FileOutputStream(output).use { stream ->
+        if (!bitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, stream)) error("Couldn't encode the photo")
+      }
+      copyExif(input, output, bitmap.width, bitmap.height)
+      return null
+    } finally {
+      if (bitmap !== decoded) bitmap.recycle()
+      decoded.recycle()
+    }
+  }
+
+  private fun copyExif(input: File, output: File, width: Int, height: Int) {
+    val from = ExifInterface(input.path)
+    val to = ExifInterface(output.path)
+    for (tag in EXIF_TAGS) {
+      from.getAttribute(tag)?.let { to.setAttribute(tag, it) }
+    }
+    to.setAttribute(ExifInterface.TAG_IMAGE_WIDTH, width.toString())
+    to.setAttribute(ExifInterface.TAG_IMAGE_LENGTH, height.toString())
+    to.setAttribute(ExifInterface.TAG_PIXEL_X_DIMENSION, width.toString())
+    to.setAttribute(ExifInterface.TAG_PIXEL_Y_DIMENSION, height.toString())
+    to.saveAttributes()
+  }
+
+  private fun sha1(file: File): String {
+    val digest = MessageDigest.getInstance("SHA-1")
+    file.inputStream().use { input ->
+      val buffer = ByteArray(HASH_BUFFER_SIZE)
+      while (true) {
+        val read = input.read(buffer)
+        if (read == -1) break
+        digest.update(buffer, 0, read)
+      }
+    }
+    return Base64.encodeToString(digest.digest(), Base64.NO_WRAP)
+  }
+
+  private fun notShrunk(reason: String): Map<String, Any> = mapOf("shrunk" to false, "reason" to reason)
+
+  private companion object {
+    const val TAG = "StorageSaver"
+    const val MAX_SIZE_RATIO = 0.8
+    const val MAX_FRAME_RATE = 60f
+    const val MAX_SHORT_SIDE = 1080
+    const val MAX_PIXELS = 16_000_000L
+    const val JPEG_QUALITY = 85
+    const val HASH_BUFFER_SIZE = 2 * 1024 * 1024
+
+    val worker = Executors.newSingleThreadExecutor()
+
+    val EXIF_TAGS = listOf(
+      ExifInterface.TAG_DATETIME,
+      ExifInterface.TAG_DATETIME_ORIGINAL,
+      ExifInterface.TAG_DATETIME_DIGITIZED,
+      ExifInterface.TAG_OFFSET_TIME,
+      ExifInterface.TAG_OFFSET_TIME_ORIGINAL,
+      ExifInterface.TAG_OFFSET_TIME_DIGITIZED,
+      ExifInterface.TAG_SUBSEC_TIME,
+      ExifInterface.TAG_SUBSEC_TIME_ORIGINAL,
+      ExifInterface.TAG_SUBSEC_TIME_DIGITIZED,
+      ExifInterface.TAG_GPS_VERSION_ID,
+      ExifInterface.TAG_GPS_LATITUDE,
+      ExifInterface.TAG_GPS_LATITUDE_REF,
+      ExifInterface.TAG_GPS_LONGITUDE,
+      ExifInterface.TAG_GPS_LONGITUDE_REF,
+      ExifInterface.TAG_GPS_ALTITUDE,
+      ExifInterface.TAG_GPS_ALTITUDE_REF,
+      ExifInterface.TAG_GPS_TIMESTAMP,
+      ExifInterface.TAG_GPS_DATESTAMP,
+      ExifInterface.TAG_GPS_PROCESSING_METHOD,
+      ExifInterface.TAG_GPS_DOP,
+      ExifInterface.TAG_GPS_SPEED,
+      ExifInterface.TAG_GPS_SPEED_REF,
+      ExifInterface.TAG_GPS_IMG_DIRECTION,
+      ExifInterface.TAG_GPS_IMG_DIRECTION_REF,
+      ExifInterface.TAG_GPS_MAP_DATUM,
+      ExifInterface.TAG_ORIENTATION,
+      ExifInterface.TAG_MAKE,
+      ExifInterface.TAG_MODEL,
+      ExifInterface.TAG_SOFTWARE,
+      ExifInterface.TAG_ARTIST,
+      ExifInterface.TAG_COPYRIGHT,
+      ExifInterface.TAG_IMAGE_DESCRIPTION,
+      ExifInterface.TAG_USER_COMMENT,
+      ExifInterface.TAG_IMAGE_UNIQUE_ID,
+      ExifInterface.TAG_CAMERA_OWNER_NAME,
+      ExifInterface.TAG_BODY_SERIAL_NUMBER,
+      ExifInterface.TAG_LENS_MAKE,
+      ExifInterface.TAG_LENS_MODEL,
+      ExifInterface.TAG_LENS_SPECIFICATION,
+      ExifInterface.TAG_LENS_SERIAL_NUMBER,
+      ExifInterface.TAG_EXPOSURE_TIME,
+      ExifInterface.TAG_F_NUMBER,
+      ExifInterface.TAG_APERTURE_VALUE,
+      ExifInterface.TAG_MAX_APERTURE_VALUE,
+      ExifInterface.TAG_SHUTTER_SPEED_VALUE,
+      ExifInterface.TAG_BRIGHTNESS_VALUE,
+      ExifInterface.TAG_EXPOSURE_BIAS_VALUE,
+      ExifInterface.TAG_EXPOSURE_PROGRAM,
+      ExifInterface.TAG_EXPOSURE_MODE,
+      ExifInterface.TAG_PHOTOGRAPHIC_SENSITIVITY,
+      ExifInterface.TAG_SENSITIVITY_TYPE,
+      ExifInterface.TAG_METERING_MODE,
+      ExifInterface.TAG_LIGHT_SOURCE,
+      ExifInterface.TAG_FLASH,
+      ExifInterface.TAG_FOCAL_LENGTH,
+      ExifInterface.TAG_FOCAL_LENGTH_IN_35MM_FILM,
+      ExifInterface.TAG_DIGITAL_ZOOM_RATIO,
+      ExifInterface.TAG_WHITE_BALANCE,
+      ExifInterface.TAG_SCENE_CAPTURE_TYPE,
+      ExifInterface.TAG_SCENE_TYPE,
+      ExifInterface.TAG_SUBJECT_DISTANCE,
+      ExifInterface.TAG_SUBJECT_DISTANCE_RANGE,
+      ExifInterface.TAG_CONTRAST,
+      ExifInterface.TAG_SATURATION,
+      ExifInterface.TAG_SHARPNESS,
+      ExifInterface.TAG_GAIN_CONTROL,
+      ExifInterface.TAG_COLOR_SPACE,
+      ExifInterface.TAG_EXIF_VERSION,
+      ExifInterface.TAG_X_RESOLUTION,
+      ExifInterface.TAG_Y_RESOLUTION,
+      ExifInterface.TAG_RESOLUTION_UNIT,
+    )
+  }
+}
+
+// The facts that decide whether a video is shrunk.
+private class VideoFacts(val shortSide: Int, val frameRate: Float, val hdr: Boolean, val bitrate: Long) {
+  companion object {
+    fun read(file: File): VideoFacts {
+      val extractor = MediaExtractor()
+      val retriever = MediaMetadataRetriever()
+      try {
+        extractor.setDataSource(file.path)
+        retriever.setDataSource(file.path)
+        val format = (0 until extractor.trackCount)
+          .map { extractor.getTrackFormat(it) }
+          .firstOrNull { it.getString(MediaFormat.KEY_MIME)?.startsWith("video/") == true }
+          ?: error("No video track")
+        val durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+        val transfer = if (format.containsKey(MediaFormat.KEY_COLOR_TRANSFER)) {
+          format.getInteger(MediaFormat.KEY_COLOR_TRANSFER)
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+          retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_COLOR_TRANSFER)?.toIntOrNull() ?: -1
+        } else {
+          -1
+        }
+        val frameRate = if (format.containsKey(MediaFormat.KEY_FRAME_RATE)) {
+          runCatching { format.getInteger(MediaFormat.KEY_FRAME_RATE).toFloat() }
+            .getOrElse { format.getFloat(MediaFormat.KEY_FRAME_RATE) }
+        } else {
+          val frames = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_FRAME_COUNT)?.toLongOrNull() ?: 0L
+          if (durationMs > 0) frames * 1000f / durationMs else 0f
+        }
+        return VideoFacts(
+          shortSide = min(format.getInteger(MediaFormat.KEY_WIDTH), format.getInteger(MediaFormat.KEY_HEIGHT)),
+          frameRate = frameRate,
+          hdr = transfer == MediaFormat.COLOR_TRANSFER_HLG || transfer == MediaFormat.COLOR_TRANSFER_ST2084,
+          bitrate = if (durationMs > 0) file.length() * 8 * 1000 / durationMs else Long.MAX_VALUE,
+        )
+      } finally {
+        extractor.release()
+        retriever.release()
+      }
+    }
+  }
+}
+
+// One video, re-encoded as HEVC at [bitrate]; [resize] makes its short side [shortSide].
+private class VideoExport(
+  private val context: Context,
+  private val input: File,
+  private val output: File,
+  private val bitrate: Int,
+  private val resize: Boolean,
+  private val shortSide: Int,
+) {
+  private val thread = HandlerThread("storage-saver").apply { start() }
+  private val handler = Handler(thread.looper)
+  private val done = CountDownLatch(1)
+  private var transformer: Transformer? = null
+  @Volatile private var failure: String? = null
+
+  // Returns null once [output] is written, or why it wasn't.
+  fun run(): String? {
+    try {
+      handler.post(::start)
+      done.await()
+      return failure
+    } finally {
+      thread.quitSafely()
+    }
+  }
+
+  fun cancel() {
+    handler.post {
+      transformer?.cancel()
+      finish("cancelled")
+    }
+  }
+
+  private fun start() {
+    if (done.count == 0L) return
+    val encoderFactory = DefaultEncoderFactory.Builder(context)
+      .setRequestedVideoEncoderSettings(VideoEncoderSettings.Builder().setBitrate(bitrate).build())
+      .setEnableFallback(true)
+      .build()
+    val built = Transformer.Builder(context)
+      .setLooper(thread.looper)
+      .setVideoMimeType(MimeTypes.VIDEO_H265)
+      .setEncoderFactory(encoderFactory)
+      .addListener(object : Transformer.Listener {
+        override fun onCompleted(composition: Composition, exportResult: ExportResult) {
+          Log.i(TAG, "Encoded a video with ${exportResult.videoEncoderName} to ${exportResult.width}x${exportResult.height}, ${exportResult.averageVideoBitrate} bps")
+          val outputShortSide = min(exportResult.width, exportResult.height)
+          finish(if (outputShortSide in 0 until shortSide - SIZE_TOLERANCE) "encoderLimit" else null)
+        }
+
+        override fun onError(composition: Composition, exportResult: ExportResult, exportException: ExportException) {
+          Log.w(TAG, "Couldn't shrink a video", exportException)
+          finish("failed: ${exportException.errorCodeName}")
+        }
+
+        override fun onFallbackApplied(
+          composition: Composition,
+          originalTransformationRequest: TransformationRequest,
+          fallbackTransformationRequest: TransformationRequest,
+        ) {
+          Log.i(TAG, "Encoder fallback: $originalTransformationRequest -> $fallbackTransformationRequest")
+        }
+      })
+      .build()
+    transformer = built
+    val item = EditedMediaItem.Builder(MediaItem.fromUri(Uri.fromFile(input)))
+    if (resize) item.setEffects(Effects(listOf(), listOf(Presentation.createForShortSide(shortSide))))
+    built.start(item.build(), output.path)
+  }
+
+  private fun finish(reason: String?) {
+    if (done.count == 0L) return
+    failure = reason
+    done.countDown()
+  }
+
+  private companion object {
+    const val TAG = "StorageSaver"
+    const val SIZE_TOLERANCE = 16
+  }
+}
+
+// The JPEG's header segments that mark photos kept full size.
+private class JpegHeaders(val xmp: String, val multiPicture: Boolean) {
+  fun skipReason(): String? = when {
+    xmp.contains("hdrgm") -> "gainMap"
+    xmp.contains("MotionPhoto") || xmp.contains("MicroVideo") -> "motionPhoto"
+    multiPicture || DEPTH_MARKERS.any { xmp.contains(it) } -> "depth"
+    else -> null
+  }
+
+  companion object {
+    private val DEPTH_MARKERS = listOf("GDepth", "GImage", "Container:Directory")
+    private const val XMP_PREFIX = "http://ns.adobe.com/"
+    private val MPF_PREFIX = byteArrayOf('M'.code.toByte(), 'P'.code.toByte(), 'F'.code.toByte(), 0)
+
+    fun read(file: File): JpegHeaders {
+      val xmp = StringBuilder()
+      var multiPicture = false
+      DataInputStream(file.inputStream().buffered()).use { input ->
+        if (input.readUnsignedShort() != 0xFFD8) return JpegHeaders("", false)
+        while (true) {
+          if (input.readUnsignedByte() != 0xFF) break
+          var marker = input.readUnsignedByte()
+          while (marker == 0xFF) marker = input.readUnsignedByte()
+          if (marker == 0xDA || marker == 0xD9) break
+          val data = ByteArray(input.readUnsignedShort() - 2)
+          input.readFully(data)
+          when (marker) {
+            0xE1 -> {
+              val text = String(data, Charsets.ISO_8859_1)
+              if (text.startsWith(XMP_PREFIX)) xmp.append(text)
+            }
+            0xE2 -> if (data.size >= MPF_PREFIX.size && data.copyOf(MPF_PREFIX.size).contentEquals(MPF_PREFIX)) multiPicture = true
+          }
+        }
+      }
+      return JpegHeaders(xmp.toString(), multiPicture)
+    }
+  }
+}

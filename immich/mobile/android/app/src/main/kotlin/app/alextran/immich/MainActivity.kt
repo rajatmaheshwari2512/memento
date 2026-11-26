@@ -22,6 +22,7 @@ import app.alextran.immich.passkey.PasskeyPlugin
 import app.alextran.immich.permission.PermissionApi
 import app.alextran.immich.permission.PermissionApiImpl
 import app.alextran.immich.selfphotos.AdjustImagePlugin
+import app.alextran.immich.selfphotos.StorageSaverPlugin
 import app.alextran.immich.sync.NativeSyncApi
 import app.alextran.immich.sync.NativeSyncApiImpl26
 import app.alextran.immich.sync.NativeSyncApiImpl30
@@ -70,6 +71,7 @@ class MainActivity : FlutterFragmentActivity() {
       flutterEngine.plugins.add(backgroundEngineLockImpl)
       flutterEngine.plugins.add(nativeSyncApiImpl)
       flutterEngine.plugins.add(permissionApiImpl)
+      flutterEngine.plugins.add(StorageSaverPlugin()) // SelfPhotos Storage saver: also for background uploads
     }
 
     fun cancelPlugins(flutterEngine: FlutterEngine) {

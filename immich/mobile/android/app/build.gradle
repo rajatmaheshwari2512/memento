@@ -94,6 +94,9 @@ dependencies {
   implementation libs.cronet.embedded
   implementation libs.media3.datasource.okhttp
   implementation libs.media3.datasource.cronet
+  implementation libs.media3.transformer
+  implementation libs.media3.effect
+  implementation libs.media3.common
   implementation libs.kotlinx.coroutines.android
   implementation libs.work.runtime.ktx
   implementation libs.concurrent.futures
