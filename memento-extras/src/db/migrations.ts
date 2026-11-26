@@ -238,4 +238,17 @@ export const MIGRATIONS: readonly Migration[] = [
       `);
     },
   },
+  {
+    name: "13: backup quality",
+    run(db) {
+      db.exec(`
+        -- Each person's backup quality (backup.service.ts). No row: original.
+        CREATE TABLE backup_settings (
+          user_id    TEXT PRIMARY KEY,   -- Immich user
+          quality    TEXT NOT NULL CHECK (quality IN ('original', 'saverHigh', 'saver')),
+          updated_at TEXT NOT NULL
+        );
+      `);
+    },
+  },
 ];

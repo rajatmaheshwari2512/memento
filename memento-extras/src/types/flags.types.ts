@@ -31,6 +31,9 @@ export type Flags = {
   reduceNoise: {
     enabled: boolean; // Off: the Reduce noise button for videos is hidden and refused. Cleaned copies stay.
   };
+  storageSaver: {
+    enabled: boolean; // Off: the backup quality choice is hidden, Storage saver levels are refused, and backups are full size. Copies already made stay.
+  };
 };
 
 // How each setting is shown: the Android app's Memento admin draws its list from these (GET /admin/settings). The web admin page (MementoFeaturesSettings.svelte) has its own copy of the words: keep them in step.

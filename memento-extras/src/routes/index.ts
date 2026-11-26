@@ -5,6 +5,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { adjustRoutes } from "./adjust.routes.ts";
 import { adminRoutes } from "./admin.routes.ts";
 import { askRoutes } from "./ask.routes.ts";
+import { backupRoutes } from "./backup.routes.ts";
 import { editsRoutes } from "./edits.routes.ts";
 import { flagsRoutes } from "./flags.routes.ts";
 import { healthRoutes } from "./health.routes.ts";
@@ -14,7 +15,7 @@ import { videosRoutes } from "./videos.routes.ts";
 import type { Route } from "../types/http.types.ts";
 import { HttpError } from "../utils/http-error.ts";
 
-const routes: Route[] = [...healthRoutes, ...flagsRoutes, ...adminRoutes, ...liveAlbumsRoutes, ...memoriesRoutes, ...askRoutes, ...editsRoutes, ...adjustRoutes, ...videosRoutes];
+const routes: Route[] = [...healthRoutes, ...flagsRoutes, ...adminRoutes, ...liveAlbumsRoutes, ...memoriesRoutes, ...backupRoutes, ...askRoutes, ...editsRoutes, ...adjustRoutes, ...videosRoutes];
 
 const matchers = routes.map((route) => {
   const names: string[] = [];

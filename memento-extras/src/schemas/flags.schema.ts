@@ -62,6 +62,10 @@ export const RULES: Record<string, Rule> = {
     kind: "boolean", section: "Videos", title: "Reduce noise for videos",
     subtitle: "A Reduce noise button on your own videos: our server cleans up the sound (wind, traffic, hum) with DeepFilterNet, a small open model that works best on speech, and saves a copy stacked on the original. The picture isn't changed. Videos up to 10 minutes and 2 GB, one at a time, not at night while photos are captioned. Free: nothing leaves our server. Off hides the button and the server refuses. Cleaned copies stay.",
   },
+  "storageSaver.enabled": {
+    kind: "boolean", section: "Backup", title: "Enable Storage saver",
+    subtitle: "Lets each person choose smaller backups from Memento's Android app: Storage saver (videos at 1080p, about 4 Mbps) or Storage saver, high (about 8 Mbps); ordinary photos over 16 MP become 16 MP. HDR videos, and HDR, motion and portrait photos, stay full size. Website uploads always stay full size. Off: backups are full size again from the next upload; copies already made stay as they are.",
+  },
 };
 
 // The settings an admin may change, in display order, with their labels and limits.

@@ -97,6 +97,7 @@ test("reading flags needs a login, and shows the env limits as defaults", async 
     captions: { enabled: true },
     adjust: { enabled: true },
     reduceNoise: { enabled: true },
+    storageSaver: { enabled: false },
   });
   assert.deepEqual(body.defaults, body.flags);
 });
@@ -236,7 +237,7 @@ test("GET /admin/settings describes every setting, for the app's Memento admin (
     [
       "gemini.enabled", "gemini.tools", "gemini.allow4k", "gemini.dailyLimitPerUser", "gemini.monthlyLimitTotal", "liveAlbums.enabled",
       "askPhotos.enabled", "askPhotos.trainedReader", "askPhotos.places", "themedMemories.enabled", "creations.enabled",
-      "captions.enabled", "adjust.enabled", "reduceNoise.enabled",
+      "captions.enabled", "adjust.enabled", "reduceNoise.enabled", "storageSaver.enabled",
     ],
   );
   for (const setting of body.settings as Array<{ key: string; section: string; title: string; subtitle: string }>) {
