@@ -18,27 +18,27 @@ const { migrate } = await import("../src/db/database.ts");
 const version = (db: DatabaseSync) => (db.prepare("PRAGMA user_version").get() as any).user_version;
 const schema = (db: DatabaseSync) => db.prepare("SELECT type, name, sql FROM sqlite_master ORDER BY name").all().map((r) => ({ ...r }));
 
-test("a fresh database is migrated to version 13", () => {
+test("a fresh database is migrated to version 14", () => {
   const db = new DatabaseSync(":memory:");
   migrate(db, MIGRATIONS);
   assert.equal(BASELINE_VERSION, 12);
-  assert.equal(version(db), 13);
+  assert.equal(version(db), 14);
   assert.ok(schema(db).some((o) => o.name === "captions_fts"));
   assert.ok(schema(db).some((o) => o.name === "backup_settings"));
 });
 
-test("a database already at version 13 is left exactly as it is", () => {
+test("a database already at version 14 is left exactly as it is", () => {
   const db = new DatabaseSync(":memory:");
   migrate(db, MIGRATIONS);
   db.exec("INSERT INTO flags VALUES ('a.b', 'true', 't', 'admin')");
   const before = schema(db);
   migrate(db, MIGRATIONS);
-  assert.equal(version(db), 13);
+  assert.equal(version(db), 14);
   assert.deepEqual(schema(db), before);
   assert.equal((db.prepare("SELECT count(*) AS n FROM flags").get() as any).n, 1);
 });
 
-test("13: a version-12 database with data is updated, and every row stays", () => {
+test("a version-12 database with data is updated, and every row stays", () => {
   const db = new DatabaseSync(":memory:");
   migrate(db, MIGRATIONS.slice(0, 1));
   assert.equal(version(db), 12);
@@ -49,13 +49,35 @@ test("13: a version-12 database with data is updated, and every row stays", () =
     INSERT INTO live_albums (id, user_id, album_id, album_name, match, created_at, updated_at) VALUES ('l1', 'u1', 'al1', 'Family', 'all', 't', 't');
     INSERT INTO live_album_people VALUES ('l1', 'p1', 'include');
     INSERT INTO memory_users (user_id, created_at, updated_at) VALUES ('u1', 't', 't');
+    INSERT INTO themed_memories (id, user_id, theme, theme_key, status, made_on, created_at) VALUES (1, 'u1', 'month', 'month:2026-10', 'created', '2026-11-01', 't');
+    INSERT INTO creation_cards (id, user_id, themed_memory_id, week, status, memory_id, created_at, updated_at, attempts, next_at) VALUES (7, 'u1', 1, '2026-11-01', 'created', 'm1', 't1', 't2', 2, 't3');
+    INSERT INTO creation_cards (id, user_id, themed_memory_id, week, status, created_at, updated_at) VALUES (8, 'u1', 1, '2026-11-08', 'waiting', 't', 't');
+    INSERT INTO creation_jobs (id, user_id, themed_memory_id, kind, inputs, state, rank, next_at, created_at, updated_at, card_id) VALUES (1, 'u1', 1, 'collage', '[]', 'done', 1.5, 't', 't', 't', 7);
+    INSERT INTO creation_jobs (id, user_id, themed_memory_id, kind, inputs, state, rank, next_at, created_at, updated_at, card_id) VALUES (2, 'u1', 1, 'recap', '[]', 'proposed', 0.5, 't', 't', 't', NULL);
+    INSERT INTO noise_jobs (id, user_id, asset_id, state, step, copy_id, video_ms, created_at) VALUES ('n1', 'u1', 'v1', 'running', 'cleaning', NULL, 5000, 't');
+    INSERT INTO noise_jobs (id, user_id, asset_id, state, step, copy_id, created_at) VALUES ('n2', 'u1', 'v2', 'done', NULL, 'c2', 't');
   `);
   const rows = (table: string) => db.prepare(`SELECT * FROM ${table}`).all().map((r) => ({ ...r }));
-  const tables = ["flags", "user_keys", "edits", "live_albums", "live_album_people", "memory_users"];
+  const without = (table: string, column: string) => rows(table).map(({ [column]: _, ...rest }) => rest);
+  const tables = ["flags", "user_keys", "edits", "live_albums", "live_album_people", "memory_users", "themed_memories", "creation_jobs"];
   const before = Object.fromEntries(tables.map((t) => [t, rows(t)]));
+  const cardsBefore = without("creation_cards", "extra");
+  const noiseBefore = without("noise_jobs", "step");
+  assert.equal(rows("noise_jobs")[0]!.step, "cleaning");
   migrate(db, MIGRATIONS);
-  assert.equal(version(db), 13);
+  assert.equal(version(db), 14);
   assert.deepEqual(Object.fromEntries(tables.map((t) => [t, rows(t)])), before);
+  assert.deepEqual(rows("creation_cards"), cardsBefore);
+  assert.deepEqual(rows("noise_jobs"), noiseBefore);
+  assert.equal(rows("creation_cards").length, 2);
+  assert.deepEqual(rows("creation_jobs").map((j) => j.card_id), [7, null]);
+  assert.ok(!("extra" in rows("creation_cards")[0]!));
+  assert.ok(!("step" in rows("noise_jobs")[0]!));
+  assert.throws(() => db.exec("INSERT INTO creation_cards (user_id, themed_memory_id, week, status, created_at, updated_at) VALUES ('u1', 1, '2026-11-01', 'waiting', 't', 't')"), /UNIQUE/);
+  db.exec("PRAGMA foreign_keys = ON");
+  db.exec("DELETE FROM creation_cards WHERE id = 7");
+  assert.equal(rows("creation_jobs")[0]!.card_id, null);
+  db.exec("PRAGMA foreign_keys = OFF");
   db.exec("INSERT INTO backup_settings VALUES ('u1', 'saver', 't')");
   assert.throws(() => db.exec("INSERT INTO backup_settings VALUES ('u2', 'low', 't')"), /CHECK/);
   assert.throws(() => db.exec("INSERT INTO backup_settings VALUES ('u1', 'original', 't')"), /UNIQUE|PRIMARY/);
@@ -80,20 +102,21 @@ test("a database from a newer version is refused", () => {
 
 test("steps after the baseline are numbered from 13 and applied in order, once", () => {
   assert.equal(MIGRATIONS[1]!.name, "13: backup quality");
+  assert.equal(MIGRATIONS[2]!.name, "14: drop unused columns");
   const steps = [
     ...MIGRATIONS,
-    { name: "14: a", run: (d: DatabaseSync) => d.exec("CREATE TABLE a (x)") },
-    { name: "15: b", run: (d: DatabaseSync) => d.exec("CREATE TABLE b (x)") },
+    { name: "15: a", run: (d: DatabaseSync) => d.exec("CREATE TABLE a (x)") },
+    { name: "16: b", run: (d: DatabaseSync) => d.exec("CREATE TABLE b (x)") },
   ];
   const old = new DatabaseSync(":memory:");
   migrate(old, MIGRATIONS);
   migrate(old, steps);
-  assert.equal(version(old), 15);
+  assert.equal(version(old), 16);
   migrate(old, steps);
-  assert.equal(version(old), 15);
+  assert.equal(version(old), 16);
   const fresh = new DatabaseSync(":memory:");
   migrate(fresh, steps);
-  assert.equal(version(fresh), 15);
+  assert.equal(version(fresh), 16);
   assert.deepEqual(schema(fresh), schema(old));
 });
 

@@ -13,7 +13,7 @@ import {
 import { placeWithOriginal, requireOwnVideo, uploadVideoCopy } from "./copies.service.ts";
 import { getFlags } from "./flags.service.ts";
 import {
-  addNoiseJob, failNoiseJob, failUnfinishedNoiseJobs, finishNoiseJob, noiseJobRow, setNoiseStep, startNoiseJob,
+  addNoiseJob, failNoiseJob, failUnfinishedNoiseJobs, finishNoiseJob, noiseJobRow, startNoiseJob,
 } from "./repositories/reduce-noise.repository.ts";
 import { fitsBeforeQuiet, rendersMayStart } from "./schedule.service.ts";
 import type { Asset, Credential, User } from "../types/immich.types.ts";
@@ -190,12 +190,10 @@ async function cleanAndSave(job: QueuedNoiseJob): Promise<string> {
   const dir = await freshJobFolder(job.id);
   const name = `video.${job.format}`;
   await downloadTo(job.cred, `/api/assets/${encodeURIComponent(job.assetId)}/original`, await inFolder(dir, name), VIDEO_LIMITS.videoBytes, NOISE_TIMEOUT_MS.download);
-  setNoiseStep(job.id, "cleaning");
   await renderInTurn(job, { id: job.id, kind: "reduce-noise", video: name, format: job.format });
   const copy = await openOutput(job.id, OUTPUT_FILE["reduce-noise"], VIDEO_LIMITS.bytes);
   if (!copy) throw new Error("the container's copy wasn't there afterwards");
   try {
-    setNoiseStep(job.id, "saving");
     const copyId = await uploadVideoCopy(job.cred, video, copy, job.mime, job.extension, COPY_SUFFIX, NOISE_TIMEOUT_MS.upload);
     await placeWithOriginal(job.cred, copyId, video);
     return copyId;

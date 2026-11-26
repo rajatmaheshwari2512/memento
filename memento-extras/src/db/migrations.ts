@@ -251,4 +251,30 @@ export const MIGRATIONS: readonly Migration[] = [
       `);
     },
   },
+  {
+    name: "14: drop unused columns",
+    run(db) {
+      db.exec(`
+        ALTER TABLE noise_jobs DROP COLUMN step;
+
+        CREATE TABLE creation_cards_new (
+          id               INTEGER PRIMARY KEY,
+          user_id          TEXT NOT NULL,                  -- Immich user
+          themed_memory_id INTEGER NOT NULL REFERENCES themed_memories (id) ON DELETE CASCADE, -- made from
+          week             TEXT NOT NULL,                  -- the local day (a Sunday) it was picked
+          status           TEXT NOT NULL CHECK (status IN ('waiting', 'created', 'empty', 'late', 'failed')),
+          memory_id        TEXT UNIQUE,                    -- Immich memory, once created
+          created_at       TEXT NOT NULL,
+          updated_at       TEXT NOT NULL,
+          attempts         INTEGER NOT NULL DEFAULT 0,     -- server errors so far
+          next_at          TEXT,                           -- not tried again before (UTC)
+          UNIQUE (user_id, week)
+        );
+        INSERT INTO creation_cards_new (id, user_id, themed_memory_id, week, status, memory_id, created_at, updated_at, attempts, next_at)
+          SELECT id, user_id, themed_memory_id, week, status, memory_id, created_at, updated_at, attempts, next_at FROM creation_cards;
+        DROP TABLE creation_cards;
+        ALTER TABLE creation_cards_new RENAME TO creation_cards;
+      `);
+    },
+  },
 ];

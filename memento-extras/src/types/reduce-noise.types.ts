@@ -4,11 +4,10 @@ import type { VideoFormat } from "../../creations/src/job.ts";
 import type { Credential, User } from "./immich.types.ts";
 
 export type NoiseState = "queued" | "running" | "done" | "failed";
-export type NoiseStep = "preparing" | "cleaning" | "saving";
 
-// A row of noise_jobs (db/migrations.ts, step 12).
+// A row of noise_jobs (db/migrations.ts, steps 12 and 14).
 export type NoiseJobRow = {
-  id: string; user_id: string; asset_id: string; state: NoiseState; step: NoiseStep | null; copy_id: string | null; error: string | null;
+  id: string; user_id: string; asset_id: string; state: NoiseState; copy_id: string | null; error: string | null;
   video_ms: number | null; video_bytes: number | null; created_at: string; started_at: string | null; finished_at: string | null;
 };
 

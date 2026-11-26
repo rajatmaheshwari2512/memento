@@ -1,7 +1,7 @@
 // The record of videos whose noise was reduced (noise_jobs: db/migrations.ts).
 
 import { database } from "../../db/database.ts";
-import type { NoiseJobRow, NoiseStep } from "../../types/reduce-noise.types.ts";
+import type { NoiseJobRow } from "../../types/reduce-noise.types.ts";
 
 const now = () => new Date().toISOString();
 
@@ -16,23 +16,19 @@ export function noiseJobRow(id: string): NoiseJobRow | undefined {
 }
 
 export function startNoiseJob(id: string): void {
-  database().prepare("UPDATE noise_jobs SET state = 'running', step = 'preparing', started_at = ? WHERE id = ?").run(now(), id);
-}
-
-export function setNoiseStep(id: string, step: NoiseStep): void {
-  database().prepare("UPDATE noise_jobs SET step = ? WHERE id = ?").run(step, id);
+  database().prepare("UPDATE noise_jobs SET state = 'running', started_at = ? WHERE id = ?").run(now(), id);
 }
 
 export function finishNoiseJob(id: string, copyId: string): void {
-  database().prepare("UPDATE noise_jobs SET state = 'done', step = NULL, copy_id = ?, finished_at = ? WHERE id = ?").run(copyId, now(), id);
+  database().prepare("UPDATE noise_jobs SET state = 'done', copy_id = ?, finished_at = ? WHERE id = ?").run(copyId, now(), id);
 }
 
 export function failNoiseJob(id: string, error: string): void {
-  database().prepare("UPDATE noise_jobs SET state = 'failed', step = NULL, error = ?, finished_at = ? WHERE id = ?").run(error, now(), id);
+  database().prepare("UPDATE noise_jobs SET state = 'failed', error = ?, finished_at = ? WHERE id = ?").run(error, now(), id);
 }
 
 export function failUnfinishedNoiseJobs(error: string): number {
   return Number(database().prepare(
-    "UPDATE noise_jobs SET state = 'failed', step = NULL, error = ?, finished_at = ? WHERE state IN ('queued', 'running')",
+    "UPDATE noise_jobs SET state = 'failed', error = ?, finished_at = ? WHERE state IN ('queued', 'running')",
   ).run(error, now()).changes);
 }
