@@ -79,9 +79,6 @@ trap restore_build_inputs EXIT
 
 generate_code
 
-echo "== Applying Immich's Flutter patch for simulator builds"
-bash ios/scripts/xcode_flutter_patch.sh
-
 echo "== Installing CocoaPods packages"
 mise run //mobile:install:ios
 

@@ -35,6 +35,9 @@ apps/ios/build.sh device   # the plugged-in iPhone; needs the IPHONE part of .en
    cd native && mise install rust
    ```
    These are the versions Immich pins. The steps are also at the top of `apps/ios/build.sh`.
+   - If Flutter was already installed (for example for the Android app), run
+     `mise install --force aqua:flutter/flutter` once, in `immich/mobile`, so Immich's patch for
+     simulator builds is applied.
 
 ## In the simulator
 
