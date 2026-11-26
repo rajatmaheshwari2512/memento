@@ -277,7 +277,7 @@ class BackgroundWorkerBgService extends BackgroundWorkerFlutterApi {
     }
   }
 
-  /// [isIosProcessing]: an iOS processing task, which uploads in Dart when Storage saver shrinks backups.
+  /// [isIosProcessing]: true for the iOS processing task.
   Future<bool> _handleBackup({required Future<bool> remoteSync, bool isIosProcessing = false}) async {
     final needsRetry = await runZonedGuarded(() async {
       if (_isCleanedUp) {

@@ -149,12 +149,16 @@ class StorageSaverUpload {
 
   /// The copy's file name: on iOS a photo keeps [file]'s format and a video becomes QuickTime. Null when an iOS
   /// photo's format can't be named.
-  String? _copyName(LocalAsset asset, File file) => switch ((asset.type == AssetType.video, CurrentPlatform.isIOS)) {
-    (true, true) => 'copy.mov',
-    (true, false) => 'copy.mp4',
-    (false, true) => p.extension(file.path).isEmpty ? null : 'copy${p.extension(file.path).toLowerCase()}',
-    (false, false) => 'copy.jpg',
-  };
+  String? _copyName(LocalAsset asset, File file) {
+    if (asset.type == AssetType.video) {
+      return CurrentPlatform.isIOS ? 'copy.mov' : 'copy.mp4';
+    }
+    if (!CurrentPlatform.isIOS) {
+      return 'copy.jpg';
+    }
+    final extension = p.extension(file.path).toLowerCase();
+    return extension.isEmpty ? null : 'copy$extension';
+  }
 
   /// The base64 SHA-1 of [file], as the app stores checksums.
   Future<String> _checksum(File file) async => base64.encode((await sha1.bind(file.openRead()).first).bytes);
