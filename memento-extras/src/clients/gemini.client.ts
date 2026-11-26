@@ -7,7 +7,7 @@ import {
   API_REVISION, AREA_GUIDANCE, GEMINI_TIMEOUT_MS, GUIDANCE, MAX_ERROR_REPLY_BYTES, MAX_REPLY_BYTES, MAX_REPLY_KEPT_BYTES,
   MAX_REPLY_TEXT_BYTES,
 } from "../constants/edits.constants.ts";
-import type { EditInput, EditOutput, EditProvider, ImageFile } from "../types/edit-provider.types.ts";
+import type { EditInput, EditOutput, ImageFile } from "../types/edit-provider.types.ts";
 import type { GeminiReply } from "../types/gemini.types.ts";
 import { Base64ToFile, base64Length, base64OfFile } from "../utils/base64-file.ts";
 import { HttpError } from "../utils/http-error.ts";
@@ -180,4 +180,4 @@ async function errorCode(res: Response): Promise<unknown> {
 
 const bodyOf = (res: Response): AsyncIterable<Uint8Array> => (res.body ?? []) as AsyncIterable<Uint8Array>;
 
-export const gemini: EditProvider = { name: "gemini", model: config.geminiModel, edit: geminiEdit };
+export const gemini = { name: "gemini", model: config.geminiModel, edit: geminiEdit };

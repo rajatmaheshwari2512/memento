@@ -196,7 +196,7 @@ test("sizes are automatic, by the photo: 4K over ~5 MP, else 2K, for every edit;
   assert.equal(limits.body.fourKOverPixels, 5_250_000, "so the apps show the price of that size");
 });
 
-test("presets name their tools (they pick the provider: Gemini for every tool today); bad names are refused", async () => {
+test("presets name their tools; bad names are refused", async () => {
   geminiCalls.length = 0;
   assert.equal((await edit({ tool: "unblur", prompt: "Make the photo sharp" })).status, 201);
   for (const bad of ["Unblur", "../x", 7, "a".repeat(41)]) assert.equal((await edit({ tool: bad })).status, 400, String(bad));

@@ -11,9 +11,8 @@ import {
   FULL_SIZE_MIN_SHARE, FULL_SIZE_SHAPE_TOLERANCE, GEMINI_OFF, MAX_EDIT_PIXELS, MAX_EDIT_SIDE, PHOTO_TOO_LARGE, PHOTO_TOO_LARGE_CODE,
   TOOLS_OFF,
 } from "../constants/edits.constants.ts";
-import { GeminiRefused } from "../clients/gemini.client.ts";
+import { gemini, GeminiRefused } from "../clients/gemini.client.ts";
 import { inSaveLine, placeWithOriginal, requireFreeSpace, requireOwnPhoto, uploadCopy, withSaveSlot } from "./copies.service.ts";
-import { providerFor } from "./edit-providers.service.ts";
 import { getFlags } from "./flags.service.ts";
 import { tryFreeTool } from "./free-first.service.ts";
 import { finish, reserve, usage } from "./limits.service.ts";
@@ -139,14 +138,13 @@ export async function makeEdit(
   }
 
   if (!wanted()) return null;
-  const provider = providerFor(tools);
   const id = randomUUID();
-  const refused = reserve(id, user.id, assetId, prompt.length, provider.model);
+  const refused = reserve(id, user.id, assetId, prompt.length, gemini.model);
   if (refused) throw new HttpError(429, refused, { usage: usage(user.id) });
 
   const started = Date.now();
   try {
-    const out = await provider.edit({ image: source, prompt, size, mark: mark ?? undefined, folder });
+    const out = await gemini.edit({ image: source, prompt, size, mark: mark ?? undefined, folder });
     const area = mark !== null;
     await putEdit(
       {
@@ -157,7 +155,7 @@ export async function makeEdit(
     );
     finish(id, true, Date.now() - started, out.costUsd);
     log({
-      event: "edit", edit: id, user: user.id, asset: assetId, provider: provider.name, model: out.model, tools, size, area, from: source.from,
+      event: "edit", edit: id, user: user.id, asset: assetId, provider: gemini.name, model: out.model, tools, size, area, from: source.from,
       ms: Date.now() - started, bytesIn: source.bytes, markBytes: mark?.bytes ?? 0, bytesOut: out.image.bytes, costUsd: out.costUsd,
     });
     return { editId: id, size, usage: usage(user.id) };
