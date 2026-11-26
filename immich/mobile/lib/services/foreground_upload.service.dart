@@ -222,29 +222,14 @@ class ForegroundUploadService {
       if (cancelToken?.isCompleted ?? false) {
         return BackupQuality.original;
       }
-      if (quality != BackupQuality.original) {
-        await _clearStorageSaverFolders();
-        if (cancelToken != null) {
-          unawaited(cancelToken.future.then((_) => _storageSaverNative.cancel()).catchError((Object _) {}));
-        }
+      if (quality != BackupQuality.original && cancelToken != null) {
+        unawaited(cancelToken.future.then((_) => _storageSaverNative.cancel()).catchError((Object _) {}));
       }
       _logger.info("Storage saver quality for this run: ${quality.name}");
       return quality;
     } catch (error) {
       _logger.warning("Couldn't read the Storage saver quality, uploading originals: $error");
       return BackupQuality.original;
-    }
-  }
-
-  Future<void> _clearStorageSaverFolders() async {
-    try {
-      await for (final entity in Directory.systemTemp.list()) {
-        if (p.basename(entity.path).startsWith(_storageSaverFolderPrefix)) {
-          await entity.delete(recursive: true);
-        }
-      }
-    } catch (error) {
-      _logger.warning("Couldn't clear Storage saver's temporary files: $error");
     }
   }
 
