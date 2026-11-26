@@ -5,8 +5,7 @@ import { toastManager } from '@immich/ui';
 import type { MessageFormatter } from 'svelte-i18n';
 
 const video = { id: 'v1', isVideo: true, isTrashed: false, isOwner: true };
-const flags = (enabled: boolean | undefined) =>
-  ({ reduceNoise: enabled === undefined ? undefined : { enabled } }) as unknown as MementoFlags;
+const flags = (enabled: boolean) => ({ reduceNoise: { enabled } }) as unknown as MementoFlags;
 const $t = ((key: string) => key) as unknown as MessageFormatter;
 
 const answers = (...bodies: Array<{ status?: number; body: unknown }>) => {
@@ -40,8 +39,6 @@ describe('Reduce noise', () => {
     expect(canReduceNoise({ ...video, isTrashed: true })).toBe(false);
     expect(canReduceNoise(undefined)).toBe(false);
     mementoFlags.value = flags(false);
-    expect(canReduceNoise(video)).toBe(false);
-    mementoFlags.value = flags(undefined);
     expect(canReduceNoise(video)).toBe(false);
     mementoFlags.value = flags(true);
     expect(canReduceNoise(video)).toBe(true);

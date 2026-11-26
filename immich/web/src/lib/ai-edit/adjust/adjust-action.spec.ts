@@ -3,8 +3,7 @@ import type { MementoFlags } from '#lib/ai-edit/ai-edit-api.ts';
 import { mementoFlags } from '#lib/ai-edit/flags.svelte.ts';
 
 const photo = { id: 'a1', isImage: true, isTrashed: false, isOwner: true };
-const flags = (enabled: boolean | undefined) =>
-  ({ adjust: enabled === undefined ? undefined : { enabled } }) as unknown as MementoFlags;
+const flags = (enabled: boolean) => ({ adjust: { enabled } }) as unknown as MementoFlags;
 
 describe('Adjust entry', () => {
   afterEach(() => {
@@ -19,10 +18,8 @@ describe('Adjust entry', () => {
     expect(canAdjust(undefined)).toBe(false);
   });
 
-  it('follows the admin switch; a service without it counts as off; unknown yet counts as on', () => {
+  it('follows the admin switch; unknown yet counts as on', () => {
     mementoFlags.value = flags(false);
-    expect(canAdjust(photo)).toBe(false);
-    mementoFlags.value = flags(undefined);
     expect(canAdjust(photo)).toBe(false);
     mementoFlags.value = flags(true);
     expect(canAdjust(photo)).toBe(true);

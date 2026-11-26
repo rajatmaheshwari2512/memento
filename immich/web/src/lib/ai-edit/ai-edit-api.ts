@@ -86,14 +86,14 @@ export const getAiEditUsage = () => request<AiEditUsage>('GET', '/limits');
 
 // SelfPhotos feature flags (Administration → Settings → Memento Features).
 export type MementoFlags = {
-  gemini: { enabled: boolean; tools?: boolean; allow4k: boolean; dailyLimitPerUser: number; monthlyLimitTotal: number };
+  gemini: { enabled: boolean; tools: boolean; allow4k: boolean; dailyLimitPerUser: number; monthlyLimitTotal: number };
   liveAlbums: { enabled: boolean };
   askPhotos: { enabled: boolean };
   captions: { enabled: boolean };
   adjust: { enabled: boolean };
-  themedMemories?: { enabled: boolean };
-  creations?: { enabled: boolean };
-  reduceNoise?: { enabled: boolean };
+  themedMemories: { enabled: boolean };
+  creations: { enabled: boolean };
+  reduceNoise: { enabled: boolean };
 };
 export type MementoFlagsResponse = { flags: MementoFlags; defaults: MementoFlags };
 

@@ -21,21 +21,20 @@ export const isGeminiEnabled = () => mementoFlags.value?.gemini.enabled ?? true;
 
 // The AI tools (presets and highlighting).
 export const isAiToolsEnabled = () =>
-  mementoFlags.value === null || (mementoFlags.value.gemini.enabled && (mementoFlags.value.gemini.tools ?? false));
+  mementoFlags.value === null || (mementoFlags.value.gemini.enabled && mementoFlags.value.gemini.tools);
 
 export const isLiveAlbumsEnabled = () => mementoFlags.value?.liveAlbums.enabled ?? true;
 
-export const isAdjustEnabled = () => mementoFlags.value === null || (mementoFlags.value.adjust?.enabled ?? false);
+export const isAdjustEnabled = () => mementoFlags.value === null || mementoFlags.value.adjust.enabled;
 
-export const isReduceNoiseEnabled = () =>
-  mementoFlags.value === null || (mementoFlags.value.reduceNoise?.enabled ?? false);
+export const isReduceNoiseEnabled = () => mementoFlags.value === null || mementoFlags.value.reduceNoise.enabled;
 
 // Off until the flags are known.
-export const isAskPhotosEnabled = () => mementoFlags.value?.askPhotos?.enabled ?? false;
+export const isAskPhotosEnabled = () => mementoFlags.value?.askPhotos.enabled ?? false;
 
 // Known to be off (loaded, and off).
 export const isAskPhotosOff = () => mementoFlags.value !== null && !isAskPhotosEnabled();
 
 // Themed memories and their collages and videos.
-export const isThemedMemoriesEnabled = () => mementoFlags.value?.themedMemories?.enabled ?? false;
-export const isCreationsEnabled = () => mementoFlags.value?.creations?.enabled ?? false;
+export const isThemedMemoriesEnabled = () => mementoFlags.value?.themedMemories.enabled ?? false;
+export const isCreationsEnabled = () => mementoFlags.value?.creations.enabled ?? false;

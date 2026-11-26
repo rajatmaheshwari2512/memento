@@ -83,15 +83,13 @@
                 isEdited={edit.gemini.enabled !== saved.gemini.enabled}
               />
 
-              {#if edit.gemini.tools !== undefined && saved.gemini.tools !== undefined}
-                <SettingSwitch
-                  title="Enable AI tools: presets and highlighting"
-                  subtitle="Preset edits in the photo editor (Unblur, Enhance, Better sky, styles and more; up to 3 in one edit), and brushing over an area to edit just that area; only the brushed area is pasted onto the original. Each costs like any AI edit. Off hides them, and the server refuses highlighted edits. Typed instructions still work while AI edits are on."
-                  disabled={!edit.gemini.enabled}
-                  bind:checked={edit.gemini.tools}
-                  isEdited={edit.gemini.tools !== saved.gemini.tools}
-                />
-              {/if}
+              <SettingSwitch
+                title="Enable AI tools: presets and highlighting"
+                subtitle="Preset edits in the photo editor (Unblur, Enhance, Better sky, styles and more; up to 3 in one edit), and brushing over an area to edit just that area; only the brushed area is pasted onto the original. Each costs like any AI edit. Off hides them, and the server refuses highlighted edits. Typed instructions still work while AI edits are on."
+                disabled={!edit.gemini.enabled}
+                bind:checked={edit.gemini.tools}
+                isEdited={edit.gemini.tools !== saved.gemini.tools}
+              />
 
               <hr />
 
@@ -170,31 +168,29 @@
             </div>
           </SettingAccordion>
 
-          {#if edit.themedMemories && saved.themedMemories && edit.creations && saved.creations}
-            <SettingAccordion
-              key="memento-memories"
-              title="Memories"
-              subtitle="Themed memories (Spotlight, Best of last month, trips, big days) and weekly collages and recap videos, for the people who turn them on."
-            >
-              <div class="ms-4 mt-4 flex flex-col gap-4">
-                <SettingSwitch
-                  title="Make themed memories"
-                  subtitle="Each morning after the night captions, for people who turned them on: Spotlight on a person (at most once a week), Best of last month (on the 1st), trips once they end (needs photos with a location) and big days. They show with Immich's own memories in every app; Memento's apps also show their titles. Off stops new ones; memories already made stay."
-                  bind:checked={edit.themedMemories.enabled}
-                  isEdited={edit.themedMemories.enabled !== saved.themedMemories.enabled}
-                />
+          <SettingAccordion
+            key="memento-memories"
+            title="Memories"
+            subtitle="Themed memories (Spotlight, Best of last month, trips, big days) and weekly collages and recap videos, for the people who turn them on."
+          >
+            <div class="ms-4 mt-4 flex flex-col gap-4">
+              <SettingSwitch
+                title="Make themed memories"
+                subtitle="Each morning after the night captions, for people who turned them on: Spotlight on a person (at most once a week), Best of last month (on the 1st), trips once they end (needs photos with a location) and big days. They show with Immich's own memories in every app; Memento's apps also show their titles. Off stops new ones; memories already made stay."
+                bind:checked={edit.themedMemories.enabled}
+                isEdited={edit.themedMemories.enabled !== saved.themedMemories.enabled}
+              />
 
-                <hr />
+              <hr />
 
-                <SettingSwitch
-                  title="Make collages and recap videos"
-                  subtitle="At most one collage and one short video a week per person, from that week's best themed memory, shown together in a memory of their own from Sunday to Tuesday. Made on our server at the lowest priority (never during night captions), and saved into the person's library as normal photos and videos, in albums called Collages and Recaps. Each person can turn them off for themselves, and delete any like a photo. Off stops new ones; existing ones stay."
-                  bind:checked={edit.creations.enabled}
-                  isEdited={edit.creations.enabled !== saved.creations.enabled}
-                />
-              </div>
-            </SettingAccordion>
-          {/if}
+              <SettingSwitch
+                title="Make collages and recap videos"
+                subtitle="At most one collage and one short video a week per person, from that week's best themed memory, shown together in a memory of their own from Sunday to Tuesday. Made on our server at the lowest priority (never during night captions), and saved into the person's library as normal photos and videos, in albums called Collages and Recaps. Each person can turn them off for themselves, and delete any like a photo. Off stops new ones; existing ones stay."
+                bind:checked={edit.creations.enabled}
+                isEdited={edit.creations.enabled !== saved.creations.enabled}
+              />
+            </div>
+          </SettingAccordion>
 
           <SettingAccordion
             key="memento-editing"
@@ -211,22 +207,20 @@
             </div>
           </SettingAccordion>
 
-          {#if edit.reduceNoise && saved.reduceNoise}
-            <SettingAccordion
-              key="memento-videos"
-              title="Videos"
-              subtitle="Reduce noise: the sound of your own videos cleaned up on our server, saved as a copy stacked on the original."
-            >
-              <div class="ms-4 mt-4 flex flex-col gap-4">
-                <SettingSwitch
-                  title="Reduce noise for videos"
-                  subtitle="A Reduce noise button on your own videos: our server cleans up the sound (wind, traffic, hum) with DeepFilterNet, a small open model that works best on speech, and saves a copy stacked on the original. The picture isn't changed. Videos up to 10 minutes and 2 GB, one at a time, not at night while photos are captioned. Free: nothing leaves our server. Off hides the button and the server refuses. Cleaned copies stay."
-                  bind:checked={edit.reduceNoise.enabled}
-                  isEdited={edit.reduceNoise.enabled !== saved.reduceNoise.enabled}
-                />
-              </div>
-            </SettingAccordion>
-          {/if}
+          <SettingAccordion
+            key="memento-videos"
+            title="Videos"
+            subtitle="Reduce noise: the sound of your own videos cleaned up on our server, saved as a copy stacked on the original."
+          >
+            <div class="ms-4 mt-4 flex flex-col gap-4">
+              <SettingSwitch
+                title="Reduce noise for videos"
+                subtitle="A Reduce noise button on your own videos: our server cleans up the sound (wind, traffic, hum) with DeepFilterNet, a small open model that works best on speech, and saves a copy stacked on the original. The picture isn't changed. Videos up to 10 minutes and 2 GB, one at a time, not at night while photos are captioned. Free: nothing leaves our server. Off hides the button and the server refuses. Cleaned copies stay."
+                bind:checked={edit.reduceNoise.enabled}
+                isEdited={edit.reduceNoise.enabled !== saved.reduceNoise.enabled}
+              />
+            </div>
+          </SettingAccordion>
 
           <div class="mt-8 flex justify-between gap-2">
             <div class="left">
