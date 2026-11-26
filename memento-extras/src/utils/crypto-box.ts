@@ -5,12 +5,7 @@ import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from "node:cr
 import { config } from "../config.ts";
 import { SECRET_BOX_VERSION } from "../constants/http.constants.ts";
 
-export function secretConfigured(): boolean {
-  return config.secret !== null;
-}
-
 function keyFor(purpose: string): Buffer {
-  if (!config.secret) throw new Error("MEMENTO_SECRET isn't set");
   return Buffer.from(hkdfSync("sha256", config.secret, Buffer.alloc(0), `memento-extras ${purpose} v${SECRET_BOX_VERSION}`, 32));
 }
 

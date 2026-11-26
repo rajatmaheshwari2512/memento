@@ -13,7 +13,7 @@ import { fakeLlama, listen } from "./helpers.ts";
 
 const run = promisify(execFile);
 const dataDir = mkdtempSync(join(tmpdir(), "memento-extras-night-"));
-const env = { ...process.env, DATA_DIR: dataDir, GEMINI_API_KEY: "unused" };
+const env = { ...process.env, DATA_DIR: dataDir, GEMINI_API_KEY: "unused", MEMENTO_SECRET: "A".repeat(44) };
 const OWNER = randomUUID();
 
 type Photo = { id: string; path: string; uploadedAt: string };
@@ -38,6 +38,7 @@ let llamaUrl: string;
 before(async () => {
   process.env.DATA_DIR = dataDir;
   process.env.GEMINI_API_KEY = "unused";
+  process.env.MEMENTO_SECRET = "A".repeat(44);
   const { saveCaption } = await import("../src/services/repositories/captions.repository.ts");
   const { closeDatabase } = await import("../src/db/database.ts");
   saveCaption({ assetId: done.id, ownerId: OWNER, model: "earlier", caption: "Already captioned.", tags: [] });

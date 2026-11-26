@@ -223,11 +223,12 @@ random_letters() { head -c 1000 /dev/urandom | LC_ALL=C tr -dc 'A-Za-z0-9' | cut
 
 make_secrets() {
   local file="$dev/secrets.env"
-  [ -f "$file" ] && return 0
-  {
-    printf 'DB_PASSWORD=%s\n' "$(random_letters 32)"
-    printf 'MEMENTO_SECRET=%s\n' "$(head -c 32 /dev/urandom | base64)"
-  } | write_private "$file"
+  if [ ! -f "$file" ]; then
+    printf 'DB_PASSWORD=%s\n' "$(random_letters 32)" | write_private "$file"
+  fi
+  if [ -z "$(generated MEMENTO_SECRET "$file")" ]; then
+    printf 'MEMENTO_SECRET=%s\n' "$(head -c 32 /dev/urandom | base64)" >> "$file"
+  fi
 }
 
 write_immich_env() {

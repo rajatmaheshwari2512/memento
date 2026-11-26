@@ -10,6 +10,7 @@ import { Base64ToFile, base64Length, base64OfFile } from "../src/utils/base64-fi
 import { readJsonStream, type JsonPath, type JsonRoute, type JsonStreamOptions, type StringSink } from "../src/utils/json-stream.ts";
 
 process.env.GEMINI_API_KEY ??= "test-key-not-real";
+process.env.MEMENTO_SECRET ??= "A".repeat(44);
 const { readReply, resultOf } = await import("../src/clients/gemini.client.ts");
 
 const folder = mkdtempSync(join(tmpdir(), "memento-extras-json-stream-"));

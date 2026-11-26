@@ -91,6 +91,7 @@ async function upload(base: string, size: number, timeoutMs: number): Promise<{ 
 }
 
 process.env.GEMINI_API_KEY ??= "test-key-not-real";
+process.env.MEMENTO_SECRET ??= "A".repeat(44);
 process.env.DATA_DIR ??= dir;
 process.env.IMMICH_URL ??= "http://127.0.0.1:9";
 

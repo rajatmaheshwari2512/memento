@@ -29,6 +29,7 @@ const immich = createServer(async (req, res) => {
   json(res, 200, url.searchParams.get("type") === "state" ? ["Goa", null] : []);
 });
 process.env.GEMINI_API_KEY ??= "test";
+process.env.MEMENTO_SECRET ??= "A".repeat(44);
 process.env.IMMICH_URL = `http://127.0.0.1:${await listen(immich)}`;
 const { cachedPlaces, findPlace, indexPlaces, placesOf, withoutOnce } = await import("../src/services/ask-places.service.ts");
 const { wordsOf } = await import("../src/utils/words.ts");

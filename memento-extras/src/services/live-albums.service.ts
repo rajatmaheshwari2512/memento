@@ -14,7 +14,6 @@ import {
 } from "./repositories/live-albums.repository.ts";
 import type { Credential, User } from "../types/immich.types.ts";
 import type { CheckResult, LiveAlbum, NewLiveAlbum, Row, Rules, RunResult, Seen } from "../types/live-albums.types.ts";
-import { secretConfigured } from "../utils/crypto-box.ts";
 import { HttpError, isUuid } from "../utils/http-error.ts";
 import { log } from "../utils/http.ts";
 
@@ -132,7 +131,7 @@ export async function runLiveAlbum(id: string): Promise<RunResult> {
 
 // One pass over every live album, one at a time. Skipped while the flag is off.
 export async function runAll(): Promise<void> {
-  if (passRunning || !getFlags().liveAlbums.enabled || !secretConfigured()) return;
+  if (passRunning || !getFlags().liveAlbums.enabled) return;
   passRunning = true;
   try {
     for (const id of activeLiveAlbumIds()) await runLiveAlbum(id);
@@ -145,7 +144,6 @@ export async function runAll(): Promise<void> {
 
 export function requireLiveAlbums(): void {
   if (!getFlags().liveAlbums.enabled) throw new HttpError(403, LIVE_ALBUMS_OFF);
-  if (!secretConfigured()) throw new HttpError(503, "Live albums aren't set up on this server (MEMENTO_SECRET is missing).");
 }
 
 async function checkPeople(cred: Credential, { include, exclude }: Rules): Promise<void> {

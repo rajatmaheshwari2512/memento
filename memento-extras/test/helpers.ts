@@ -66,7 +66,7 @@ export class Service {
   async start(): Promise<void> {
     const child = spawn(process.execPath, ["--disable-warning=ExperimentalWarning", "src/server.ts"], {
       cwd: join(import.meta.dirname, ".."),
-      env: { ...process.env, ...this.env, PORT: String(this.port) },
+      env: { MEMENTO_SECRET: "A".repeat(44), ...process.env, ...this.env, PORT: String(this.port) },
       stdio: ["ignore", "pipe", "pipe"],
     });
     this.child = child;

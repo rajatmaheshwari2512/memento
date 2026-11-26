@@ -11,6 +11,7 @@ import { freePort, Service } from "./helpers.ts";
 const dataDir = mkdtempSync(join(tmpdir(), "memento-db-"));
 process.env.DATA_DIR = dataDir;
 process.env.GEMINI_API_KEY = "test";
+process.env.MEMENTO_SECRET ??= "A".repeat(44);
 const { BASELINE_VERSION, MIGRATIONS } = await import("../src/db/migrations.ts");
 const { migrate } = await import("../src/db/database.ts");
 

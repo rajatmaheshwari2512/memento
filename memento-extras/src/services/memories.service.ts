@@ -22,7 +22,6 @@ import { inQuietHours, markRunDone, runTimeReached, today, withRunLock } from ".
 import type { Credential, User } from "../types/immich.types.ts";
 import type { Quality } from "../types/creations.types.ts";
 import type { Candidate, MemorySettings, Plan, RunOptions, RunSummary, SettingsChange, ThemedMemory } from "../types/memories.types.ts";
-import { secretConfigured } from "../utils/crypto-box.ts";
 import { HttpError } from "../utils/http-error.ts";
 import { log } from "../utils/http.ts";
 import { addDays, daysBetween, startOfDay } from "../utils/local-date.ts";
@@ -43,7 +42,7 @@ export function startThemedMemories(): void {
 export async function dailyPass(): Promise<void> {
   if (!runTimeReached()) return;
   const day = today();
-  if (!getFlags().themedMemories.enabled || !secretConfigured()) return markRunDone(day);
+  if (!getFlags().themedMemories.enabled) return markRunDone(day);
   const done = await withRunLock(async () => {
     const retryBefore = new Date(Date.now() - RETRY_MINUTES * 60_000).toISOString();
     for (const userId of usersDue(day, retryBefore)) await runForUser(userId, day);
@@ -184,7 +183,6 @@ async function publish(due: Due, cred: Credential, chosen: Candidate[], label: s
 
 export function requireThemedMemories(): void {
   if (!getFlags().themedMemories.enabled) throw new HttpError(403, MEMORIES_OFF);
-  if (!secretConfigured()) throw new HttpError(503, "Themed memories aren't set up on this server (MEMENTO_SECRET is missing).");
 }
 
 export function settingsOf(userId: string): MemorySettings {

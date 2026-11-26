@@ -32,7 +32,7 @@ before(async () => {
     setTimeout(() => res.socket?.destroy(), 20);
   }));
   const port = await listen(fake);
-  Object.assign(process.env, { GEMINI_API_KEY: "unused", DATA_DIR: data, CREATIONS_WORK_DIR: work, CREATIONS_URL: `http://127.0.0.1:${port}` });
+  Object.assign(process.env, { GEMINI_API_KEY: "unused", MEMENTO_SECRET: "A".repeat(44), DATA_DIR: data, CREATIONS_WORK_DIR: work, CREATIONS_URL: `http://127.0.0.1:${port}` });
   lib = await import("../src/utils/work-folder.ts");
   client = await import("../src/clients/creations.client.ts");
   render = await import("../src/services/creation-render.service.ts");

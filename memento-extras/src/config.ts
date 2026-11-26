@@ -29,13 +29,11 @@ function oneOf<T extends string>(name: string, allowed: readonly T[], fallback: 
   return value as T;
 }
 
-// MEMENTO_SECRET: 32+ random bytes, base64; encrypts per-user keys. Optional; live albums need it.
-function secret(): Buffer | null {
+// MEMENTO_SECRET: what `openssl rand -base64 32` prints (44 characters); encrypts per-user keys.
+function secret(): Buffer {
   const raw = process.env.MEMENTO_SECRET;
-  if (!raw) return null;
-  const bytes = Buffer.from(raw, "base64");
-  if (bytes.length < 32) throw new Error("MEMENTO_SECRET must be at least 32 random bytes, base64-encoded");
-  return bytes;
+  if (!raw || raw.length < 44) throw new Error("MEMENTO_SECRET is missing or too short: set it to what `openssl rand -base64 32` prints (44 characters).");
+  return Buffer.from(raw, "base64");
 }
 
 // "07:05" → minutes past midnight.

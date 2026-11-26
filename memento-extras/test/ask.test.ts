@@ -197,6 +197,7 @@ const dataDir = mkdtempSync(join(tmpdir(), "memento-extras-ask-"));
 before(async () => {
   process.env.DATA_DIR = dataDir;
   process.env.GEMINI_API_KEY = "unused";
+  process.env.MEMENTO_SECRET = "A".repeat(44);
   const { saveCaption } = await import("../src/services/repositories/captions.repository.ts");
   const { closeDatabase } = await import("../src/db/database.ts");
   for (const c of captions) saveCaption({ ...c, tags: c.tags as Tag[], model: "test-model" });

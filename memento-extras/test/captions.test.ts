@@ -14,6 +14,7 @@ import { fakeLlama, listen } from "./helpers.ts";
 const dataDir = mkdtempSync(join(tmpdir(), "memento-captions-"));
 process.env.DATA_DIR = dataDir;
 process.env.GEMINI_API_KEY = "test";
+process.env.MEMENTO_SECRET ??= "A".repeat(44);
 const { captionPhoto, captionRequest, modelName } = await import("../src/services/captions.service.ts");
 const { parseCaption } = await import("../src/schemas/captions.schema.ts");
 const { saveCaption, searchCaptions } = await import("../src/services/repositories/captions.repository.ts");

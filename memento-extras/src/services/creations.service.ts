@@ -22,7 +22,6 @@ import { fitsBeforeQuiet, rendersMayStart, today } from "./schedule.service.ts";
 import type { CreationKind, CreationStamp, Job, JobInputs, Quality, WaitingCard } from "../types/creations.types.ts";
 import type { Candidate, Theme } from "../types/memories.types.ts";
 import type { Mood } from "../../creations/src/job.ts";
-import { secretConfigured } from "../utils/crypto-box.ts";
 import { log } from "../utils/http.ts";
 import { addDays } from "../utils/local-date.ts";
 import { localDateWithOffset } from "../utils/photo-time.ts";
@@ -50,7 +49,7 @@ export function kickWorker(): void {
 async function drain(): Promise<void> {
   if (draining) return;
   draining = true;
-  const allowed = () => getFlags().creations.enabled && secretConfigured() && rendersMayStart();
+  const allowed = () => getFlags().creations.enabled && rendersMayStart();
   try {
     await startup;
     if (!allowed()) return;

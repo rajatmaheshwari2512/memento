@@ -14,6 +14,7 @@ const server: Server = createServer(async (req, res) => {
   json(res, 200, { tokens: ["goa"], tags: ["B-WORD"], ms: 3 });
 });
 process.env.GEMINI_API_KEY ??= "test";
+process.env.MEMENTO_SECRET ??= "A".repeat(44);
 process.env.READER_URL = `http://127.0.0.1:${await listen(server)}`;
 process.env.READER_TIMEOUT_MS = "300";
 const { planFromReply, spansOf } = await import("../src/services/ask-reader.service.ts");
