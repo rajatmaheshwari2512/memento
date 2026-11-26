@@ -111,9 +111,9 @@ void main() {
     when(() => mockSyncApiRepo.deleteSyncAck(any())).thenAnswer((_) async => {});
 
     when(() => mockApi.serverInfoApi).thenReturn(mockServerApi);
-    when(() => mockServerApi.getServerVersion()).thenAnswer(
-      (_) async => ServerVersionResponseDto(major: 1, minor: 132, patch_: 0, prerelease: null, featureLevel: 1),
-    );
+    when(
+      () => mockServerApi.getServerVersion(),
+    ).thenAnswer((_) async => ServerVersionResponseDto(major: 1, minor: 132, patch_: 0, prerelease: null, featureLevel: 1));
 
     when(() => mockSyncStreamRepo.updateUsersV1(any())).thenAnswer(successHandler);
     when(() => mockSyncStreamRepo.deleteUsersV1(any())).thenAnswer(successHandler);
@@ -567,9 +567,9 @@ void main() {
   group('SyncStreamService - Sync Migration', () {
     test('ensure that <2.5.0 migrations run', () async {
       await Store.put(StoreKey.syncMigrationStatus, "[]");
-      when(() => mockServerApi.getServerVersion()).thenAnswer(
-        (_) async => ServerVersionResponseDto(major: 2, minor: 4, patch_: 1, prerelease: null, featureLevel: 1),
-      );
+      when(
+        () => mockServerApi.getServerVersion(),
+      ).thenAnswer((_) async => ServerVersionResponseDto(major: 2, minor: 4, patch_: 1, prerelease: null, featureLevel: 1));
 
       await sut.sync();
 
@@ -595,9 +595,9 @@ void main() {
     });
     test('ensure that >=2.5.0 migrations run', () async {
       await Store.put(StoreKey.syncMigrationStatus, "[]");
-      when(() => mockServerApi.getServerVersion()).thenAnswer(
-        (_) async => ServerVersionResponseDto(major: 2, minor: 5, patch_: 0, prerelease: null, featureLevel: 1),
-      );
+      when(
+        () => mockServerApi.getServerVersion(),
+      ).thenAnswer((_) async => ServerVersionResponseDto(major: 2, minor: 5, patch_: 0, prerelease: null, featureLevel: 1));
       await sut.sync();
 
       verifyInOrder([
@@ -625,9 +625,9 @@ void main() {
         '["${SyncMigrationTask.v20260128_CopyExifWidthHeightToAsset.name}"]',
       );
 
-      when(() => mockServerApi.getServerVersion()).thenAnswer(
-        (_) async => ServerVersionResponseDto(major: 2, minor: 4, patch_: 1, prerelease: null, featureLevel: 1),
-      );
+      when(
+        () => mockServerApi.getServerVersion(),
+      ).thenAnswer((_) async => ServerVersionResponseDto(major: 2, minor: 4, patch_: 1, prerelease: null, featureLevel: 1));
 
       await sut.sync();
 
