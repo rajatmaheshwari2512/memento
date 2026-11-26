@@ -5,7 +5,8 @@ Memento is a photo library you run yourself, in the spirit of Google Photos. It 
 Memento keeps everything Immich does and adds editing, smarter search, memories and creations
 on top.
 
-It comes as a website and an Android app. There is no iPhone app.
+It comes as a website and an Android app. The iPhone app is built from source
+([docs/setup-iphone.md](docs/setup-iphone.md)).
 
 ## What it adds to Immich
 
@@ -46,6 +47,7 @@ The apps say "Memento" in place of "Immich", with their own logo.
 - [Try it on your computer (dev)](docs/setup-dev.md): free, with test photos and a fake Gemini.
 - [Run it on a server (prod)](docs/setup-prod.md): setup, the Android app, backups and restores,
   and how dev and prod differ.
+- [Build the iPhone app](docs/setup-iphone.md): from source, on a Mac, with a free Apple ID.
 - [Upgrades](docs/upgrades.md): new Memento changes, and new Immich releases.
 
 ## How it's built

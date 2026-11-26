@@ -144,7 +144,7 @@ lists them, with where to download each and what to name it.
 - Immich's own settings are Immich's defaults (for example the smaller ViT-B-32 search model). Prod's
   changes are listed in [setup-prod.md](setup-prod.md#mementos-immich-settings); set them in
   Administration → Settings to try them in dev.
-- No iPhone app (prod doesn't have one either).
+- The iPhone app runs only in the simulator on this Mac ([setup-iphone.md](setup-iphone.md)).
 - Only this computer can reach it: every port listens on `127.0.0.1`, and the proxy only answers
   `localhost` and `127.0.0.1`. A phone can't reach it yet.
 

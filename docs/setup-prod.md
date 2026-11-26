@@ -299,7 +299,7 @@ In Administration → Settings. Immich keeps them in its own database, so they s
 
 ## The Android app
 
-There's no iPhone app. The app is built on your computer (below), or downloaded from a
+The iPhone app is built from source: [setup-iphone.md](setup-iphone.md). The Android app is built on your computer (below), or downloaded from a
 [release](#releases) (`memento-<version>.apk`, then step 4), and installed by hand.
 
 1. **MANUAL, once: the build tools.** The build is set up for a Mac with Homebrew. From the top
@@ -674,7 +674,8 @@ downloaded.
 
 ## Limits
 
-- **No iPhone app.** The website works on an iPhone's browser.
+- **No iPhone app to download.** You build it yourself on a Mac ([setup-iphone.md](setup-iphone.md));
+  the website works on an iPhone's browser.
 - **One server.** Everything runs on it: no spare, no load sharing.
 - **From your copy of the code, the website and the app are built on your computer,** which needs
   Docker for the website. A [release](#releases) has both ready.
