@@ -1,0 +1,58 @@
+# Checks that the iPhone app still builds: apps/ios/build.sh, for the iOS simulator, unsigned.
+# On every pull request, and on pushes to main that change the app, its build or this file.
+# It publishes nothing.
+name: iPhone build
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    paths:
+      - immich/mobile/**
+      - apps/ios/**
+      - apps/mobile-build.sh
+      - .github/workflows/ios.yml
+
+permissions: {}
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: iPhone app (simulator)
+    runs-on: macos-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+        with:
+          version: 2026.10.5
+          install: false
+          cache: false
+
+      - name: Install the build tools
+        working-directory: immich
+        env:
+          MISE_EXPERIMENTAL: 1
+          MISE_GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          (cd mobile && mise install aqua:flutter/flutter java rust)
+          mise install node pnpm npm:@openapitools/openapi-generator-cli
+          (cd native && mise install rust)
+          version=$(python3 -I -c 'import json; print(json.load(open("open-api/openapitools.json"))["generator-cli"]["version"])')
+          url="https://maven-central.storage-download.googleapis.com/maven2/org/openapitools/openapi-generator-cli/$version/openapi-generator-cli-$version.jar"
+          curl -fsSL --retry 5 --retry-all-errors -o "$RUNNER_TEMP/generator.jar" "$url"
+          echo "$(curl -fsSL --retry 5 --retry-all-errors "$url.sha1")  $RUNNER_TEMP/generator.jar" | shasum -a 1 -c -
+          dirs=$(find "$HOME/.local/share/mise/installs" -type d -path '*node_modules/@openapitools/openapi-generator-cli')
+          [ -n "$dirs" ] || { echo "::error::openapi-generator-cli isn't installed"; exit 1; }
+          for dir in $dirs; do mkdir -p "$dir/versions" && cp "$RUNNER_TEMP/generator.jar" "$dir/versions/$version.jar"; done
+
+      - name: Build for the simulator (apps/ios/build.sh)
+        run: apps/ios/build.sh
