@@ -109,13 +109,14 @@ class StorageSaverUpload {
 
   /// Shrinks [file] for [run]; null means upload the original.
   Future<StorageSaverCopy?> prepare(LocalAsset asset, File file, StorageSaverRun run) async {
-    if (run.quality == BackupQuality.original) {
+    final copyName = _copyName(asset, file);
+    if (run.quality == BackupQuality.original || copyName == null) {
       return null;
     }
     try {
       final originalChecksum = asset.checksum ?? await _checksum(file);
       final folder = _folder = await Directory.systemTemp.createTemp(_folderPrefix);
-      final output = File(p.join(folder.path, _copyName(asset, file)));
+      final output = File(p.join(folder.path, copyName));
       final result = await _native.shrink(
         file.path,
         output.path,
@@ -145,11 +146,12 @@ class StorageSaverUpload {
     }
   }
 
-  /// The copy's file name: on iOS a photo keeps [file]'s format and a video becomes QuickTime.
-  String _copyName(LocalAsset asset, File file) => switch ((asset.type == AssetType.video, CurrentPlatform.isIOS)) {
+  /// The copy's file name: on iOS a photo keeps [file]'s format and a video becomes QuickTime. Null when an iOS
+  /// photo's format can't be named.
+  String? _copyName(LocalAsset asset, File file) => switch ((asset.type == AssetType.video, CurrentPlatform.isIOS)) {
     (true, true) => 'copy.mov',
     (true, false) => 'copy.mp4',
-    (false, true) => 'copy${p.extension(file.path).toLowerCase()}',
+    (false, true) => p.extension(file.path).isEmpty ? null : 'copy${p.extension(file.path).toLowerCase()}',
     (false, false) => 'copy.jpg',
   };
 

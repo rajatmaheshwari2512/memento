@@ -445,6 +445,22 @@ void main() {
       expect(uploads.single.name, 'IMG_0001.heic');
     });
 
+    test('on iOS keeps a photo with no extension full size', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      stubAsset(photo, '/path/to/DJI_0001', 'DJI_0001');
+      final uploads = captureUploads();
+
+      await sut.uploadSingleAsset(
+        photo,
+        null,
+        callbacks: const UploadCallbacks(),
+        storageSaver: const StorageSaverRun(BackupQuality.saver, 1),
+      );
+
+      expect(uploads.single.path, '/path/to/DJI_0001');
+      verifyZeroInteractions(mockStorageSaverNative);
+    });
+
     test('on iOS names a shrunk video as QuickTime', () async {
       debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
       stubAsset(video, '/path/to/clip.mov', 'clip.mov');
