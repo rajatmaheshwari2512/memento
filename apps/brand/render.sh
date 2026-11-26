@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Renders every Memento image (web app + Android app) from the SVGs in this folder, and
+# Renders every Memento image (web app, Android and iPhone apps) from the SVGs in this folder, and
 # puts them into ../../immich under the file names Immich already uses (plus a few
 # new ones for dark mode). Uses only macOS's built-in sips, which renders SVG with a
 # transparent background. Run after changing an SVG here, then rebuild.
@@ -89,4 +89,22 @@ for pair in mdpi:48:80:288:24 hdpi:72:120:432:36 xhdpi:96:160:576:48 xxhdpi:144:
   resize "$tmp/glyph.png" "$notify" "$res/drawable-$d/notification_icon.png"
 done
 
-echo "Rendered Memento images into $src (web/static, web/src/lib/assets/memento, mobile/assets, android res)."
+# --- iPhone app: app icon (every size its Contents.json lists), launch screen ---
+xcassets="$mobile/ios/Runner/Assets.xcassets"
+for icon in "$xcassets/AppIcon.appiconset/"*.png; do
+  resize "$tmp/home-light.png" "$(basename "$icon" .png)" "$icon"
+done
+for pair in :80 @2x:160 @3x:240; do
+  IFS=: read -r scale size <<<"$pair"
+  resize "$tmp/mark-light.png" "$size" "$xcassets/LaunchImage.imageset/LaunchImage$scale.png"
+  resize "$tmp/mark-dark.png" "$size" "$xcassets/LaunchImage.imageset/LaunchImageDark$scale.png"
+done
+# The launch background is the Android launcher icon's background colour (memento_colors.xml).
+for pair in values:background values-night:darkbackground; do
+  IFS=: read -r values name <<<"$pair"
+  color="$(sed -n 's/.*"memento_launcher_background">#FF\([0-9A-Fa-f]\{6\}\)<.*/\1/p' "$res/$values/memento_colors.xml")"
+  printf '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><rect width="1" height="1" fill="#%s"/></svg>' "$color" > "$tmp/$name.svg"
+  render "$tmp/$name.svg" 1 1 "$xcassets/LaunchBackground.imageset/$name.png"
+done
+
+echo "Rendered Memento images into $src (web/static, web/src/lib/assets/memento, mobile/assets, android res, ios Assets.xcassets)."
