@@ -38,7 +38,6 @@ ENV NODE_ENV=production \
     # The depth step: no bytecode written, numpy on one thread.
     PYTHONDONTWRITEBYTECODE=1 \
     OPENBLAS_NUM_THREADS=1 \
-    WORK_DIR=/work \
     MUSIC_DIR=/music
 WORKDIR /app
 COPY src ./src

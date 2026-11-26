@@ -13,8 +13,8 @@ const LEAD_IN_SECONDS = 2;
 const CROSSFADE_SAMPLES = 2_400;
 const TAIL_SAMPLES = 4_800;
 const SOUND_SECONDS = LIMITS["reduce-noise"].videoSeconds + 5;
-const DEEP_FILTER = process.env.DEEP_FILTER ?? "/app/deep-filter";
-const GLIBC = process.env.GLIBC_DIR ?? "/opt/glibc";
+const DEEP_FILTER = "/app/deep-filter";
+const GLIBC = "/opt/glibc";
 const LOADER = join(GLIBC, "ld-linux-aarch64.so.1");
 const deepFilter = (args: string[]): [string, string[]] =>
   existsSync(LOADER) ? [LOADER, ["--library-path", GLIBC, DEEP_FILTER, ...args]] : [DEEP_FILTER, args];

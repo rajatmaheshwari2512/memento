@@ -13,8 +13,8 @@ def _env(name: str, default: str) -> str:
 class Settings:
     """How the reader runs. Every value has a default that suits the main server."""
 
-    model_dir: Path = field(default_factory=lambda: Path(_env("MODEL_DIR", "/app/model")))
-    model_file: str = field(default_factory=lambda: _env("MODEL_FILE", "model.onnx"))
+    model_dir: Path = Path("/app/model")
+    model_file: str = "model.onnx"
     port: int = field(default_factory=lambda: int(_env("PORT", "8000")))
     threads: int = field(
         default_factory=lambda: int(_env("THREADS", "2"))

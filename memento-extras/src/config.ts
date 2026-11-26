@@ -62,7 +62,7 @@ export const config = {
   secret: secret(),
   // How often live albums are checked for new photos.
   liveAlbumsIntervalSeconds: int("LIVE_ALBUMS_INTERVAL_SECONDS", 300),
-  maxLiveAlbumsPerUser: int("MAX_LIVE_ALBUMS_PER_USER", 20),
+  maxLiveAlbumsPerUser: 20,
   // Themed memories: how often to check whether tonight's are due (0 = never), and a fixed "today" (YYYY-MM-DD) for tests only.
   memoriesCheckSeconds: int("MEMORIES_CHECK_SECONDS", 300),
   // When the day's themed memories are made (config.timeZone).
@@ -108,7 +108,7 @@ export const config = {
   monthlyLimitTotal: int("MONTHLY_LIMIT_TOTAL", 150),
   // An edit's instruction: up to 3 tools' instructions joined with the typed words (500 at most).
   maxPromptChars: int("MAX_PROMPT_CHARS", 1500),
-  maxInputBytes: int("MAX_INPUT_BYTES", 20 * 1024 * 1024),
+  maxInputBytes: 20 * 1024 * 1024,
   // Unsaved results are deleted after this long.
   resultTtlMinutes: int("RESULT_TTL_MINUTES", 60),
 };

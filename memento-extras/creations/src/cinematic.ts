@@ -11,7 +11,7 @@ import { fitPhoto, framePhoto, h264, mp4Output, TO_TV } from "./video.ts";
 const FPS = 25;
 const SECONDS = 5;
 const MODEL_SIDE = 518;
-const MODEL = process.env.DEPTH_MODEL ?? "/app/model/depth.onnx";
+const MODEL = "/app/model/depth.onnx";
 const DEPTH_PY = new URL("./depth.py", import.meta.url).pathname;
 const PARALLAX = new URL("./parallax.ts", import.meta.url).pathname;
 const MIN_EDGES = 0.35;
