@@ -14,13 +14,16 @@ import 'package:path/path.dart' as p;
 
 final _logger = Logger('StorageSaverUpload');
 
-/// The quality one backup run uploads at.
+/// The quality one backup run uploads at; [id] tells its shrinks apart from other runs'.
 class StorageSaverRun {
   final BackupQuality quality;
+  final int id;
 
-  const StorageSaverRun(this.quality);
+  const StorageSaverRun(this.quality, this.id);
 
-  static const original = StorageSaverRun(BackupQuality.original);
+  static const original = StorageSaverRun(BackupQuality.original, 0);
+
+  static int _lastId = 0;
 
   /// Reads the quality for a run on Android ([original] when it can't be read). Completing [cancelToken]
   /// stops the run's shrinks.
@@ -37,11 +40,12 @@ class StorageSaverRun {
       if (cancelToken?.isCompleted ?? false) {
         return original;
       }
+      final run = StorageSaverRun(quality, ++_lastId);
       if (quality != BackupQuality.original && cancelToken != null) {
-        unawaited(cancelToken.future.then((_) => native.cancel()).catchError((Object _) {}));
+        unawaited(cancelToken.future.then((_) => native.cancel(run.id)).catchError((Object _) {}));
       }
       _logger.info("Storage saver quality for this run: ${quality.name}");
-      return StorageSaverRun(quality);
+      return run;
     } catch (error) {
       _logger.warning("Couldn't read the Storage saver quality, uploading originals: $error");
       return original;
@@ -99,6 +103,7 @@ class StorageSaverUpload {
         file.path,
         output.path,
         kind: asset.type == AssetType.video ? StorageSaverKind.video : StorageSaverKind.photo,
+        runId: run.id,
         videoBitrate: run.quality.videoBitrate,
       );
       if (result.isCancelled) {

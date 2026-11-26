@@ -30,10 +30,10 @@ import io.flutter.plugin.common.MethodChannel
 import java.io.DataInputStream
 import java.io.File
 import java.io.FileOutputStream
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.floor
 import kotlin.math.min
 import kotlin.math.sqrt
@@ -43,9 +43,9 @@ class StorageSaverPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
   private var channel: MethodChannel? = null
   private var context: Context? = null
   private val main = Handler(Looper.getMainLooper())
-  private val submitted = AtomicLong()
-  @Volatile private var cancelledUpTo = 0L
-  @Volatile private var running: VideoExport? = null
+  private val cancelledRuns = ConcurrentHashMap.newKeySet<Long>()
+  @Volatile private var detached = false
+  @Volatile private var running: Pair<Long, VideoExport>? = null
 
   override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
     context = binding.applicationContext
@@ -55,20 +55,21 @@ class StorageSaverPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
   override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
     channel?.setMethodCallHandler(null)
     channel = null
-    cancel()
+    detached = true
+    running?.second?.cancel()
   }
 
   override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
     when (call.method) {
       "shrink" -> {
-        val job = submitted.incrementAndGet()
+        val run = call.argument<Number>("runId")!!.toLong()
         worker.execute {
           try {
-            val value = if (job <= cancelledUpTo) {
+            val value = if (isCancelled(run)) {
               notShrunk("cancelled")
             } else {
               shrink(
-                job,
+                run,
                 File(call.argument<String>("inputPath")!!),
                 File(call.argument<String>("outputPath")!!),
                 call.argument<String>("kind")!!,
@@ -83,22 +84,24 @@ class StorageSaverPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         }
       }
       "cancel" -> {
-        cancel()
+        cancel(call.argument<Number>("runId")!!.toLong())
         result.success(null)
       }
       else -> result.notImplemented()
     }
   }
 
-  // Stops the running shrink and skips the ones already asked for.
-  private fun cancel() {
-    cancelledUpTo = submitted.get()
-    running?.cancel()
+  private fun isCancelled(run: Long) = detached || run in cancelledRuns
+
+  // Stops [run]'s running shrink and skips the ones it already asked for.
+  private fun cancel(run: Long) {
+    cancelledRuns.add(run)
+    running?.let { (runningRun, export) -> if (runningRun == run) export.cancel() }
   }
 
-  private fun shrink(job: Long, input: File, output: File, kind: String, videoBitrate: Int?): Map<String, Any> {
+  private fun shrink(run: Long, input: File, output: File, kind: String, videoBitrate: Int?): Map<String, Any> {
     val reason = when (kind) {
-      "video" -> shrinkVideo(job, input, output, videoBitrate!!)
+      "video" -> shrinkVideo(run, input, output, videoBitrate!!)
       "photo" -> shrinkPhoto(input, output)
       else -> error("Unknown kind $kind")
     }
@@ -114,7 +117,7 @@ class StorageSaverPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
   }
 
   // Returns why the video is kept as it is, or null once [output] is written.
-  private fun shrinkVideo(job: Long, input: File, output: File, bitrate: Int): String? {
+  private fun shrinkVideo(run: Long, input: File, output: File, bitrate: Int): String? {
     val facts = VideoFacts.read(input)
     if (facts.hdr) return "hdr"
     if (facts.frameRate > MAX_FRAME_RATE) return "frameRate"
@@ -122,9 +125,9 @@ class StorageSaverPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     if (!resize && facts.bitrate <= bitrate / MAX_SIZE_RATIO) return "alreadySmall"
 
     val export = VideoExport(context!!, input, output, bitrate, resize, min(facts.shortSide, MAX_SHORT_SIDE))
-    running = export
+    running = run to export
     try {
-      if (job <= cancelledUpTo) export.cancel()
+      if (isCancelled(run)) export.cancel()
       return export.run(facts.durationMs * 2 + TIME_LIMIT_EXTRA_MS)
     } finally {
       running = null

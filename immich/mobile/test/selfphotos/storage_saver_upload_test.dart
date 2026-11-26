@@ -70,7 +70,7 @@ void main() {
     when(() => mockAssetService.getLocalAsset(any())).thenAnswer((_) async => null);
     when(() => mockAssetService.stackEditedUpload(any(), any(), any())).thenAnswer((_) async {});
     when(() => mockAssetService.linkStorageSaverCopy(any(), any(), any())).thenAnswer((_) async {});
-    when(() => mockStorageSaverNative.cancel()).thenAnswer((_) async {});
+    when(() => mockStorageSaverNative.cancel(any())).thenAnswer((_) async {});
 
     sut = ForegroundUploadService(
       mockUploadRepository,
@@ -108,6 +108,7 @@ void main() {
           any(),
           any(),
           kind: any(named: 'kind'),
+          runId: any(named: 'runId'),
           videoBitrate: any(named: 'videoBitrate'),
         ),
       ).thenAnswer((invocation) async {
@@ -158,7 +159,7 @@ void main() {
         photo,
         null,
         callbacks: const UploadCallbacks(),
-        storageSaver: const StorageSaverRun(BackupQuality.saver),
+        storageSaver: const StorageSaverRun(BackupQuality.saver, 1),
       );
 
       expect(uploads, hasLength(1));
@@ -174,6 +175,7 @@ void main() {
           '/path/to/photo.jpg',
           any(),
           kind: StorageSaverKind.photo,
+          runId: 1,
           videoBitrate: 4000000,
         ),
       ).called(1);
@@ -188,7 +190,7 @@ void main() {
         photo,
         null,
         callbacks: const UploadCallbacks(),
-        storageSaver: const StorageSaverRun(BackupQuality.saver),
+        storageSaver: const StorageSaverRun(BackupQuality.saver, 1),
       );
 
       verifyInOrder([
@@ -206,7 +208,7 @@ void main() {
         video,
         null,
         callbacks: const UploadCallbacks(),
-        storageSaver: const StorageSaverRun(BackupQuality.saverHigh),
+        storageSaver: const StorageSaverRun(BackupQuality.saverHigh, 1),
       );
 
       expect(uploads.single.name, 'clip.mp4');
@@ -217,7 +219,8 @@ void main() {
         },
       ]);
       verify(
-        () => mockStorageSaverNative.shrink(any(), any(), kind: StorageSaverKind.video, videoBitrate: 8000000),
+        () =>
+            mockStorageSaverNative.shrink(any(), any(), kind: StorageSaverKind.video, runId: 1, videoBitrate: 8000000),
       ).called(1);
       expect(File(uploads.single.path).existsSync(), isFalse);
     });
@@ -231,7 +234,7 @@ void main() {
         photo,
         null,
         callbacks: const UploadCallbacks(),
-        storageSaver: const StorageSaverRun(BackupQuality.saver),
+        storageSaver: const StorageSaverRun(BackupQuality.saver, 1),
       );
 
       expect(uploads.single.path, '/path/to/photo.jpg');
@@ -250,7 +253,7 @@ void main() {
         photo,
         null,
         callbacks: UploadCallbacks(onError: (_, message) => errors.add(message)),
-        storageSaver: const StorageSaverRun(BackupQuality.saver),
+        storageSaver: const StorageSaverRun(BackupQuality.saver, 1),
       );
 
       expect(uploads.single.path, '/path/to/photo.jpg');
@@ -270,7 +273,7 @@ void main() {
         unhashed,
         null,
         callbacks: const UploadCallbacks(),
-        storageSaver: const StorageSaverRun(BackupQuality.saver),
+        storageSaver: const StorageSaverRun(BackupQuality.saver, 1),
       );
 
       expect(uploads.map((upload) => upload.path), ['/path/to/photo.jpg', '/path/to/photo.jpg']);
@@ -319,6 +322,18 @@ void main() {
       verifyZeroInteractions(mockStorageSaverNative);
     });
 
+    int capturedRunId() =>
+        verify(
+              () => mockStorageSaverNative.shrink(
+                any(),
+                any(),
+                kind: any(named: 'kind'),
+                runId: captureAny(named: 'runId'),
+                videoBitrate: any(named: 'videoBitrate'),
+              ),
+            ).captured.single
+            as int;
+
     test('cancels the shrink when the run is cancelled', () async {
       final cancelToken = Completer<void>();
       stubAsset(photo, '/path/to/photo.jpg', 'photo.jpg');
@@ -332,8 +347,29 @@ void main() {
       await sut.uploadManual([photo], cancelToken: cancelToken);
       await pumpEventQueue();
 
-      verify(() => mockStorageSaverNative.cancel()).called(1);
+      final runId = capturedRunId();
+      verify(() => mockStorageSaverNative.cancel(runId)).called(1);
       expect(uploads, isEmpty);
+    });
+
+    test('cancelling one run leaves another run\'s shrinks alone', () async {
+      final cancelA = Completer<void>();
+      final cancelB = Completer<void>();
+      stubAsset(photo, '/path/to/photo.jpg', 'photo.jpg');
+      when(() => mockStorageSaverService.backupQuality()).thenAnswer((_) async => BackupQuality.saver);
+      stubShrink(() => shrunk);
+      captureUploads();
+
+      await sut.uploadManual([photo], cancelToken: cancelA);
+      final runA = capturedRunId();
+      await sut.uploadManual([photo], cancelToken: cancelB);
+      final runB = capturedRunId();
+      cancelA.complete();
+      await pumpEventQueue();
+
+      expect(runB, isNot(runA));
+      verify(() => mockStorageSaverNative.cancel(runA)).called(1);
+      verifyNever(() => mockStorageSaverNative.cancel(runB));
     });
 
     test('a run cancelled while reading the quality leaves other runs\' shrinks alone', () async {
@@ -359,7 +395,7 @@ void main() {
         photo,
         Completer<void>(),
         callbacks: UploadCallbacks(onError: (_, message) => errors.add(message)),
-        storageSaver: const StorageSaverRun(BackupQuality.saver),
+        storageSaver: const StorageSaverRun(BackupQuality.saver, 1),
       );
 
       expect(uploads, isEmpty);
