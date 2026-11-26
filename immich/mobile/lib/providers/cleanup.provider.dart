@@ -17,6 +17,7 @@ abstract class CleanupState with _$CleanupState {
     DateTime? selectedDate,
     @Default([]) List<LocalAsset> assetsToDelete,
     @Default(0) int totalBytes,
+    @Default(false) bool hasStorageSaverCopies,
     @Default(false) bool isScanning,
     @Default(false) bool isDeleting,
     @Default(AssetKeepType.none) AssetKeepType keepMediaType,
@@ -132,7 +133,12 @@ class CleanupNotifier extends StateNotifier<CleanupState> {
         keepAlbumIds: state.keepAlbumIds,
       );
 
-      state = state.copyWith(assetsToDelete: result.assets, totalBytes: result.totalBytes, isScanning: false);
+      state = state.copyWith(
+        assetsToDelete: result.assets,
+        totalBytes: result.totalBytes,
+        hasStorageSaverCopies: result.hasStorageSaverCopies,
+        isScanning: false,
+      );
     } catch (e) {
       state = state.copyWith(isScanning: false);
       rethrow;

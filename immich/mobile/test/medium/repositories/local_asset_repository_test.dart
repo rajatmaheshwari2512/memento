@@ -127,6 +127,22 @@ void main() {
       expect(result.assets.first.id, includedAsset.id);
     });
 
+    test('says when a candidate is backed up only as a Storage saver copy', () async {
+      final copy = await ctx.newRemoteAsset(ownerId: userId);
+      final linked = await ctx.newLocalAsset(checksum: 'original', createdAt: beforeCutoff);
+      final remoteAsset = await ctx.newRemoteAsset(ownerId: userId);
+      await ctx.newLocalAsset(checksum: remoteAsset.checksum, createdAt: beforeCutoff);
+
+      final before = await sut.getRemovalCandidates(userId, cutoffDate);
+      await sut.linkStorageSaverCopy(linked.id, originalChecksum: 'original', copyChecksum: copy.checksum);
+      final after = await sut.getRemovalCandidates(userId, cutoffDate);
+
+      expect(before.assets, hasLength(1));
+      expect(before.hasStorageSaverCopies, isFalse);
+      expect(after.assets, hasLength(2));
+      expect(after.hasStorageSaverCopies, isTrue);
+    });
+
     test('includes favorites when keepFavorites is false', () async {
       final remoteAsset = await ctx.newRemoteAsset(ownerId: userId);
       final favoriteAsset = await ctx.newLocalAsset(

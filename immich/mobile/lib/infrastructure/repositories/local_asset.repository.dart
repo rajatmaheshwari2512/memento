@@ -16,7 +16,10 @@ class RemovalCandidatesResult {
   final List<LocalAsset> assets;
   final int totalBytes;
 
-  const RemovalCandidatesResult({required this.assets, required this.totalBytes});
+  /// Whether any of [assets] is backed up only as a Storage saver copy.
+  final bool hasStorageSaverCopies;
+
+  const RemovalCandidatesResult({required this.assets, required this.totalBytes, this.hasStorageSaverCopies = false});
 }
 
 @DriftAccessor()
@@ -214,12 +217,17 @@ class LocalAssetRepository extends DatabaseAccessor<Drift> with $LocalAssetRepos
 
     final rows = await query.get();
     final assets = rows.map((row) => row.readTable(_db.localAssetEntity).toDto()).toList();
+    final hasStorageSaverCopies = rows.any((row) => row.readTable(_db.localAssetEntity).deviceChecksum != null);
     final totalBytes = rows.fold<int>(0, (sum, row) {
       final fileSize = row.readTableOrNull(_db.remoteExifEntity)?.fileSize;
       return sum + (fileSize ?? 0);
     });
 
-    return RemovalCandidatesResult(assets: assets, totalBytes: totalBytes);
+    return RemovalCandidatesResult(
+      assets: assets,
+      totalBytes: totalBytes,
+      hasStorageSaverCopies: hasStorageSaverCopies,
+    );
   }
 
   Future<void> reconcileHashesFromCloudId() async {

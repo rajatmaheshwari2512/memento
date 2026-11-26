@@ -633,6 +633,22 @@ class _FreeUpSpaceSettingsState extends ConsumerState<FreeUpSpaceSettings> {
                                     ),
                                     style: context.textTheme.labelLarge?.copyWith(fontSize: 15),
                                   ),
+                                  if (state.hasStorageSaverCopies) ...[
+                                    // SelfPhotos Storage saver
+                                    const SizedBox(height: 12),
+                                    Row(
+                                      children: [
+                                        Icon(Icons.warning_amber_rounded, color: context.colorScheme.error),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Text(
+                                            context.t.cleanup_storage_saver_warning,
+                                            style: context.textTheme.labelLarge,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
                                 ],
                               )
                             : null,
