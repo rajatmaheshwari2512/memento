@@ -24,6 +24,7 @@ import 'package:immich_mobile/providers/infrastructure/sync.provider.dart';
 import 'package:immich_mobile/providers/user.provider.dart';
 import 'package:immich_mobile/services/api.service.dart';
 import 'package:immich_mobile/services/auth.service.dart';
+import 'package:immich_mobile/services/background_upload.service.dart';
 import 'package:immich_mobile/services/foreground_upload.service.dart';
 import 'package:immich_mobile/services/localization.service.dart';
 import 'package:immich_mobile/utils/bootstrap.dart';
@@ -158,6 +159,7 @@ class BackgroundWorkerBgService extends BackgroundWorkerFlutterApi {
         _hashService.hashAssets(),
         _handleBackup(
           remoteSync: remoteSync.then((ok) => ok && !_cancellationToken.isCompleted).catchError((_) => false),
+          isIosProcessing: maxSeconds == null,
         ),
       ]);
       if (budget != null) {
@@ -275,7 +277,8 @@ class BackgroundWorkerBgService extends BackgroundWorkerFlutterApi {
     }
   }
 
-  Future<bool> _handleBackup({required Future<bool> remoteSync}) async {
+  /// [isIosProcessing]: an iOS processing task, which uploads in Dart when Storage saver shrinks backups.
+  Future<bool> _handleBackup({required Future<bool> remoteSync, bool isIosProcessing = false}) async {
     final needsRetry = await runZonedGuarded(() async {
       if (_isCleanedUp) {
         return false;
@@ -293,8 +296,16 @@ class BackgroundWorkerBgService extends BackgroundWorkerFlutterApi {
       }
 
       if (CurrentPlatform.isIOS) {
-        await _ref?.read(backupProvider.notifier).startBackupWithURLSession(currentUser.id, remoteSync);
-        return false;
+        final shrinks =
+            isIosProcessing && (await _ref?.read(backgroundUploadServiceProvider).shrinksBackups() ?? false);
+        if (!shrinks) {
+          await _ref?.read(backupProvider.notifier).startBackupWithURLSession(currentUser.id, remoteSync);
+          return false;
+        }
+        if (!await remoteSync) {
+          _logger.warning("Remote sync did not complete successfully, skipping backup");
+          return false;
+        }
       }
 
       final uploadService = _ref?.read(foregroundUploadServiceProvider);

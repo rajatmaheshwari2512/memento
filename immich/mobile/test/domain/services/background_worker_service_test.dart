@@ -36,11 +36,14 @@ void main() {
   late BackgroundWorkerBgService sut;
   late MockSyncStreamService mockRemoteSyncService;
   late MockBackgroundUploadService mockBackgroundUploadService;
+  late MockForegroundUploadService mockForegroundUploadService;
   late Drift db;
 
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    registerFallbackValue(Completer<void>());
+    registerFallbackValue(const UploadCallbacks());
 
     db = Drift(drift.DatabaseConnection(NativeDatabase.memory(), closeStreamsSynchronously: true));
     await SettingsRepository.ensureInitialized(db);
@@ -58,6 +61,7 @@ void main() {
     final mockUserService = MockUserService();
     mockRemoteSyncService = MockSyncStreamService();
     mockBackgroundUploadService = MockBackgroundUploadService();
+    mockForegroundUploadService = MockForegroundUploadService();
 
     when(() => mockLocalSyncService.sync()).thenAnswer((_) async {});
     when(() => mockHashService.hashAssets()).thenAnswer((_) async {});
@@ -66,6 +70,14 @@ void main() {
     when(() => mockBackgroundUploadService.getActiveTasks(kBackupGroup)).thenAnswer((_) async => []);
     when(() => mockBackgroundUploadService.uploadBackupCandidates(any())).thenAnswer((_) async {});
     when(() => mockBackgroundUploadService.resume()).thenAnswer((_) async {});
+    when(
+      () => mockForegroundUploadService.uploadCandidates(
+        any(),
+        any(),
+        callbacks: any(named: 'callbacks'),
+        useSequentialUpload: any(named: 'useSequentialUpload'),
+      ),
+    ).thenAnswer((_) async {});
 
     sut = BackgroundWorkerBgService(
       dataController: MockDataController(),
@@ -75,7 +87,7 @@ void main() {
         syncStreamServiceProvider.overrideWithValue(mockRemoteSyncService),
         hashServiceProvider.overrideWithValue(mockHashService),
         currentUserProvider.overrideWith((ref) => CurrentUserProvider(mockUserService)),
-        foregroundUploadServiceProvider.overrideWithValue(MockForegroundUploadService()),
+        foregroundUploadServiceProvider.overrideWithValue(mockForegroundUploadService),
         backgroundUploadServiceProvider.overrideWithValue(mockBackgroundUploadService),
       ],
     );
@@ -93,6 +105,7 @@ void main() {
       remoteSync.complete(true);
       await upload;
       verify(() => mockBackgroundUploadService.uploadBackupCandidates(UserStub.admin.id)).called(1);
+      verifyNever(() => mockBackgroundUploadService.shrinksBackups());
     });
 
     test('does not list a new batch when the remote sync fails', () async {
@@ -131,6 +144,53 @@ void main() {
 
       remoteSync.complete(true);
       await upload;
+    });
+  });
+
+  group('onIosUpload processing task', () {
+    Future<void> dartUpload() => mockForegroundUploadService.uploadCandidates(
+      UserStub.admin.id,
+      any(),
+      callbacks: any(named: 'callbacks'),
+      useSequentialUpload: true,
+    );
+
+    setUp(() => when(() => mockRemoteSyncService.sync()).thenAnswer((_) async => true));
+
+    test('uploads in Dart, shrinking, while Storage saver is on', () async {
+      when(() => mockBackgroundUploadService.shrinksBackups()).thenAnswer((_) async => true);
+
+      await sut.onIosUpload(false, null);
+
+      verify(dartUpload).called(1);
+      verifyNever(() => mockBackgroundUploadService.getActiveTasks(any()));
+      verifyNever(() => mockBackgroundUploadService.uploadBackupCandidates(any()));
+      verifyNever(() => mockBackgroundUploadService.cancel());
+    });
+
+    test('uploads through the URLSession at original quality', () async {
+      when(() => mockBackgroundUploadService.shrinksBackups()).thenAnswer((_) async => false);
+
+      await sut.onIosUpload(false, null);
+
+      verify(() => mockBackgroundUploadService.uploadBackupCandidates(UserStub.admin.id)).called(1);
+      verifyNever(
+        () => mockForegroundUploadService.uploadCandidates(
+          any(),
+          any(),
+          callbacks: any(named: 'callbacks'),
+          useSequentialUpload: any(named: 'useSequentialUpload'),
+        ),
+      );
+    });
+
+    test('does not upload when the remote sync fails', () async {
+      when(() => mockRemoteSyncService.sync()).thenAnswer((_) async => false);
+      when(() => mockBackgroundUploadService.shrinksBackups()).thenAnswer((_) async => true);
+
+      await sut.onIosUpload(false, null);
+
+      verifyNever(dartUpload);
     });
   });
 }
