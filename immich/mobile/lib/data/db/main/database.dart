@@ -33,6 +33,7 @@ import 'package:immich_mobile/data/db/main/table/remote/asset.drift.dart';
 import 'package:immich_mobile/data/db/main/table/remote/cloud_id.dart';
 import 'package:immich_mobile/data/db/main/table/remote/exif.dart';
 import 'package:immich_mobile/data/db/main/table/remote/stack.dart';
+import 'package:immich_mobile/data/db/main/table/remote/storage_saver.dart';
 import 'package:immich_mobile/data/db/main/table/user/auth_user.dart';
 import 'package:immich_mobile/data/db/main/table/user/metadata.dart';
 import 'package:immich_mobile/data/db/main/table/user/partner.dart';
@@ -85,6 +86,7 @@ import 'package:sqlite_async/sqlite_async.dart';
     AssetEditEntity,
     SettingsEntity,
     AssetOcrEntity,
+    RemoteAssetStorageSaverEntity,
   ],
   include: {'package:immich_mobile/data/db/main/query/merged_asset.drift'},
   daos: [
@@ -160,7 +162,7 @@ class Drift extends $Drift {
   }
 
   @override
-  int get schemaVersion => 35;
+  int get schemaVersion => 36;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -379,6 +381,11 @@ class Drift extends $Drift {
                 await m.addColumn(v35.localAssetEntity, v35.localAssetEntity.groupDate);
                 await m.createIndex(v35.idxRemoteAssetGroup);
                 await m.createIndex(v35.idxLocalAssetGroup);
+              },
+              from35To36: (m, v36) async {
+                await m.createTable(v36.remoteAssetStorageSaverEntity);
+                await m.createIndex(v36.idxRemoteAssetStorageSaverOriginalChecksum);
+                await m.addColumn(v36.localAssetEntity, v36.localAssetEntity.deviceChecksum);
               },
             ),
           );

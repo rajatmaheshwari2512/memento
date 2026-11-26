@@ -6,7 +6,8 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 part 'asset_metadata.model.freezed.dart';
 
 enum RemoteAssetMetadataKey {
-  mobileApp("mobile-app");
+  mobileApp("mobile-app"),
+  storageSaver("memento-storage-saver");
 
   final String key;
 
@@ -50,4 +51,15 @@ abstract class RemoteAssetMobileAppMetadata extends RemoteAssetMetadataValue wit
     'latitude': ?latitude,
     'longitude': ?longitude,
   };
+}
+
+@freezed
+abstract class RemoteAssetStorageSaverMetadata extends RemoteAssetMetadataValue with _$RemoteAssetStorageSaverMetadata {
+  const factory RemoteAssetStorageSaverMetadata({required String originalChecksum, required String quality}) =
+      _RemoteAssetStorageSaverMetadata;
+
+  const RemoteAssetStorageSaverMetadata._();
+
+  @override
+  Map<String, dynamic> toJson() => {'originalChecksum': originalChecksum, 'quality': quality};
 }

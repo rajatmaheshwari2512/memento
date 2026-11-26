@@ -410,6 +410,75 @@ void main() {
     });
   });
 
+  group('SyncStreamRepository - Storage saver metadata', () {
+    const key = 'memento-storage-saver';
+
+    Future<Map<String, String>> rows() async {
+      final data = await db.remoteAssetStorageSaverEntity.select().get();
+      return {for (final row in data) row.assetId: row.originalChecksum};
+    }
+
+    setUp(() async {
+      await sut.updateUsersV1([_createUser()]);
+      await sut.updateAssetsV1([
+        _createAsset(id: 'a', checksum: 'AAA', fileName: 'a.jpg'),
+        _createAsset(id: 'b', checksum: 'BBB', fileName: 'b.jpg'),
+      ]);
+    });
+
+    test('stores the original checksum for the Storage saver key and ignores other keys', () async {
+      await sut.updateAssetsMetadataV1([
+        SyncAssetMetadataV1(assetId: 'a', key: key, value: {'originalChecksum': 'original-a', 'quality': 'saver'}),
+        SyncAssetMetadataV1(assetId: 'b', key: 'other', value: {'originalChecksum': 'original-b'}),
+      ]);
+
+      expect(await rows(), {'a': 'original-a'});
+    });
+
+    test('replaces the original checksum on update', () async {
+      await sut.updateAssetsMetadataV1([
+        SyncAssetMetadataV1(assetId: 'a', key: key, value: {'originalChecksum': 'first'}),
+      ]);
+      await sut.updateAssetsMetadataV1([
+        SyncAssetMetadataV1(assetId: 'a', key: key, value: {'originalChecksum': 'second'}),
+      ]);
+
+      expect(await rows(), {'a': 'second'});
+    });
+
+    test('skips a value without an original checksum', () async {
+      await sut.updateAssetsMetadataV1([
+        SyncAssetMetadataV1(assetId: 'a', key: key, value: {'quality': 'saver'}),
+      ]);
+
+      expect(await rows(), isEmpty);
+    });
+
+    test('deletes the row only for the Storage saver key', () async {
+      await sut.updateAssetsMetadataV1([
+        SyncAssetMetadataV1(assetId: 'a', key: key, value: {'originalChecksum': 'original-a'}),
+        SyncAssetMetadataV1(assetId: 'b', key: key, value: {'originalChecksum': 'original-b'}),
+      ]);
+
+      await sut.deleteAssetsMetadataV1([
+        SyncAssetMetadataDeleteV1(assetId: 'a', key: key),
+        SyncAssetMetadataDeleteV1(assetId: 'b', key: 'other'),
+      ]);
+
+      expect(await rows(), {'b': 'original-b'});
+    });
+
+    test('reset clears the rows', () async {
+      await sut.updateAssetsMetadataV1([
+        SyncAssetMetadataV1(assetId: 'a', key: key, value: {'originalChecksum': 'original-a'}),
+      ]);
+
+      await sut.reset();
+
+      expect(await rows(), isEmpty);
+    });
+  });
+
   group('SyncStreamRepository - deleteAssetOcrV1 (#32337)', () {
     test('removes OCR rows for deleted assets', () async {
       await sut.updateUsersV1([_createUser()]);

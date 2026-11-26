@@ -37,6 +37,9 @@ class LocalAssetEntity extends Table with DriftDefaultsMixin, AssetEntityMixin {
   /// Checksum of the last synced version of this asset
   TextColumn get previousChecksum => text().nullable()();
 
+  /// Checksum of the device file while [checksum] holds a linked Storage saver copy's checksum
+  TextColumn get deviceChecksum => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }

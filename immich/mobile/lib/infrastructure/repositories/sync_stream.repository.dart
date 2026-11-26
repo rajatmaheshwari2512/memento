@@ -18,11 +18,13 @@ import 'package:immich_mobile/data/db/main/table/remote/asset.drift.dart';
 import 'package:immich_mobile/data/db/main/table/remote/cloud_id.drift.dart';
 import 'package:immich_mobile/data/db/main/table/remote/exif.drift.dart';
 import 'package:immich_mobile/data/db/main/table/remote/stack.drift.dart';
+import 'package:immich_mobile/data/db/main/table/remote/storage_saver.drift.dart';
 import 'package:immich_mobile/data/db/main/table/user/auth_user.drift.dart';
 import 'package:immich_mobile/data/db/main/table/user/metadata.drift.dart';
 import 'package:immich_mobile/data/db/main/table/user/partner.drift.dart';
 import 'package:immich_mobile/data/db/main/table/user/user.drift.dart';
 import 'package:immich_mobile/domain/models/album/album.model.dart';
+import 'package:immich_mobile/domain/models/asset/asset_metadata.model.dart';
 import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
 import 'package:immich_mobile/domain/models/asset_edit.model.dart';
 import 'package:immich_mobile/domain/models/memory.model.dart';
@@ -73,6 +75,7 @@ class SyncStreamRepository extends DatabaseAccessor<Drift> with $SyncStreamRepos
             await _db.userEntity.deleteAll();
             await _db.userMetadataEntity.deleteAll();
             await _db.remoteAssetCloudIdEntity.deleteAll();
+            await _db.remoteAssetStorageSaverEntity.deleteAll();
             await _db.assetEditEntity.deleteAll();
             await _db.assetOcrEntity.deleteAll();
           });
@@ -395,6 +398,8 @@ class SyncStreamRepository extends DatabaseAccessor<Drift> with $SyncStreamRepos
         for (final metadata in data) {
           if (metadata.key == kMobileMetadataKey) {
             batch.deleteWhere(_db.remoteAssetCloudIdEntity, (row) => row.assetId.equals(metadata.assetId));
+          } else if (metadata.key == RemoteAssetMetadataKey.storageSaver.key) {
+            batch.deleteWhere(_db.remoteAssetStorageSaverEntity, (row) => row.assetId.equals(metadata.assetId));
           }
         }
       });
@@ -421,6 +426,17 @@ class SyncStreamRepository extends DatabaseAccessor<Drift> with $SyncStreamRepos
             );
             batch.insert(
               _db.remoteAssetCloudIdEntity,
+              companion.copyWith(assetId: Value(metadata.assetId)),
+              onConflict: DoUpdate((_) => companion),
+            );
+          } else if (metadata.key == RemoteAssetMetadataKey.storageSaver.key) {
+            final originalChecksum = metadata.value['originalChecksum'];
+            if (originalChecksum is! String) {
+              continue;
+            }
+            final companion = RemoteAssetStorageSaverEntityCompanion(originalChecksum: Value(originalChecksum));
+            batch.insert(
+              _db.remoteAssetStorageSaverEntity,
               companion.copyWith(assetId: Value(metadata.assetId)),
               onConflict: DoUpdate((_) => companion),
             );
