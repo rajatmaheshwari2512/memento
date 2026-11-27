@@ -32,7 +32,10 @@ class ExtrasClient {
 
   Map<String, String> get headers {
     final token = Store.tryGet(StoreKey.accessToken);
-    return {'content-type': 'application/json', if (token != null && token.isNotEmpty) 'x-immich-user-token': token};
+    return {
+      'content-type': 'application/json',
+      if (token != null && token.isNotEmpty) 'x-immich-user-token': token,
+    };
   }
 
   /// Sends a JSON request and returns the decoded answer (null for 204).
@@ -77,7 +80,8 @@ class ExtrasClient {
     Object? data;
     try {
       data = jsonDecode(utf8.decode(response.bodyBytes));
-    } catch (_) {}
+    } catch (_) {
+    }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       final error = data is Map ? data['error'] : null;
       throw ExtrasException(
