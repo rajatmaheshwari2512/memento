@@ -4,9 +4,10 @@ import 'package:immich_mobile/selfphotos/storage_saver/storage_saver.service.dar
 
 class _Extras extends ExtrasClient {
   final bool storageSaver;
+  final bool iphoneHdr;
   final paths = <String>[];
 
-  _Extras({required this.storageSaver});
+  _Extras({required this.storageSaver, this.iphoneHdr = false});
 
   @override
   Future<Object?> send(String method, String path, {Object? body}) async {
@@ -14,7 +15,7 @@ class _Extras extends ExtrasClient {
     return switch (path) {
       '/flags' => {
         'flags': {
-          'storageSaver': {'enabled': storageSaver},
+          'storageSaver': {'enabled': storageSaver, 'iphoneHdr': iphoneHdr},
         },
       },
       '/backup/settings' => {'quality': 'saver'},
@@ -43,5 +44,17 @@ void main() {
 
     expect(await StorageSaverService(extras).backupQuality(), BackupQuality.saver);
     expect(extras.paths, ['/flags', '/backup/settings']);
+  });
+
+  test('shrinks iPhone HDR videos only with both admin switches on', () async {
+    expect(
+      (await StorageSaverService(_Extras(storageSaver: true, iphoneHdr: true)).backupSettings()).shrinkHdr,
+      isTrue,
+    );
+    expect((await StorageSaverService(_Extras(storageSaver: true)).backupSettings()).shrinkHdr, isFalse);
+
+    final off = await StorageSaverService(_Extras(storageSaver: false, iphoneHdr: true)).backupSettings();
+    expect(off.quality, BackupQuality.original);
+    expect(off.shrinkHdr, isFalse);
   });
 }

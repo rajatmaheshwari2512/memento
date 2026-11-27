@@ -31,9 +31,16 @@ class StorageSaverService {
   Future<BackupQuality> change(BackupQuality quality) async =>
       BackupQuality.fromJson(await _client.send('PUT', '/backup/settings', body: {'quality': quality.name}));
 
-  /// The quality to back up at: [BackupQuality.original] while the admin switch is off.
-  Future<BackupQuality> backupQuality() async {
+  /// The quality to back up at ([BackupQuality.original] while the admin switch is off), and whether iPhone HDR
+  /// videos are shrunk too.
+  Future<({BackupQuality quality, bool shrinkHdr})> backupSettings() async {
     final flags = MementoFlags.fromJson(await _client.send('GET', '/flags'));
-    return flags.storageSaver ? quality() : BackupQuality.original;
+    if (!flags.storageSaver) {
+      return (quality: BackupQuality.original, shrinkHdr: false);
+    }
+    return (quality: await quality(), shrinkHdr: flags.storageSaverIphoneHdr);
   }
+
+  /// The quality to back up at: [BackupQuality.original] while the admin switch is off.
+  Future<BackupQuality> backupQuality() async => (await backupSettings()).quality;
 }

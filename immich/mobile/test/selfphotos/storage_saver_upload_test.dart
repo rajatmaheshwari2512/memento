@@ -108,6 +108,7 @@ void main() {
           kind: any(named: 'kind'),
           runId: any(named: 'runId'),
           videoBitrate: any(named: 'videoBitrate'),
+          shrinkHdr: any(named: 'shrinkHdr'),
         ),
       ).thenAnswer((invocation) async {
         final result = answer();
@@ -175,6 +176,31 @@ void main() {
           kind: StorageSaverKind.photo,
           runId: 1,
           videoBitrate: 4000000,
+          shrinkHdr: false,
+        ),
+      ).called(1);
+    });
+
+    test('asks the shrink to include HDR videos when the run says so', () async {
+      stubAsset(photo, '/path/to/photo.jpg', 'photo.jpg');
+      stubShrink(() => shrunk);
+      captureUploads();
+
+      await sut.uploadSingleAsset(
+        photo,
+        null,
+        callbacks: const UploadCallbacks(),
+        storageSaver: const StorageSaverRun(BackupQuality.saver, 1, shrinkHdr: true),
+      );
+
+      verify(
+        () => mockStorageSaverNative.shrink(
+          any(),
+          any(),
+          kind: any(named: 'kind'),
+          runId: 1,
+          videoBitrate: any(named: 'videoBitrate'),
+          shrinkHdr: true,
         ),
       ).called(1);
     });
@@ -300,8 +326,14 @@ void main() {
         },
       ]);
       verify(
-        () =>
-            mockStorageSaverNative.shrink(any(), any(), kind: StorageSaverKind.video, runId: 1, videoBitrate: 8000000),
+        () => mockStorageSaverNative.shrink(
+          any(),
+          any(),
+          kind: StorageSaverKind.video,
+          runId: 1,
+          videoBitrate: 8000000,
+          shrinkHdr: false,
+        ),
       ).called(1);
       expect(File(uploads.single.path).existsSync(), isFalse);
     });
@@ -366,13 +398,15 @@ void main() {
       for (final asset in assets) {
         stubAsset(asset, '/path/to/photo.jpg', 'photo.jpg');
       }
-      when(() => mockStorageSaverService.backupQuality()).thenAnswer((_) async => BackupQuality.saver);
+      when(
+        () => mockStorageSaverService.backupSettings(),
+      ).thenAnswer((_) async => (quality: BackupQuality.saver, shrinkHdr: false));
       stubShrink(() => shrunk);
       final uploads = captureUploads();
 
       await sut.uploadManual(assets);
 
-      verify(() => mockStorageSaverService.backupQuality()).called(1);
+      verify(() => mockStorageSaverService.backupSettings()).called(1);
       expect(uploads, hasLength(3));
       expect(uploads.every((upload) => upload.fields.containsKey('metadata')), isTrue);
     });
@@ -384,14 +418,16 @@ void main() {
       }
       when(() => mockBackupRepository.getCandidates('user-id')).thenAnswer((_) async => assets);
       when(() => mockConnectivityApi.getCapabilities()).thenAnswer((_) async => [NetworkCapability.unmetered]);
-      when(() => mockStorageSaverService.backupQuality()).thenAnswer((_) async => BackupQuality.saver);
+      when(
+        () => mockStorageSaverService.backupSettings(),
+      ).thenAnswer((_) async => (quality: BackupQuality.saver, shrinkHdr: false));
       stubShrink(() => shrunk);
       final uploads = captureUploads();
 
       await sut.uploadCandidates('user-id', Completer<void>());
-      verify(() => mockStorageSaverService.backupQuality()).called(1);
+      verify(() => mockStorageSaverService.backupSettings()).called(1);
       await sut.uploadCandidates('user-id', Completer<void>(), useSequentialUpload: true);
-      verify(() => mockStorageSaverService.backupQuality()).called(1);
+      verify(() => mockStorageSaverService.backupSettings()).called(1);
 
       expect(uploads, hasLength(6));
       expect(uploads.every((upload) => upload.fields.containsKey('metadata')), isTrue);
@@ -401,9 +437,11 @@ void main() {
       stubAsset(photo, '/path/to/photo.jpg', 'photo.jpg');
       final uploads = captureUploads();
 
-      when(() => mockStorageSaverService.backupQuality()).thenAnswer((_) async => BackupQuality.original);
+      when(
+        () => mockStorageSaverService.backupSettings(),
+      ).thenAnswer((_) async => (quality: BackupQuality.original, shrinkHdr: false));
       await sut.uploadManual([photo]);
-      when(() => mockStorageSaverService.backupQuality()).thenThrow(Exception('offline'));
+      when(() => mockStorageSaverService.backupSettings()).thenThrow(Exception('offline'));
       await sut.uploadManual([photo]);
 
       expect(uploads.map((upload) => upload.path), ['/path/to/photo.jpg', '/path/to/photo.jpg']);
@@ -413,13 +451,15 @@ void main() {
     test('shrinks on iOS too', () async {
       debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
       stubAsset(photo, '/path/to/photo.jpg', 'photo.jpg');
-      when(() => mockStorageSaverService.backupQuality()).thenAnswer((_) async => BackupQuality.saver);
+      when(
+        () => mockStorageSaverService.backupSettings(),
+      ).thenAnswer((_) async => (quality: BackupQuality.saver, shrinkHdr: false));
       stubShrink(() => shrunk);
       final uploads = captureUploads();
 
       await sut.uploadManual([photo]);
 
-      verify(() => mockStorageSaverService.backupQuality()).called(1);
+      verify(() => mockStorageSaverService.backupSettings()).called(1);
       expect(uploads.single.path, endsWith('/copy.jpg'));
       expect(uploads.single.fields['metadata'], contains('memento-storage-saver'));
     });
@@ -482,6 +522,7 @@ void main() {
                 kind: any(named: 'kind'),
                 runId: captureAny(named: 'runId'),
                 videoBitrate: any(named: 'videoBitrate'),
+                shrinkHdr: any(named: 'shrinkHdr'),
               ),
             ).captured.single
             as int;
@@ -489,7 +530,9 @@ void main() {
     test('cancels the shrink when the run is cancelled', () async {
       final cancelToken = Completer<void>();
       stubAsset(photo, '/path/to/photo.jpg', 'photo.jpg');
-      when(() => mockStorageSaverService.backupQuality()).thenAnswer((_) async => BackupQuality.saver);
+      when(
+        () => mockStorageSaverService.backupSettings(),
+      ).thenAnswer((_) async => (quality: BackupQuality.saver, shrinkHdr: false));
       stubShrink(() {
         cancelToken.complete();
         return const StorageSaverResult(shrunk: false, reason: 'cancelled');
@@ -508,7 +551,9 @@ void main() {
       final cancelA = Completer<void>();
       final cancelB = Completer<void>();
       stubAsset(photo, '/path/to/photo.jpg', 'photo.jpg');
-      when(() => mockStorageSaverService.backupQuality()).thenAnswer((_) async => BackupQuality.saver);
+      when(
+        () => mockStorageSaverService.backupSettings(),
+      ).thenAnswer((_) async => (quality: BackupQuality.saver, shrinkHdr: false));
       stubShrink(() => shrunk);
       captureUploads();
 
@@ -527,7 +572,9 @@ void main() {
     test('a run cancelled while reading the quality leaves other runs\' shrinks alone', () async {
       final cancelToken = Completer<void>()..complete();
       stubAsset(photo, '/path/to/photo.jpg', 'photo.jpg');
-      when(() => mockStorageSaverService.backupQuality()).thenAnswer((_) async => BackupQuality.saver);
+      when(
+        () => mockStorageSaverService.backupSettings(),
+      ).thenAnswer((_) async => (quality: BackupQuality.saver, shrinkHdr: false));
       final uploads = captureUploads();
 
       await sut.uploadManual([photo], cancelToken: cancelToken);

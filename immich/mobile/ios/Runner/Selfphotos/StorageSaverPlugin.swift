@@ -8,9 +8,6 @@ import VideoToolbox
 class StorageSaverPlugin: ImmichPlugin, FlutterPlugin {
   static let name = "StorageSaverPlugin"
 
-  // Set to true to shrink HDR videos as 10-bit HEVC that stays HDR, for testing.
-  private static let shrinksHdr = false
-
   private static let maxSizeRatio = 0.8
   private static let maxFrameRate: Float = 60
   private static let maxShortSide = 1080
@@ -60,6 +57,7 @@ class StorageSaverPlugin: ImmichPlugin, FlutterPlugin {
         return
       }
       let videoBitrate = (args["videoBitrate"] as? NSNumber)?.intValue
+      let shrinkHdr = args["shrinkHdr"] as? Bool ?? false
       Self.worker.async {
         let value: Any
         do {
@@ -70,7 +68,8 @@ class StorageSaverPlugin: ImmichPlugin, FlutterPlugin {
               input: URL(fileURLWithPath: input),
               output: URL(fileURLWithPath: output),
               kind: kind,
-              videoBitrate: videoBitrate
+              videoBitrate: videoBitrate,
+              shrinkHdr: shrinkHdr
             )
         } catch {
           print("StorageSaver: couldn't shrink: \(error)")
@@ -104,12 +103,12 @@ class StorageSaverPlugin: ImmichPlugin, FlutterPlugin {
     }
   }
 
-  private func shrink(run: Int64, input: URL, output: URL, kind: String, videoBitrate: Int?) throws -> [String: Any] {
+  private func shrink(run: Int64, input: URL, output: URL, kind: String, videoBitrate: Int?, shrinkHdr: Bool) throws -> [String: Any] {
     let reason: String?
     switch kind {
     case "video":
       guard let videoBitrate else { throw StorageSaverError("No video bitrate") }
-      reason = try shrinkVideo(run: run, input: input, output: output, bitrate: videoBitrate)
+      reason = try shrinkVideo(run: run, input: input, output: output, bitrate: videoBitrate, shrinkHdr: shrinkHdr)
     case "photo":
       reason = try autoreleasepool { try shrinkPhoto(input: input, output: output) }
     default:
@@ -127,11 +126,11 @@ class StorageSaverPlugin: ImmichPlugin, FlutterPlugin {
   }
 
   // Returns why the video is kept as it is, or nil once [output] is written.
-  private func shrinkVideo(run: Int64, input: URL, output: URL, bitrate: Int) throws -> String? {
+  private func shrinkVideo(run: Int64, input: URL, output: URL, bitrate: Int, shrinkHdr: Bool) throws -> String? {
     let asset = AVURLAsset(url: input)
     guard let track = asset.tracks(withMediaType: .video).first else { throw StorageSaverError("No video track") }
     let facts = VideoFacts(asset: asset, track: track, fileSize: try fileSize(input))
-    if facts.hdr && !Self.shrinksHdr { return "hdr" }
+    if facts.hdr && !shrinkHdr { return "hdr" }
     if facts.frameRate > Self.maxFrameRate { return "frameRate" }
     let resize = facts.shortSide > Self.maxShortSide
     if !resize && Double(facts.bitrate) <= Double(bitrate) / Self.maxSizeRatio { return "alreadySmall" }
