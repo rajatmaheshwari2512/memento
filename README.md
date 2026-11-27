@@ -30,8 +30,8 @@ It comes as a website and an Android app. The iPhone app is built from source
   library like any other photo.
 - **Live albums.** Albums that fill themselves with new photos of the people you choose.
 - **Storage saver.** Like Google Photos: each person can back up from the phone app (Android or
-  iPhone) at Original quality, or as smaller copies made on the phone (videos at 1080p, about 4 or 8
-  Mbps; ordinary photos over 16 MP at 16 MP). HDR, motion, Live and portrait items stay full size
+  iPhone) at Original quality, or as smaller copies made on the phone (videos at 1080p and about 4 Mbps, or 2K and about
+  8 Mbps; ordinary photos over 16 MP at 16 MP). HDR, motion, Live and portrait items stay full size
   (an admin switch lets iPhones shrink HDR videos too, keeping them HDR). The app still counts the
   phone's original as backed up, so "Free up space" works.
 - **Feature switches.** Admins turn each feature on or off, and set AI Edit's limits, from
