@@ -682,7 +682,7 @@
   "backup_quality_saver": "Storage saver",
   "backup_quality_saver_description": "Videos become 1080p at about 4 Mbps, and ordinary photos over 16 MP become 16 MP. Saves the most space, like Google Photos' Storage saver.",
   "backup_quality_saver_high": "Storage saver, high",
-  "backup_quality_saver_high_description": "Videos become 1080p at about 8 Mbps, and ordinary photos over 16 MP become 16 MP. Saves most of the space, with more detail than Storage saver.",
+  "backup_quality_saver_high_description": "Videos become 2K (1440p) at about 8 Mbps, and ordinary photos over 16 MP become 16 MP. Saves most of the space, with sharper videos than Storage saver, mainly seen on big screens.",
   "backup_settings_subtitle": "Manage upload settings",
   "backward": "Backward",
   "battery_optimization_backup_reliability": "Disabling battery optimizations can improve the reliability of background backup",

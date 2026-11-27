@@ -108,6 +108,7 @@ void main() {
           kind: any(named: 'kind'),
           runId: any(named: 'runId'),
           videoBitrate: any(named: 'videoBitrate'),
+          videoShortSide: any(named: 'videoShortSide'),
           shrinkHdr: any(named: 'shrinkHdr'),
         ),
       ).thenAnswer((invocation) async {
@@ -176,6 +177,7 @@ void main() {
           kind: StorageSaverKind.photo,
           runId: 1,
           videoBitrate: 4000000,
+          videoShortSide: 1080,
           shrinkHdr: false,
         ),
       ).called(1);
@@ -200,6 +202,7 @@ void main() {
           kind: any(named: 'kind'),
           runId: 1,
           videoBitrate: any(named: 'videoBitrate'),
+          videoShortSide: any(named: 'videoShortSide'),
           shrinkHdr: true,
         ),
       ).called(1);
@@ -332,6 +335,7 @@ void main() {
           kind: StorageSaverKind.video,
           runId: 1,
           videoBitrate: 8000000,
+          videoShortSide: 1440,
           shrinkHdr: false,
         ),
       ).called(1);
@@ -522,6 +526,7 @@ void main() {
                 kind: any(named: 'kind'),
                 runId: captureAny(named: 'runId'),
                 videoBitrate: any(named: 'videoBitrate'),
+                videoShortSide: any(named: 'videoShortSide'),
                 shrinkHdr: any(named: 'shrinkHdr'),
               ),
             ).captured.single

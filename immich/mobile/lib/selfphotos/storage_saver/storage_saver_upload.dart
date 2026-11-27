@@ -127,6 +127,7 @@ class StorageSaverUpload {
         kind: asset.type == AssetType.video ? StorageSaverKind.video : StorageSaverKind.photo,
         runId: run.id,
         videoBitrate: run.quality.videoBitrate,
+        videoShortSide: run.quality.videoShortSide,
         shrinkHdr: run.shrinkHdr,
       );
       if (result.isCancelled) {

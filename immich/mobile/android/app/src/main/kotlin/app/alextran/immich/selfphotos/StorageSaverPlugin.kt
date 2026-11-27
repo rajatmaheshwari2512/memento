@@ -75,6 +75,7 @@ class StorageSaverPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 File(call.argument<String>("outputPath")!!),
                 call.argument<String>("kind")!!,
                 call.argument<Int>("videoBitrate"),
+                call.argument<Int>("videoShortSide"),
               )
             }
             main.post { result.success(value) }
@@ -129,9 +130,9 @@ class StorageSaverPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     return sizes
   }
 
-  private fun shrink(run: Long, input: File, output: File, kind: String, videoBitrate: Int?): Map<String, Any> {
+  private fun shrink(run: Long, input: File, output: File, kind: String, videoBitrate: Int?, videoShortSide: Int?): Map<String, Any> {
     val reason = when (kind) {
-      "video" -> shrinkVideo(run, input, output, videoBitrate!!)
+      "video" -> shrinkVideo(run, input, output, videoBitrate!!, videoShortSide!!)
       "photo" -> shrinkPhoto(input, output)
       else -> error("Unknown kind $kind")
     }
@@ -147,14 +148,14 @@ class StorageSaverPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
   }
 
   // Returns why the video is kept as it is, or null once [output] is written.
-  private fun shrinkVideo(run: Long, input: File, output: File, bitrate: Int): String? {
+  private fun shrinkVideo(run: Long, input: File, output: File, bitrate: Int, maxShortSide: Int): String? {
     val facts = VideoFacts.read(input)
     if (facts.hdr) return "hdr"
     if (facts.frameRate > MAX_FRAME_RATE) return "frameRate"
-    val resize = facts.shortSide > MAX_SHORT_SIDE
+    val resize = facts.shortSide > maxShortSide
     if (!resize && facts.bitrate <= bitrate / MAX_SIZE_RATIO) return "alreadySmall"
 
-    val export = VideoExport(context!!, input, output, bitrate, resize, min(facts.shortSide, MAX_SHORT_SIDE))
+    val export = VideoExport(context!!, input, output, bitrate, resize, min(facts.shortSide, maxShortSide))
     running = run to export
     try {
       if (isCancelled(run)) export.cancel()
@@ -217,7 +218,6 @@ class StorageSaverPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     const val TAG = "StorageSaver"
     const val MAX_SIZE_RATIO = 0.8
     const val MAX_FRAME_RATE = 60f
-    const val MAX_SHORT_SIDE = 1080
     const val MAX_PIXELS = 16_000_000L
     const val JPEG_QUALITY = 85
     const val SIZES_CHUNK = 500

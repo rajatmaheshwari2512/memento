@@ -36,13 +36,14 @@ class StorageSaverNative {
   static const _channel = MethodChannel('selfphotos/storage_saver');
 
   /// Shrinks [inputPath] into [outputPath], one at a time across the app, for the backup run [runId].
-  /// [videoBitrate] is in bits per second.
+  /// [videoBitrate] is in bits per second; a video's short side is shrunk to at most [videoShortSide] pixels.
   Future<StorageSaverResult> shrink(
     String inputPath,
     String outputPath, {
     required StorageSaverKind kind,
     required int runId,
     int? videoBitrate,
+    int? videoShortSide,
     bool shrinkHdr = false,
   }) async {
     try {
@@ -52,6 +53,7 @@ class StorageSaverNative {
         'kind': kind.name,
         'runId': runId,
         'videoBitrate': videoBitrate,
+        'videoShortSide': videoShortSide,
         'shrinkHdr': shrinkHdr,
       });
       return StorageSaverResult.fromMap(result!);

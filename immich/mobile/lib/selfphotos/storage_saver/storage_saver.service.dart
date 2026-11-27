@@ -18,6 +18,13 @@ enum BackupQuality {
     saverHigh => 8000000,
     saver => 4000000,
   };
+
+  /// The longest the shrunk video's short side can be, in pixels (null for [original]).
+  int? get videoShortSide => switch (this) {
+    original => null,
+    saverHigh => 1440,
+    saver => 1080,
+  };
 }
 
 class StorageSaverService {
