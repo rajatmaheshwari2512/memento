@@ -230,7 +230,7 @@
             <div class="ms-4 mt-4 flex flex-col gap-4">
               <SettingSwitch
                 title="Enable Storage saver"
-                subtitle="Lets each person choose smaller backups from Memento's phone app: Storage saver (videos at 1080p, about 4 Mbps) or Storage saver, high (about 8 Mbps); ordinary photos over 16 MP become 16 MP. HDR videos, and HDR, motion and portrait photos, stay full size (the switch below lets iPhones shrink HDR videos too). Website uploads always stay full size. Off: backups are full size again from the next upload; copies already made stay as they are."
+                subtitle="Lets each person choose smaller backups from Memento's phone app: Storage saver (videos at 1080p, about 4 Mbps) or Storage saver, high (videos at 2K, about 8 Mbps); ordinary photos over 16 MP become 16 MP. HDR videos, and HDR, motion and portrait photos, stay full size (the switch below lets iPhones shrink HDR videos too). Website uploads always stay full size. Off: backups are full size again from the next upload; copies already made stay as they are."
                 bind:checked={edit.storageSaver.enabled}
                 isEdited={edit.storageSaver.enabled !== saved.storageSaver.enabled}
               />
