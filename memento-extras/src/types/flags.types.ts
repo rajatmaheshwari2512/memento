@@ -33,6 +33,7 @@ export type Flags = {
   };
   storageSaver: {
     enabled: boolean; // Off: the backup quality choice is hidden, Storage saver levels are refused, and backups are full size. Copies already made stay.
+    iphoneHdr: boolean; // On: iPhones shrink HDR videos too, keeping them HDR. Android keeps HDR videos full size either way.
   };
 };
 

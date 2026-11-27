@@ -22,7 +22,7 @@ export function defaultFlags(): Flags {
     captions: { enabled: true },
     adjust: { enabled: true },
     reduceNoise: { enabled: true },
-    storageSaver: { enabled: false },
+    storageSaver: { enabled: false, iphoneHdr: false },
   };
 }
 

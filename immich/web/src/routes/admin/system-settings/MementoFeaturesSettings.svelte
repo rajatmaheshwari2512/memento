@@ -234,6 +234,14 @@
                 bind:checked={edit.storageSaver.enabled}
                 isEdited={edit.storageSaver.enabled !== saved.storageSaver.enabled}
               />
+
+              <SettingSwitch
+                title="Also shrink HDR videos on iPhone"
+                subtitle="iPhones record video in HDR (Dolby Vision) by default, so without this most iPhone videos stay full size. On: they're shrunk like other videos and stay HDR; Dolby Vision's extra data is dropped, so they play as standard HDR. Android keeps HDR videos full size either way. Applies from the next backup."
+                disabled={!edit.storageSaver.enabled}
+                bind:checked={edit.storageSaver.iphoneHdr}
+                isEdited={edit.storageSaver.iphoneHdr !== saved.storageSaver.iphoneHdr}
+              />
             </div>
           </SettingAccordion>
 
