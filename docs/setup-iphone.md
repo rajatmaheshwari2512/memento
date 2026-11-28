@@ -99,7 +99,7 @@ A paid Apple Developer account ($99 a year) has none of these limits.
 - **Storage saver** works the same way, with iPhone formats:
   - HEIC photos stay HEIC.
   - These stay full size: HDR photos (most iPhone photos), Live Photos and portrait photos.
-  - HDR videos (iPhones record Dolby Vision HDR by default) stay full size unless an admin turns on "Also shrink HDR videos on iPhone" (Administration → Settings → Memento features → Backup). Then they're shrunk and stay HDR; Dolby Vision's extra data is dropped, so they play as standard HDR.
+  - HDR videos (iPhones record Dolby Vision HDR by default) are shrunk like other videos and stay HDR, Dolby Vision included. On Android, HDR videos stay full size.
   - iOS doesn't let background uploads shrink anything, so items to be shrunk wait until the app is open, or for iOS's longer overnight run.
   - Free up space shows no size when smaller copies are involved, because iOS has no public way to read a photo's file size.
 - **Links to my.immich.app** don't open the app. Links that start with `immich://` do.
