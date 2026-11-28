@@ -64,7 +64,7 @@ export const RULES: Record<string, Rule> = {
   },
   "storageSaver.enabled": {
     kind: "boolean", section: "Backup", title: "Enable Storage saver",
-    subtitle: "Lets each person choose smaller backups from Memento's phone app: Storage saver (videos at 1080p, about 4 Mbps) or Storage saver, high (videos at 2K, about 8 Mbps); ordinary photos over 16 MP become 16 MP. Motion, Live and portrait photos stay full size, and so do HDR photos on iPhone. Other HDR photos and HDR videos are shrunk and stay HDR; a phone that can't keep them HDR backs them up full size. Website uploads always stay full size. Off: backups are full size again from the next upload; copies already made stay as they are.",
+    subtitle: "Lets each person choose smaller backups from Memento's phone app: Storage saver (videos at 1080p, about 4 Mbps) or Storage saver, high (videos at 2K, about 8 Mbps); ordinary photos over 16 MP become 16 MP. Motion, Live and portrait photos stay full size. HDR photos and videos are shrunk and stay HDR; a phone that can't keep them HDR backs them up full size. Website uploads always stay full size. Off: backups are full size again from the next upload; copies already made stay as they are.",
   },
 };
 
