@@ -94,7 +94,7 @@ export type MementoFlags = {
   themedMemories: { enabled: boolean };
   creations: { enabled: boolean };
   reduceNoise: { enabled: boolean };
-  storageSaver: { enabled: boolean; iphoneHdr: boolean };
+  storageSaver: { enabled: boolean };
 };
 export type MementoFlagsResponse = { flags: MementoFlags; defaults: MementoFlags };
 
