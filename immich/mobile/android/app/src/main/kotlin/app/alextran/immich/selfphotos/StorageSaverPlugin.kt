@@ -23,6 +23,7 @@ import androidx.media3.transformer.EditedMediaItem
 import androidx.media3.transformer.Effects
 import androidx.media3.transformer.ExportException
 import androidx.media3.transformer.ExportResult
+import androidx.media3.transformer.TransformationRequest
 import androidx.media3.transformer.Transformer
 import androidx.media3.transformer.VideoEncoderSettings
 import io.flutter.embedding.engine.plugins.FlutterPlugin
@@ -150,7 +151,6 @@ class StorageSaverPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
   // Returns why the video is kept as it is, or null once [output] is written.
   private fun shrinkVideo(run: Long, input: File, output: File, bitrate: Int, maxShortSide: Int): String? {
     val facts = VideoFacts.read(input)
-    if (facts.hdr) return "hdr"
     if (facts.frameRate > MAX_FRAME_RATE) return "frameRate"
     val resize = facts.shortSide > maxShortSide
     if (!resize && facts.bitrate <= bitrate / MAX_SIZE_RATIO) return "alreadySmall"
@@ -276,7 +276,6 @@ class StorageSaverPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
 private class VideoFacts(
   val shortSide: Int,
   val frameRate: Float,
-  val hdr: Boolean,
   val bitrate: Long,
   val durationMs: Long,
 ) {
@@ -292,13 +291,6 @@ private class VideoFacts(
           .firstOrNull { it.getString(MediaFormat.KEY_MIME)?.startsWith("video/") == true }
           ?: error("No video track")
         val durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
-        val transfer = if (format.containsKey(MediaFormat.KEY_COLOR_TRANSFER)) {
-          format.getInteger(MediaFormat.KEY_COLOR_TRANSFER)
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-          retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_COLOR_TRANSFER)?.toIntOrNull() ?: -1
-        } else {
-          -1
-        }
         val frameRate = if (!format.containsKey(MediaFormat.KEY_FRAME_RATE)) {
           0f
         } else {
@@ -311,7 +303,6 @@ private class VideoFacts(
         return VideoFacts(
           shortSide = min(format.getInteger(MediaFormat.KEY_WIDTH), format.getInteger(MediaFormat.KEY_HEIGHT)),
           frameRate = frameRate,
-          hdr = transfer == MediaFormat.COLOR_TRANSFER_HLG || transfer == MediaFormat.COLOR_TRANSFER_ST2084,
           bitrate = if (durationMs > 0) file.length() * 8 * 1000 / durationMs else Long.MAX_VALUE,
           durationMs = durationMs,
         )
@@ -323,7 +314,8 @@ private class VideoFacts(
   }
 }
 
-// One video, re-encoded as HEVC at [bitrate]; [resize] makes its short side [shortSide].
+// One video, re-encoded as HEVC at [bitrate]; [resize] makes its short side [shortSide]. An HDR video stays HDR, or
+// isn't shrunk ("hdrUnsupported") on a phone that can't keep it HDR.
 private class VideoExport(
   private val context: Context,
   private val input: File,
@@ -384,6 +376,17 @@ private class VideoExport(
         override fun onCompleted(composition: Composition, exportResult: ExportResult) {
           val outputShortSide = min(exportResult.width, exportResult.height)
           finish(if (outputShortSide in 0 until shortSide - SIZE_TOLERANCE) "encoderLimit" else null)
+        }
+
+        override fun onFallbackApplied(
+          composition: Composition,
+          originalTransformationRequest: TransformationRequest,
+          fallbackTransformationRequest: TransformationRequest,
+        ) {
+          if (fallbackTransformationRequest.hdrMode != Composition.HDR_MODE_KEEP_HDR) {
+            handler.post { transformer?.cancel() }
+            finish("hdrUnsupported")
+          }
         }
 
         override fun onError(composition: Composition, exportResult: ExportResult, exportException: ExportException) {
