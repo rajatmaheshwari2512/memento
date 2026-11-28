@@ -98,7 +98,7 @@ A paid Apple Developer account ($99 a year) has none of these limits.
 
 - **Storage saver** works the same way, with iPhone formats:
   - HEIC photos stay HEIC.
-  - These stay full size: HDR photos (most iPhone photos), Live Photos and portrait photos.
+  - These stay full size: HDR photos (most iPhone photos), Live Photos and portrait photos. (Android shrinks its HDR photos, keeping the HDR.)
   - HDR videos (iPhones record Dolby Vision HDR by default) are shrunk like other videos and stay HDR, Dolby Vision included.
   - iOS doesn't let background uploads shrink anything, so items to be shrunk wait until the app is open, or for iOS's longer overnight run.
   - Free up space shows no size when smaller copies are involved, because iOS has no public way to read a photo's file size.
