@@ -3,6 +3,7 @@ package app.alextran.immich.selfphotos
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Gainmap
 import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
@@ -170,14 +171,17 @@ class StorageSaverPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
     BitmapFactory.decodeFile(input.path, bounds)
     if (bounds.outMimeType != "image/jpeg") return "notJpeg"
-    JpegHeaders.read(input).skipReason()?.let { return it }
+    val headers = JpegHeaders.read(input)
+    headers.skipReason()?.let { return it }
 
     val decoded = BitmapFactory.decodeFile(input.path, BitmapFactory.Options().apply {
       inPreferredConfig = Bitmap.Config.ARGB_8888
     }) ?: return "unreadable"
     var bitmap = decoded
+    var gainmap: Gainmap? = null
     try {
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && decoded.hasGainmap()) return "gainMap"
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) gainmap = decoded.gainmap
+      if (headers.ultraHdr && gainmap == null) return "gainMap"
       val pixels = decoded.width.toLong() * decoded.height
       if (pixels > MAX_PIXELS) {
         val scale = sqrt(MAX_PIXELS.toDouble() / pixels)
@@ -187,16 +191,24 @@ class StorageSaverPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
           floor(decoded.height * scale).toInt(),
           true,
         )
+        if (gainmap != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) bitmap.gainmap = gainmap
       }
       FileOutputStream(output).use { stream ->
         if (!bitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, stream)) error("Couldn't encode the photo")
       }
       copyExif(input, output, bitmap.width, bitmap.height)
-      return null
     } finally {
       if (bitmap !== decoded) bitmap.recycle()
       decoded.recycle()
     }
+    return if (gainmap != null && !hasGainmap(output)) "gainMapLost" else null
+  }
+
+  // Whether [file] decodes with an HDR gain map (Android 14 and later).
+  private fun hasGainmap(file: File): Boolean {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return false
+    val decoded = BitmapFactory.decodeFile(file.path) ?: return false
+    return decoded.hasGainmap().also { decoded.recycle() }
   }
 
   private fun copyExif(input: File, output: File, width: Int, height: Int) {
@@ -416,15 +428,24 @@ private class VideoExport(
 
 // The JPEG's header segments that mark photos kept full size.
 private class JpegHeaders(val xmp: String, val multiPicture: Boolean) {
+  // Whether the photo carries an HDR gain map (Ultra HDR).
+  val ultraHdr get() = xmp.contains("hdrgm")
+
   fun skipReason(): String? = when {
-    xmp.contains("hdrgm") -> "gainMap"
     xmp.contains("MotionPhoto") || xmp.contains("MicroVideo") -> "motionPhoto"
-    multiPicture || DEPTH_MARKERS.any { xmp.contains(it) } -> "depth"
+    DEPTH_MARKERS.any { xmp.contains(it) } -> "depth"
+    xmp.contains("Container:Directory") && containerItems() != ULTRA_HDR_ITEMS -> "depth"
+    multiPicture && !ultraHdr -> "depth"
+    ultraHdr && Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE -> "gainMap"
     else -> null
   }
 
+  private fun containerItems(): Set<String> = ITEM_SEMANTIC.findAll(xmp).map { it.groupValues[1] }.toSet()
+
   companion object {
-    private val DEPTH_MARKERS = listOf("GDepth", "GImage", "Container:Directory")
+    private val DEPTH_MARKERS = listOf("GDepth", "GImage")
+    private val ULTRA_HDR_ITEMS = setOf("Primary", "GainMap")
+    private val ITEM_SEMANTIC = Regex("""Item:Semantic="([^"]+)"""")
     private const val XMP_PREFIX = "http://ns.adobe.com/"
     private val MPF_PREFIX = byteArrayOf('M'.code.toByte(), 'P'.code.toByte(), 'F'.code.toByte(), 0)
 

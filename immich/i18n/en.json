@@ -676,7 +676,7 @@
   "backup_options": "Backup Options",
   "backup_quality": "Backup quality",
   "backup_quality_description": "Applies to backups from Memento's phone app. Uploads from the website always keep full quality.",
-  "backup_quality_note": "HDR, motion and portrait photos always keep full quality. HDR videos are shrunk and stay HDR; on a phone that can't keep them HDR, they keep full quality. A change applies to new backups only. With Free up space, the phone's full-quality original is deleted and only the smaller copy is kept.",
+  "backup_quality_note": "Motion, Live and portrait photos always keep full quality, and so do HDR photos on iPhone. Other HDR photos and HDR videos are shrunk and stay HDR; on a phone that can't keep them HDR, they keep full quality. A change applies to new backups only. With Free up space, the phone's full-quality original is deleted and only the smaller copy is kept.",
   "backup_quality_original": "Original",
   "backup_quality_original_description": "Full quality, as on your phone. Uses the most space.",
   "backup_quality_saver": "Storage saver",
