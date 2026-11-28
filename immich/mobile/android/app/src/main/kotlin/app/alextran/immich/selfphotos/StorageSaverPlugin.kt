@@ -371,7 +371,9 @@ private class VideoExport(
 
   private fun startExport() {
     val encoderFactory = DefaultEncoderFactory.Builder(context)
-      .setRequestedVideoEncoderSettings(VideoEncoderSettings.Builder().setBitrate(bitrate).build())
+      .setRequestedVideoEncoderSettings(
+        VideoEncoderSettings.Builder().setBitrate(bitrate).setiFrameIntervalSeconds(KEYFRAME_INTERVAL_SECONDS).build(),
+      )
       .setEnableFallback(true)
       .build()
     val built = Transformer.Builder(context)
@@ -405,6 +407,7 @@ private class VideoExport(
   private companion object {
     const val TAG = "StorageSaver"
     const val SIZE_TOLERANCE = 16
+    const val KEYFRAME_INTERVAL_SECONDS = 1f
   }
 }
 

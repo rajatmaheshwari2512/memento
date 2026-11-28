@@ -301,6 +301,8 @@ private struct PhotoFacts {
 
 // One video, re-encoded as HEVC at [bitrate] and [size], with its audio, rotation, date and place kept.
 private final class VideoExport {
+  private static let keyframeInterval: TimeInterval = 1
+
   private let asset: AVURLAsset
   private let track: AVAssetTrack
   private let output: URL
@@ -411,7 +413,10 @@ private final class VideoExport {
   }
 
   private func videoSettings() -> [String: Any] {
-    var compression: [String: Any] = [AVVideoAverageBitRateKey: bitrate]
+    var compression: [String: Any] = [
+      AVVideoAverageBitRateKey: bitrate,
+      AVVideoMaxKeyFrameIntervalDurationKey: Self.keyframeInterval,
+    ]
     if frameRate > 0 {
       compression[AVVideoExpectedSourceFrameRateKey] = frameRate
     }
