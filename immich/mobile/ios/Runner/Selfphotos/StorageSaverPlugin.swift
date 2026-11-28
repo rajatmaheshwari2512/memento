@@ -143,7 +143,9 @@ class StorageSaverPlugin: ImmichPlugin, FlutterPlugin {
     guard let track = asset.tracks(withMediaType: .video).first else { throw StorageSaverError("No video track") }
     let facts = VideoFacts(asset: asset, track: track, fileSize: try fileSize(input))
     if facts.frameRate > Self.maxFrameRate { return "frameRate" }
-    let resize = facts.shortSide > maxShortSide
+    let maxLongSide = maxShortSide * 16 / 9
+    let scale = min(1, Double(maxShortSide) / Double(facts.shortSide), Double(maxLongSide) / Double(facts.longSide))
+    let resize = scale < 1
     if !resize && Double(facts.bitrate) <= Double(bitrate) / Self.maxSizeRatio { return "alreadySmall" }
 
     let export = VideoExport(
@@ -151,7 +153,7 @@ class StorageSaverPlugin: ImmichPlugin, FlutterPlugin {
       track: track,
       output: output,
       bitrate: bitrate,
-      size: resize ? facts.scaled(shortSide: maxShortSide) : facts.size,
+      size: resize ? facts.scaled(shortSide: Int((Double(facts.shortSide) * scale).rounded())) : facts.size,
       frameRate: facts.frameRate,
       hdr: facts.hdr
     )
@@ -167,7 +169,8 @@ class StorageSaverPlugin: ImmichPlugin, FlutterPlugin {
           let type = CGImageSourceGetType(source)
     else { return "unreadable" }
     let heic = type == UTType.heic.identifier as CFString
-    guard heic || type == UTType.jpeg.identifier as CFString else { return "notJpegOrHeic" }
+    let png = type == UTType.png.identifier as CFString
+    guard heic || png || type == UTType.jpeg.identifier as CFString else { return "notJpegHeicOrPng" }
     let facts = PhotoFacts(source: source)
     if let reason = facts.skipReason(heic: heic) { return reason }
     guard var properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
@@ -191,8 +194,10 @@ class StorageSaverPlugin: ImmichPlugin, FlutterPlugin {
       image = CGImageSourceCreateImageAtIndex(source, 0, nil)
     }
     guard let image else { return "unreadable" }
+    if png && Self.hasTransparency(image) { return "transparent" }
 
-    guard let destination = CGImageDestinationCreateWithURL(output as CFURL, type, 1, nil) else {
+    let outputType = png ? UTType.jpeg.identifier as CFString : type
+    guard let destination = CGImageDestinationCreateWithURL(output as CFURL, outputType, 1, nil) else {
       throw StorageSaverError("Couldn't create the photo")
     }
     properties[kCGImageDestinationLossyCompressionQuality] = Self.photoQuality
@@ -225,6 +230,26 @@ class StorageSaverPlugin: ImmichPlugin, FlutterPlugin {
       return "gainMapLost"
     }
     return nil
+  }
+
+  // Whether [image] has any pixel that isn't fully opaque.
+  private static func hasTransparency(_ image: CGImage) -> Bool {
+    switch image.alphaInfo {
+    case .none, .noneSkipFirst, .noneSkipLast: return false
+    default: break
+    }
+    let width = image.width, height = image.height
+    var pixels = [UInt8](repeating: 0, count: width * height * 4)
+    let drawn = pixels.withUnsafeMutableBytes { buffer -> Bool in
+      guard let context = CGContext(
+        data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+        space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+      ) else { return false }
+      context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+      return true
+    }
+    guard drawn else { return true }
+    return stride(from: 3, to: pixels.count, by: 4).contains { pixels[$0] != 255 }
   }
 
   // The longest side that brings a [width] × [height] photo down to [maxPixels], or nil when it's already within it.
@@ -262,6 +287,7 @@ private struct VideoFacts {
   let duration: TimeInterval
 
   var shortSide: Int { Int(min(size.width, size.height)) }
+  var longSide: Int { Int(max(size.width, size.height)) }
 
   init(asset: AVURLAsset, track: AVAssetTrack, fileSize: Int64) {
     size = track.naturalSize
@@ -306,9 +332,6 @@ private struct PhotoFacts {
     if xmp.contains("hdrgm") { return "gainMap" }
     if xmp.contains("MotionPhoto") || xmp.contains("MicroVideo") { return "motionPhoto" }
     if CGImageSourceGetCount(source) > 1
-      || hasAuxiliaryData(kCGImageAuxiliaryDataTypeDisparity)
-      || hasAuxiliaryData(kCGImageAuxiliaryDataTypeDepth)
-      || hasAuxiliaryData(kCGImageAuxiliaryDataTypePortraitEffectsMatte)
       || ["GDepth", "GImage", "Container:Directory"].contains(where: { xmp.contains($0) })
     {
       return "depth"

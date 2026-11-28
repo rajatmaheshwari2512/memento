@@ -94,6 +94,7 @@ void main() {
     void stubAsset(LocalAsset asset, String path, String name) {
       final mockEntity = MockAssetEntity();
       when(() => mockEntity.isLivePhoto).thenReturn(false);
+      when(() => mockEntity.subtype).thenReturn(0);
       when(() => mockStorageRepository.getAssetEntityForAsset(asset)).thenAnswer((_) async => mockEntity);
       when(() => mockStorageRepository.isAssetAvailableLocally(asset.id)).thenAnswer((_) async => true);
       when(() => mockStorageRepository.getFileForAsset(asset.id)).thenAnswer((_) async => File(path));
@@ -257,16 +258,18 @@ void main() {
       verify(() => mockAssetService.linkStorageSaverCopy(edited.id, 'edited-sha', copySha)).called(1);
     });
 
-    test('keeps a Live Photo full size, with its iCloud metadata', () async {
+    test('shrinks a Live Photo\'s picture and uploads its video as it is', () async {
       debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
       final livePhoto = photo.copyWith(cloudId: 'cloud-id');
       stubAsset(livePhoto, '/path/to/IMG_0001.HEIC', 'IMG_0001.HEIC');
       final mockEntity = MockAssetEntity();
       when(() => mockEntity.isLivePhoto).thenReturn(true);
+      when(() => mockEntity.subtype).thenReturn(1 << 3);
       when(() => mockStorageRepository.getAssetEntityForAsset(livePhoto)).thenAnswer((_) async => mockEntity);
       when(
         () => mockStorageRepository.getMotionFileForAsset(livePhoto),
       ).thenAnswer((_) async => File('/path/to/IMG_0001.MOV'));
+      stubShrink(() => shrunk);
       final uploads = captureUploads();
 
       await sut.uploadSingleAsset(
@@ -276,9 +279,31 @@ void main() {
         storageSaver: const StorageSaverRun(BackupQuality.saver, 1),
       );
 
-      expect(uploads.map((upload) => upload.path), ['/path/to/IMG_0001.MOV', '/path/to/IMG_0001.HEIC']);
-      expect(uploads.last.fields['metadata'], contains('mobile-app'));
+      expect(uploads.first.path, '/path/to/IMG_0001.MOV');
+      expect(uploads.last.path, endsWith('/copy.heic'));
+      expect(uploads.last.fields['metadata'], contains('memento-storage-saver'));
       expect(uploads.last.fields['livePhotoVideoId'], 'remote-1');
+    });
+
+    test('keeps a Portrait-mode photo full size, with its iCloud metadata', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      final portrait = photo.copyWith(cloudId: 'cloud-id');
+      stubAsset(portrait, '/path/to/IMG_0001.HEIC', 'IMG_0001.HEIC');
+      final mockEntity = MockAssetEntity();
+      when(() => mockEntity.isLivePhoto).thenReturn(false);
+      when(() => mockEntity.subtype).thenReturn(1 << 4);
+      when(() => mockStorageRepository.getAssetEntityForAsset(portrait)).thenAnswer((_) async => mockEntity);
+      final uploads = captureUploads();
+
+      await sut.uploadSingleAsset(
+        portrait,
+        null,
+        callbacks: const UploadCallbacks(),
+        storageSaver: const StorageSaverRun(BackupQuality.saver, 1),
+      );
+
+      expect(uploads.single.path, '/path/to/IMG_0001.HEIC');
+      expect(uploads.single.fields['metadata'], contains('mobile-app'));
       verifyZeroInteractions(mockStorageSaverNative);
     });
 
@@ -447,6 +472,23 @@ void main() {
 
       expect(uploads.single.path, endsWith('/copy.heic'));
       expect(uploads.single.name, 'IMG_0001.heic');
+    });
+
+    test('on iOS uploads a PNG screenshot as JPEG', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      stubAsset(photo, '/path/to/IMG_0001.PNG', 'IMG_0001.PNG');
+      stubShrink(() => shrunk);
+      final uploads = captureUploads();
+
+      await sut.uploadSingleAsset(
+        photo,
+        null,
+        callbacks: const UploadCallbacks(),
+        storageSaver: const StorageSaverRun(BackupQuality.saver, 1),
+      );
+
+      expect(uploads.single.path, endsWith('/copy.jpg'));
+      expect(uploads.single.name, 'IMG_0001.jpg');
     });
 
     test('on iOS keeps a photo with no extension full size', () async {

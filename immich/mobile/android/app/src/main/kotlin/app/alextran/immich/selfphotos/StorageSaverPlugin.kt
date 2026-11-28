@@ -38,7 +38,9 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import kotlin.math.floor
+import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 // SelfPhotos Storage saver: shrinks a video or photo before it's uploaded.
@@ -153,10 +155,13 @@ class StorageSaverPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
   private fun shrinkVideo(run: Long, input: File, output: File, bitrate: Int, maxShortSide: Int): String? {
     val facts = VideoFacts.read(input)
     if (facts.frameRate > MAX_FRAME_RATE) return "frameRate"
-    val resize = facts.shortSide > maxShortSide
+    val maxLongSide = maxShortSide * 16 / 9
+    val scale = minOf(1.0, maxShortSide.toDouble() / facts.shortSide, maxLongSide.toDouble() / facts.longSide)
+    val resize = scale < 1
     if (!resize && facts.bitrate <= bitrate / MAX_SIZE_RATIO) return "alreadySmall"
 
-    val export = VideoExport(context!!, input, output, bitrate, resize, min(facts.shortSide, maxShortSide))
+    val shortSide = if (resize) (facts.shortSide * scale).roundToInt() / 2 * 2 else facts.shortSide
+    val export = VideoExport(context!!, input, output, bitrate, resize, shortSide)
     running = run to export
     try {
       if (isCancelled(run)) export.cancel()
@@ -170,7 +175,8 @@ class StorageSaverPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
   private fun shrinkPhoto(input: File, output: File): String? {
     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
     BitmapFactory.decodeFile(input.path, bounds)
-    if (bounds.outMimeType != "image/jpeg") return "notJpeg"
+    val png = bounds.outMimeType == "image/png"
+    if (!png && bounds.outMimeType != "image/jpeg") return "notJpegOrPng"
     val headers = JpegHeaders.read(input)
     headers.skipReason()?.let { return it }
 
@@ -182,6 +188,7 @@ class StorageSaverPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     try {
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) gainmap = decoded.gainmap
       if (headers.ultraHdr && gainmap == null) return "gainMap"
+      if (png && hasTransparency(decoded)) return "transparent"
       val pixels = decoded.width.toLong() * decoded.height
       if (pixels > MAX_PIXELS) {
         val scale = sqrt(MAX_PIXELS.toDouble() / pixels)
@@ -202,6 +209,17 @@ class StorageSaverPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
       decoded.recycle()
     }
     return if (gainmap != null && !hasGainmap(output)) "gainMapLost" else null
+  }
+
+  // Whether [bitmap] has any pixel that isn't fully opaque.
+  private fun hasTransparency(bitmap: Bitmap): Boolean {
+    if (!bitmap.hasAlpha()) return false
+    val row = IntArray(bitmap.width)
+    for (y in 0 until bitmap.height) {
+      bitmap.getPixels(row, 0, bitmap.width, 0, y, bitmap.width, 1)
+      if (row.any { it ushr 24 != 0xFF }) return true
+    }
+    return false
   }
 
   // Whether [file] decodes with an HDR gain map (Android 14 and later).
@@ -287,6 +305,7 @@ class StorageSaverPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
 // The facts that decide whether a video is shrunk.
 private class VideoFacts(
   val shortSide: Int,
+  val longSide: Int,
   val frameRate: Float,
   val bitrate: Long,
   val durationMs: Long,
@@ -314,6 +333,7 @@ private class VideoFacts(
         }
         return VideoFacts(
           shortSide = min(format.getInteger(MediaFormat.KEY_WIDTH), format.getInteger(MediaFormat.KEY_HEIGHT)),
+          longSide = max(format.getInteger(MediaFormat.KEY_WIDTH), format.getInteger(MediaFormat.KEY_HEIGHT)),
           frameRate = frameRate,
           bitrate = if (durationMs > 0) file.length() * 8 * 1000 / durationMs else Long.MAX_VALUE,
           durationMs = durationMs,

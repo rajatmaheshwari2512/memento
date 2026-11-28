@@ -12,10 +12,17 @@ import 'package:immich_mobile/selfphotos/storage_saver/storage_saver_native.dart
 import 'package:immich_mobile/selfphotos/work_folder.dart';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
+import 'package:photo_manager/photo_manager.dart' show AssetEntity;
 
 final _logger = Logger('StorageSaverUpload');
 
 const _folderPrefix = 'selfphotos-saver-';
+
+/// Whether [entity] is a Portrait-mode photo (iPhone), which Storage saver keeps full size.
+bool isPortraitPhoto(AssetEntity entity) => entity.subtype & _photoDepthEffect != 0;
+
+/// PHAssetMediaSubtype.photoDepthEffect.
+const _photoDepthEffect = 1 << 4;
 
 /// The quality one backup run uploads at; [id] tells its shrinks apart from other runs'.
 class StorageSaverRun {
@@ -148,8 +155,8 @@ class StorageSaverUpload {
     }
   }
 
-  /// The copy's file name: on iOS a photo keeps [file]'s format and a video becomes QuickTime. Null when an iOS
-  /// photo's format can't be named.
+  /// The copy's file name: on iOS a photo keeps [file]'s format (a PNG becomes JPEG) and a video becomes QuickTime.
+  /// Null when an iOS photo's format can't be named.
   String? _copyName(LocalAsset asset, File file) {
     if (asset.type == AssetType.video) {
       return CurrentPlatform.isIOS ? 'copy.mov' : 'copy.mp4';
@@ -158,7 +165,10 @@ class StorageSaverUpload {
       return 'copy.jpg';
     }
     final extension = p.extension(file.path).toLowerCase();
-    return extension.isEmpty ? null : 'copy$extension';
+    if (extension.isEmpty) {
+      return null;
+    }
+    return extension == '.png' ? 'copy.jpg' : 'copy$extension';
   }
 
   /// The base64 SHA-1 of [file], as the app stores checksums.
