@@ -114,7 +114,6 @@ class MementoFlags {
   final bool creations;
   final bool reduceNoise;
   final bool storageSaver;
-  final bool storageSaverIphoneHdr;
 
   const MementoFlags({
     required this.gemini,
@@ -126,7 +125,6 @@ class MementoFlags {
     required this.creations,
     required this.reduceNoise,
     required this.storageSaver,
-    required this.storageSaverIphoneHdr,
   });
 
   static const unknown = MementoFlags(
@@ -139,7 +137,6 @@ class MementoFlags {
     creations: false,
     reduceNoise: true,
     storageSaver: false,
-    storageSaverIphoneHdr: false,
   );
 
   static bool _enabled(Object? flags, String group, {bool otherwise = true, String name = 'enabled'}) {
@@ -161,7 +158,6 @@ class MementoFlags {
   factory MementoFlags.fromJson(Object? json) {
     final flags = json is Map ? json['flags'] : null;
     final gemini = _enabled(flags, 'gemini');
-    final storageSaver = _enabled(flags, 'storageSaver', otherwise: false);
     return MementoFlags(
       gemini: gemini,
       geminiTools: gemini && _enabled(flags, 'gemini', name: 'tools', otherwise: false),
@@ -171,8 +167,7 @@ class MementoFlags {
       themedMemories: _enabled(flags, 'themedMemories', otherwise: false),
       creations: _enabled(flags, 'creations', otherwise: false),
       reduceNoise: _enabled(flags, 'reduceNoise', otherwise: false),
-      storageSaver: storageSaver,
-      storageSaverIphoneHdr: storageSaver && _enabled(flags, 'storageSaver', name: 'iphoneHdr', otherwise: false),
+      storageSaver: _enabled(flags, 'storageSaver', otherwise: false),
     );
   }
 }

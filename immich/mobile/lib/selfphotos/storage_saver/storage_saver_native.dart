@@ -44,7 +44,6 @@ class StorageSaverNative {
     required int runId,
     int? videoBitrate,
     int? videoShortSide,
-    bool shrinkHdr = false,
   }) async {
     try {
       final result = await _channel.invokeMethod<Map<Object?, Object?>>('shrink', {
@@ -54,7 +53,6 @@ class StorageSaverNative {
         'runId': runId,
         'videoBitrate': videoBitrate,
         'videoShortSide': videoShortSide,
-        'shrinkHdr': shrinkHdr,
       });
       return StorageSaverResult.fromMap(result!);
     } on PlatformException catch (e) {

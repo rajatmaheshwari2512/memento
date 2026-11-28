@@ -22,10 +22,7 @@ class StorageSaverRun {
   final BackupQuality quality;
   final int id;
 
-  /// Whether HDR videos are shrunk too (iPhone only).
-  final bool shrinkHdr;
-
-  const StorageSaverRun(this.quality, this.id, {this.shrinkHdr = false});
+  const StorageSaverRun(this.quality, this.id);
 
   static const original = StorageSaverRun(BackupQuality.original, 0);
 
@@ -40,11 +37,11 @@ class StorageSaverRun {
   ) async {
     unawaited(deleteStaleFolders());
     try {
-      final (:quality, :shrinkHdr) = await service.backupSettings();
+      final quality = await service.backupQuality();
       if (cancelToken?.isCompleted ?? false) {
         return original;
       }
-      final run = StorageSaverRun(quality, ++_lastId, shrinkHdr: shrinkHdr);
+      final run = StorageSaverRun(quality, ++_lastId);
       if (quality != BackupQuality.original && cancelToken != null) {
         unawaited(cancelToken.future.then((_) => native.cancel(run.id)).catchError((Object _) {}));
       }
@@ -128,7 +125,6 @@ class StorageSaverUpload {
         runId: run.id,
         videoBitrate: run.quality.videoBitrate,
         videoShortSide: run.quality.videoShortSide,
-        shrinkHdr: run.shrinkHdr,
       );
       if (result.isCancelled) {
         _cancelled = true;

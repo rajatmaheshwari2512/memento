@@ -57,7 +57,6 @@ class StorageSaverPlugin: ImmichPlugin, FlutterPlugin {
       }
       let videoBitrate = (args["videoBitrate"] as? NSNumber)?.intValue
       let videoShortSide = (args["videoShortSide"] as? NSNumber)?.intValue
-      let shrinkHdr = args["shrinkHdr"] as? Bool ?? false
       Self.worker.async {
         let value: Any
         do {
@@ -69,8 +68,7 @@ class StorageSaverPlugin: ImmichPlugin, FlutterPlugin {
               output: URL(fileURLWithPath: output),
               kind: kind,
               videoBitrate: videoBitrate,
-              videoShortSide: videoShortSide,
-              shrinkHdr: shrinkHdr
+              videoShortSide: videoShortSide
             )
         } catch {
           print("StorageSaver: couldn't shrink: \(error)")
@@ -110,8 +108,7 @@ class StorageSaverPlugin: ImmichPlugin, FlutterPlugin {
     output: URL,
     kind: String,
     videoBitrate: Int?,
-    videoShortSide: Int?,
-    shrinkHdr: Bool
+    videoShortSide: Int?
   ) throws -> [String: Any] {
     let reason: String?
     switch kind {
@@ -122,8 +119,7 @@ class StorageSaverPlugin: ImmichPlugin, FlutterPlugin {
         input: input,
         output: output,
         bitrate: videoBitrate,
-        maxShortSide: videoShortSide,
-        shrinkHdr: shrinkHdr
+        maxShortSide: videoShortSide
       )
     case "photo":
       reason = try autoreleasepool { try shrinkPhoto(input: input, output: output) }
@@ -142,11 +138,10 @@ class StorageSaverPlugin: ImmichPlugin, FlutterPlugin {
   }
 
   // Returns why the video is kept as it is, or nil once [output] is written.
-  private func shrinkVideo(run: Int64, input: URL, output: URL, bitrate: Int, maxShortSide: Int, shrinkHdr: Bool) throws -> String? {
+  private func shrinkVideo(run: Int64, input: URL, output: URL, bitrate: Int, maxShortSide: Int) throws -> String? {
     let asset = AVURLAsset(url: input)
     guard let track = asset.tracks(withMediaType: .video).first else { throw StorageSaverError("No video track") }
     let facts = VideoFacts(asset: asset, track: track, fileSize: try fileSize(input))
-    if facts.hdr && !shrinkHdr { return "hdr" }
     if facts.frameRate > Self.maxFrameRate { return "frameRate" }
     let resize = facts.shortSide > maxShortSide
     if !resize && Double(facts.bitrate) <= Double(bitrate) / Self.maxSizeRatio { return "alreadySmall" }
