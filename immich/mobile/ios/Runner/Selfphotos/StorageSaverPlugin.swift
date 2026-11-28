@@ -166,24 +166,25 @@ class StorageSaverPlugin: ImmichPlugin, FlutterPlugin {
     guard let source = CGImageSourceCreateWithURL(input as CFURL, nil),
           let type = CGImageSourceGetType(source)
     else { return "unreadable" }
-    guard type == UTType.jpeg.identifier as CFString || type == UTType.heic.identifier as CFString else {
-      return "notJpegOrHeic"
-    }
-    if let reason = PhotoFacts(source: source).skipReason() { return reason }
+    let heic = type == UTType.heic.identifier as CFString
+    guard heic || type == UTType.jpeg.identifier as CFString else { return "notJpegOrHeic" }
+    let facts = PhotoFacts(source: source)
+    if let reason = facts.skipReason(heic: heic) { return reason }
     guard var properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
           let width = properties[kCGImagePropertyPixelWidth] as? Int,
           let height = properties[kCGImagePropertyPixelHeight] as? Int
     else { return "unreadable" }
+    if facts.hasGainMap {
+      return try shrinkHdrPhoto(source: source, type: type, output: output, maxPixelSize: Self.maxPixelSize(width, height))
+    }
 
     let image: CGImage?
-    let pixels = width * height
-    if pixels > Self.maxPixels {
-      let scale = (Double(Self.maxPixels) / Double(pixels)).squareRoot()
+    if let maxPixelSize = Self.maxPixelSize(width, height) {
       let options: [CFString: Any] = [
         kCGImageSourceCreateThumbnailFromImageAlways: true,
         kCGImageSourceCreateThumbnailWithTransform: false,
         kCGImageSourceShouldCacheImmediately: true,
-        kCGImageSourceThumbnailMaxPixelSize: Int((Double(max(width, height)) * scale).rounded(.down)),
+        kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
       ]
       image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
     } else {
@@ -205,6 +206,33 @@ class StorageSaverPlugin: ImmichPlugin, FlutterPlugin {
     CGImageDestinationAddImage(destination, image, properties as CFDictionary)
     guard CGImageDestinationFinalize(destination) else { throw StorageSaverError("Couldn't encode the photo") }
     return nil
+  }
+
+  // Re-encodes a HEIC photo keeping its HDR gain map, its longest side at most [maxPixelSize] when given. Returns why
+  // it's kept as it is, or nil once [output] is written.
+  private func shrinkHdrPhoto(source: CGImageSource, type: CFString, output: URL, maxPixelSize: Int?) throws -> String? {
+    guard let destination = CGImageDestinationCreateWithURL(output as CFURL, type, 1, nil) else {
+      throw StorageSaverError("Couldn't create the photo")
+    }
+    var options: [CFString: Any] = [
+      kCGImageDestinationLossyCompressionQuality: Self.photoQuality,
+      kCGImageDestinationPreserveGainMap: true,
+    ]
+    if let maxPixelSize { options[kCGImageDestinationImageMaxPixelSize] = maxPixelSize }
+    CGImageDestinationAddImageFromSource(destination, source, 0, options as CFDictionary)
+    guard CGImageDestinationFinalize(destination) else { throw StorageSaverError("Couldn't encode the photo") }
+    guard let written = CGImageSourceCreateWithURL(output as CFURL, nil), PhotoFacts(source: written).hasGainMap else {
+      return "gainMapLost"
+    }
+    return nil
+  }
+
+  // The longest side that brings a [width] × [height] photo down to [maxPixels], or nil when it's already within it.
+  private static func maxPixelSize(_ width: Int, _ height: Int) -> Int? {
+    let pixels = width * height
+    guard pixels > maxPixels else { return nil }
+    let scale = (Double(maxPixels) / Double(pixels)).squareRoot()
+    return Int((Double(max(width, height)) * scale).rounded(.down))
   }
 
   private func fileSize(_ url: URL) throws -> Int64 {
@@ -265,9 +293,15 @@ private struct VideoFacts {
 private struct PhotoFacts {
   let source: CGImageSource
 
-  func skipReason() -> String? {
-    if hasAuxiliaryData(kCGImageAuxiliaryDataTypeHDRGainMap) { return "gainMap" }
-    if #available(iOS 18, *), hasAuxiliaryData(kCGImageAuxiliaryDataTypeISOGainMap) { return "gainMap" }
+  var hasGainMap: Bool {
+    if hasAuxiliaryData(kCGImageAuxiliaryDataTypeHDRGainMap) { return true }
+    if #available(iOS 18, *), hasAuxiliaryData(kCGImageAuxiliaryDataTypeISOGainMap) { return true }
+    return false
+  }
+
+  // [heic]: whether the photo is HEIC.
+  func skipReason(heic: Bool) -> String? {
+    if hasGainMap && !heic { return "gainMap" }
     let xmp = xmpText()
     if xmp.contains("hdrgm") { return "gainMap" }
     if xmp.contains("MotionPhoto") || xmp.contains("MicroVideo") { return "motionPhoto" }
